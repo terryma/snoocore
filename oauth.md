@@ -60,7 +60,8 @@ Unlike script-based apps, web and installed apps can not authenticate using a us
 var authUrl = Snoocore.oauth.getAuthUrl({
     consumerKey: 'your client_id from reddit'
     redirectUri: 'your redirect_uri set in the reddit console',
-    state: 'ourSecretState' // more on this below
+    state: 'ourSecretState', // more on this below
+    scope: [ 'flair', 'identity' ] // scopes you want to use!
 });
 ```
 
