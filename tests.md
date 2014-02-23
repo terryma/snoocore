@@ -1,5 +1,5 @@
 ---
-title: snoocore running tests
+title: Snoocore running tests
 layout: default
 ---
 

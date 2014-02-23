@@ -1,3 +1,6 @@
+body {
+}
+
 .sidebar {
 	position: fixed;
 	top: 0; left: 0; bottom: 0;
@@ -29,11 +32,17 @@
 
 .site {
   position: fixed;
-  left: 250px;
+  left: 220px;
   right: 0;
   top: 0;
   bottom: 0;
   overflow: auto;
+}
+
+.siteContent {
+  max-width: 700px;
+  padding: 5px 30px 100px 30px;
+  background-color: #f6f7f9
 }
 
 h1 {

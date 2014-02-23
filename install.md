@@ -1,5 +1,5 @@
 ---
-title: snoocore include & install
+title: Snoocore include & install
 layout: default
 ---
 

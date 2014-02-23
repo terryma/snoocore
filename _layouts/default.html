@@ -6,45 +6,52 @@
 		<title>{{ page.title }}</title>
 		<meta name="viewport" content="width=device-width">
 
-		<link rel="stylesheet" href="/css/syntax.css">
-		<link rel="stylesheet" href="/css/stackedit.css">
-		<link rel="stylesheet" href="/css/main.css">
+		<link rel="stylesheet" href="css/syntax.css">
+		<link rel="stylesheet" href="css/stackedit.css">
+		<link rel="stylesheet" href="css/main.css">
 
 	</head>
 	<body>
 
 		<div class="sidebar">
 
-			<div class="sidebarTitle">snoocore</div>
+			<div class="sidebarTitle">Snoocore 0.0.4</a></div>
 
-			<a class="itemInSidebar" href="/">
+			<a class="itemInSidebar" href="index.html">
 			Home</a>
 
-			<a class="itemInSidebar" href="/install.html">
+			<a class="itemInSidebar" href="install.html">
 			Install &amp; Include</a>
 
-			<a class="itemInSidebar" href="/identify.html">
-			Identify with Reddit</a>
 
-			<a class="itemInSidebar" href="/config.html">
+			<a class="itemInSidebar" href="basicUsage.html">
+			Basic Usage</a>
+
+			<a class="itemInSidebar" href="config.html">
 			Configuration Options</a>
 
-			<a class="itemInSidebar" href="/oauth.html">
+			<a class="itemInSidebar" href="login.html">
+			Login</a>
+
+			<a class="itemInSidebar" href="oauth.html">
 			OAuth Login</a>
 
-			<a class="itemInSidebar" href="/cookies.html">
+			<a class="itemInSidebar" href="cookies.html">
 			Cookie Login</a>
 
-			<a class="itemInSidebar" href="/promises.html">
-			Promises with snoocore</a>
+			<a class="itemInSidebar" href="gotchas.html">
+			Gotcha's</a>
 
-			<a class="itemInSidebar" href="/tests.html">
+			<a class="itemInSidebar" href="promises.html">
+			Promises</a>
+
+			<a class="itemInSidebar" href="tests.html">
 			Running Tests</a>
 
 		</div>
 
 		<div class="site">
-			{{ content }}
+			<div class="siteContent">{{ content }}</div>
 		</div>
 
 	</body>
