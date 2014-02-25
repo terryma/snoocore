@@ -20,7 +20,7 @@ Calls to endpoints such as  [`/api/subscribe`](http://www.reddit.com/dev/api#POS
 ```javascript
 var promise = reddit.api.subscribe({ 
 	action: 'sub', 
-	sr: 'aww' 
+	sr: 't5_2qh1o' // The "fullname" for the "aww" subreddit.
 });
 ```
 
