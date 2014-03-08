@@ -49,5 +49,7 @@ This will give you the front page listing, and the subreddit listing respectivel
 
 ```
 var frontPagePromise = reddit.json();
-var awwPromise = reddit.r.$subreddit.json();
+var awwPromise = reddit.r.$subreddit.json({
+	$subreddit: 'aww'
+});
 ```
