@@ -11,8 +11,6 @@ Adjust the following default options as necessary when initializing Snoocore:
 {
     // You should set a custom user agent for your application
     userAgent: 'snoocore-default', 
-    // Set to `true` if using browser JavaScript
-    browser: false
 }
 ```
 
