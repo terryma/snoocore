@@ -38,14 +38,14 @@ var promise = reddit.api.multi.$multipath.rename({
 });
 ```
 
-## Additional Listings (*.json / *.xml)
+## Additional Listings (*.json)
 
-Reddit does not cover everything in their API documentation, take for example the URL
+Reddit does not cover everything in their API documentation, take for example the URLs
 
-http://www.reddit.com/.json
-http://www.reddit.com/r/aww/.json
+ - [http://www.reddit.com/.json](http://www.reddit.com/.json)
+ - [http://www.reddit.com/r/aww/.json](http://www.reddit.com/r/aww/.json)
 
-This will give you the front page listing, and the subreddit listing respectively, but it isn't documented in the official API. To make use of these non-oauth listings, issue:
+This will give you the front page listing, and the subreddit listing respectively. To make use of these non-oauth listings:
 
 ```
 var frontPagePromise = reddit.json();
