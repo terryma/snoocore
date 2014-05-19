@@ -10,8 +10,8 @@ config.testServer = {
 config.reddit = {
 	redirectUri: 'http://localhost:3000',
 
-	REDDIT_USERNAME: '',
-	REDDIT_PASSWORD: '',
+	REDDIT_USERNAME: 'snoocore',
+	REDDIT_PASSWORD: 'arstarst',
 
 	REDDIT_KEY_WEB: 'X4X22BBsU4LTTg',
 	REDDIT_SECRET_WEB: 'tZT9V7Gad3hjZJ_mR8qstEGAT4k',
