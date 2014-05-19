@@ -2,6 +2,7 @@
 "use strict";
 
 var when = _dereq_('when')
+, delay = _dereq_('when/delay')
 , request = _dereq_('superagent')
 , rawApi = _dereq_('reddit-api-generator');
 
@@ -14,6 +15,8 @@ function Snoocore(config) {
 	var self = buildRedditApi(rawApi);
 
 	self._userAgent = config.userAgent || 'snoocore-default-User-Agent';
+
+	self._throttle = config.throttle || 2000;
 
 	self._isNode = typeof config.browser !== 'undefined'
 		? !config.browser
@@ -108,103 +111,120 @@ function Snoocore(config) {
 		return args;
 	}
 
+	// The current throttle delay before a request will go through
+	// increments every time a call is made, and is reduced when a
+	// call finishes.
+	//
+	// Time is added / removed based on the self._throttle variable.
+	self.throttleDelay = 1;
+
 	// Build a single API call
 	function buildCall(name, endpoint) {
 
 		return function callRedditApi(givenArgs) {
 
-			var redditCall = when.defer()
-			, method = endpoint.method.toLowerCase()
-			, url = buildUrl(givenArgs, endpoint)
-			, args = buildArgs(givenArgs);
+			self.throttleDelay += self._throttle;
 
-			var call = request[method](url);
+			// Wait for the throttle delay amount, then call the Reddit API
+			return delay(self.throttleDelay - self._throttle).then(function() {
 
-			// Can't set User-Agent in browser based JavaScript!
-			if (self._isNode) {
-				call.set('User-Agent', config.userAgent);
-			}
+				var redditCall = when.defer()
+				, method = endpoint.method.toLowerCase()
+				, url = buildUrl(givenArgs, endpoint)
+				, args = buildArgs(givenArgs);
 
-			// If we're logged in, set the modhash & cookie
-			if (isLoggedIn()) {
-				call.set('X-Modhash', self._modhash);
+				var call = request[method](url);
+
+				// Can't set User-Agent in browser based JavaScript!
 				if (self._isNode) {
-					call.set('Cookie', self._cookie);
+					call.set('User-Agent', config.userAgent);
 				}
-			}
 
-			// if we're authenticated, set the authorization header
-			if (isAuthenticated()) {
-				call.set('Authorization',
-					self._authData.token_type + ' ' +
-					self._authData.access_token);
-			}
-
-			// Handle arguments
-			if (method === 'get') {
-				call.query(args);
-			} else {
-				call.type('form');
-				// Handle file uploads
-				if (typeof args.file !== 'undefined') {
-					var file = args.file;
-					delete args.file;
-					for (var field in args) {
-						console.log(field, args[field]); void('debug');
-						call.field(field, args[field]);
+				// If we're logged in, set the modhash & cookie
+				if (isLoggedIn()) {
+					call.set('X-Modhash', self._modhash);
+					if (self._isNode) {
+						call.set('Cookie', self._cookie);
 					}
-					call.attach('file', file);
-				}
-				// standard request without file uploads
-				else {
-					call.send(args);
-				}
-			}
-
-			// If we encounter any error, follow Reddit's style of
-			// error notification and resolve with an object with an
-			// "error" field.
-			call.end(function(error, response) {
-
-				if (error) {
-					return redditCall.resolve({
-						error: error
-					});
 				}
 
-				var data;
-
-				try { data = JSON.parse(response.text); }
-				catch(e) {
-					return redditCall.resolve({
-						error: response.text
-					});
+				// if we're authenticated, set the authorization header
+				if (isAuthenticated()) {
+					call.set('Authorization',
+						self._authData.token_type + ' ' +
+						self._authData.access_token);
 				}
 
-				// set the modhash if the data contains it
-				if (typeof data !== 'undefined' &&
-					typeof data.json !== 'undefined' &&
-					typeof data.json.data !== 'undefined' &&
-					typeof data.json.data.modhash !== 'undefined')
-				{
-					self._modhash = data.json.data.modhash;
+				// Handle arguments
+				if (method === 'get') {
+					call.query(args);
+				} else {
+					call.type('form');
+					// Handle file uploads
+					if (typeof args.file !== 'undefined') {
+						var file = args.file;
+						delete args.file;
+						for (var field in args) {
+							console.log(field, args[field]); void('debug');
+							call.field(field, args[field]);
+						}
+						call.attach('file', file);
+					}
+					// standard request without file uploads
+					else {
+						call.send(args);
+					}
 				}
 
-				// set the cookie if it is in the response
-				if (typeof response.headers['set-cookie'] !== 'undefined') {
-					self._cookie = response.headers['set-cookie'];
-				}
+				// If we encounter any error, follow Reddit's style of
+				// error notification and resolve with an object with an
+				// "error" field.
+				call.end(function(error, response) {
 
-				return redditCall.resolve(data);
+					if (error) {
+						return redditCall.resolve({
+							error: error
+						});
+					}
+
+					var data;
+
+					try { data = JSON.parse(response.text); }
+					catch(e) {
+						return redditCall.resolve({
+							error: response.text
+						});
+					}
+
+					// set the modhash if the data contains it
+					if (typeof data !== 'undefined' &&
+						typeof data.json !== 'undefined' &&
+						typeof data.json.data !== 'undefined' &&
+						typeof data.json.data.modhash !== 'undefined')
+					{
+						self._modhash = data.json.data.modhash;
+					}
+
+					// set the cookie if it is in the response
+					if (typeof response.headers['set-cookie'] !== 'undefined') {
+						self._cookie = response.headers['set-cookie'];
+					}
+
+					return redditCall.resolve(data);
+				});
+
+				// If we have any "errors", convert them into rejections
+				return redditCall.promise.then(function(data) {
+					if (data.hasOwnProperty('error')) {
+						throw new Error(String(data.error));
+					}
+					return data;
+				});
+			}).finally(function() {
+				// decrement the throttle delay
+				self.throttleDelay -= self._throttle;
 			});
 
-			// If we have any "errors", convert them into rejections
-			return redditCall.promise.then(function(data) {
-				if (data.hasOwnProperty('error')) {
-					throw new Error(String(data.error));
-				}
-				return data;
-			});
 		};
 
 	}
@@ -312,7 +332,7 @@ function Snoocore(config) {
 	return self;
 }
 
-},{"./oauth":8,"reddit-api-generator":3,"superagent":4,"when":7}],2:[function(_dereq_,module,exports){
+},{"./oauth":9,"reddit-api-generator":3,"superagent":4,"when":8,"when/delay":7}],2:[function(_dereq_,module,exports){
 // shim for using process in browser
 
 var process = module.exports = {};
@@ -1551,6 +1571,68 @@ module.exports = function(arr, fn, initial){
   return curr;
 };
 },{}],7:[function(_dereq_,module,exports){
+/** @license MIT License (c) copyright 2011-2013 original author or authors */
+
+/**
+ * delay.js
+ *
+ * Helper that returns a promise that resolves after a delay.
+ *
+ * @author Brian Cavalier
+ * @author John Hann
+ */
+
+(function(define) {
+define(function(_dereq_) {
+	/*global setTimeout*/
+	var when, setTimer, cjsRequire, vertxSetTimer;
+
+	when = _dereq_('./when');
+	cjsRequire = _dereq_;
+
+	try {
+		vertxSetTimer = cjsRequire('vertx').setTimer;
+		setTimer = function (f, ms) { return vertxSetTimer(ms, f); };
+	} catch(e) {
+		setTimer = setTimeout;
+	}
+
+    /**
+     * Creates a new promise that will resolve after a msec delay.  If
+	 * value is supplied, the delay will start *after* the supplied
+	 * value is resolved.
+     *
+	 * @param {number} msec delay in milliseconds
+     * @param {*|Promise?} value any promise or value after which
+	 *  the delay will start
+	 * @returns {Promise} promise that is equivalent to value, only delayed
+	 *  by msec
+     */
+    return function delay(msec, value) {
+		// Support reversed, deprecated argument ordering
+		if(typeof value === 'number') {
+			var tmp = value;
+			value = msec;
+			msec = tmp;
+		}
+
+		return when.promise(function(resolve, reject, notify) {
+			when(value, function(val) {
+				setTimer(function() {
+					resolve(val);
+				}, msec);
+			},
+			reject, notify);
+		});
+    };
+
+});
+})(
+	typeof define === 'function' && define.amd ? define : function (factory) { module.exports = factory(_dereq_); });
+
+
+
+},{"./when":8}],8:[function(_dereq_,module,exports){
 (function (process){
 /** @license MIT License (c) copyright 2011-2013 original author or authors */
 
@@ -2490,7 +2572,7 @@ define(function (_dereq_) {
 })(typeof define === 'function' && define.amd ? define : function (factory) { module.exports = factory(_dereq_); });
 
 }).call(this,_dereq_("/home/trev/git/snoocore/node_modules/browserify/node_modules/insert-module-globals/node_modules/process/browser.js"))
-},{"/home/trev/git/snoocore/node_modules/browserify/node_modules/insert-module-globals/node_modules/process/browser.js":2}],8:[function(_dereq_,module,exports){
+},{"/home/trev/git/snoocore/node_modules/browserify/node_modules/insert-module-globals/node_modules/process/browser.js":2}],9:[function(_dereq_,module,exports){
 "use strict";
 
 var when = _dereq_('when')
@@ -2583,6 +2665,6 @@ oauth.getAuthData = function(appType, options) {
 
 module.exports = oauth;
 
-},{"superagent":4,"when":7}]},{},[1])
+},{"superagent":4,"when":8}]},{},[1])
 (1)
 });
