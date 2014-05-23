@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title></title>
+	<style>
+		.scrollable {
+			height: 150px;
+			overflow-y: scroll;
+		}
+	</style>
+</head>
+<body>
+
+<h1>Reddit New</h1>
+<div class="scrollable"><pre id="reddit_new"></pre></div>
+
+<h1>/r/netsec New</h1>
+<div class="scrollable"><pre id="netsec_new"></pre></div>
+
+<!-- -->
+
+<script src="../../Snoocore-standalone.js"></script>
+<script>
+	var Snoocore = window.Snoocore;
+	var reddit = new Snoocore({ userAgent: 'myApp v0.0.0' });
+
+	// Example code for http://www.reddit.com/dev/api#GET_new
+	// [/r/*subreddit*]/new
+
+	// Brackets `[]` denote optional sections of the URL, we can
+	// Leave out [/r/subreddit] to get new posts site wide
+	reddit.new().done(function(results) {
+		document.getElementById('reddit_new').innerText =
+			JSON.stringify(results, null, 4);
+	});
+
+	// Or specify a subreddit with the url parameter *subreddit*
+	reddit.r.$subreddit.new({ $subreddit: 'netsec' }).done(function(r) {
+		document.getElementById('netsec_new').innerText =
+			JSON.stringify(r, null, 4);
+	});
+</script>
+
+</body>
+</html>
