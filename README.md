@@ -6,7 +6,13 @@ A minimal and complete JavaScript driver for the Reddit API.
 
 ## Quick Start
 
-A quick demonstration of getting new posts site wide, or from a specific subreddit.
+`npm install snoocore` || `bower install snoocore`
+
+Additional installation & include information can be found [in the documentation](http://trevorsenior.github.io/snoocore/install.html). The example below uses `require` to include Snoocore which will work in Node & [Browserify](http://browserify.org/).
+
+- - -
+
+A quick demonstration of getting new posts site wide or from a specific subreddit.
 
  - API Endpoint: http://www.reddit.com/dev/api#GET_new
  - Path: **[/r/subreddit]/new**
