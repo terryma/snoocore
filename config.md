@@ -13,6 +13,7 @@ Adjust the following default options as necessary when initializing Snoocore:
     userAgent: 'snoocore-default',
     // The default wait is 1 request per 2 seconds. If you use OAuth
     // for authentication, you can set this to 1 request per second (1000)
+    // To disable, set to 0
     throttle: 2000
 }
 ```
