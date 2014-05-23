@@ -21,7 +21,8 @@ function Snoocore(config) {
 		? !config.browser
 		: (typeof require === "function" &&
 			typeof exports === "object" &&
-			typeof module === "object");
+			typeof module === "object" &&
+			typeof window === "undefined");
 
 	self._modhash = ''; // The current mod hash of whatever user we have
 	self._cookie = ''; // The current cookie of the user we have
