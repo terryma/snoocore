@@ -18,7 +18,7 @@ A quick demonstration of getting new posts site wide or from a specific subreddi
  - Path: **[/r/subreddit]/new**
 
 ```javascript
-var Snoocore = require('../../Snoocore');
+var Snoocore = require('snoocore');
 var reddit = new Snoocore({ userAgent: 'myApp v0.0.0' });
 
 // Brackets `[]` denote optional sections of the path...
