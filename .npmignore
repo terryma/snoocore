@@ -1,3 +1,7 @@
 examples
 test
 Snoocore-standalone.js
+.jshintrc
+bower.json
+karma.conf.js
+runTests.sh
