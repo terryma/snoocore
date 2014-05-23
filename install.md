@@ -7,8 +7,6 @@ layout: default
 
 ## Install
 
-The packages in npm and bower are the exact same. Choose whichever one suits your needs.
-
 **[npm](https://www.npmjs.org/)**
 
 ```
@@ -38,9 +36,9 @@ Same as Node.js
 Must use the standalone variant. Exposes `Snoocore` globally on the [window object](https://developer.mozilla.org/en-US/docs/Web/API/Window).
 
 ```html
-<script src="snoocore-standalone"></script>
-<script> 
-var reddit = new Snoocore(/* config options */);
+<script src="/path/to/snoocore/Snoocore-standalone.js"></script>
+<script>
+var reddit = new window.Snoocore(/* config options */);
 </script>
 ```
 
@@ -49,7 +47,7 @@ var reddit = new Snoocore(/* config options */);
 Must use the standalone variant.
 
 ```javascript
-requirejs(['snoocore-standalone'], function(Snoocore) {
+requirejs(['Snoocore-standalone'], function(Snoocore) {
     var reddit = new Snoocore(/* config options */);
 });
 ```
