@@ -46,7 +46,7 @@ For routes that take parameters and url parameters, see the [basic usage](http:/
 
 `npm install snoocore` || `bower install snoocore`
 
-The same syntax can be used in node and in browser based JavaScript. There are a few [limitations & restrictions](http://trevorsenior.github.io/snoocore/node-vs-browser.html) for browser based environments however covered in the documentation.
+The same syntax can be used in node and in browser based JavaScript. There are a few [limitations & restrictions](http://trevorsenior.github.io/snoocore/node-vs-browser.html) for browser based environments covered in the documentation.
 
 **Login Helpers**
 
@@ -54,4 +54,4 @@ Both [OAuth and Cookie based logins](http://trevorsenior.github.io/snoocore/logi
 
 **Throttling**
 
-Rate limiting is built into snoocore, but can be adjusted, or removed all together in [the configuration](http://trevorsenior.github.io/snoocore/config.html).
+Rate limiting is built into snoocore but can be adjusted or removed all together in [the configuration settings](http://trevorsenior.github.io/snoocore/config.html).
