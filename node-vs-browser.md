@@ -3,6 +3,8 @@ title: Snoocore Node vs Browser
 layout: default
 ---
 
+# Node vs Browser differences
+
 The syntax is the same in both Node and in the Browser. The differences lie in restrictions (what will work, and what will not).
 
 ## Node.js
