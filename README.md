@@ -45,7 +45,7 @@ reddit.r.$subreddit.new({ $subreddit: 'netsec' }).done(function(r) {
 
 **All endpoints are supported**
 
-Calls are [dynamically generated](https://github.com/trevorsenior/reddit-api-generator) from the [Reddit API documentation](http://www.reddit.com/dev/api). Event [undocumented endpoints](http://trevorsenior.github.io/snoocore/advancedUsage.html) are supported.
+Calls are [dynamically generated](https://github.com/trevorsenior/reddit-api-generator) from the [Reddit API documentation](http://www.reddit.com/dev/api). [Undocumented endpoints](http://trevorsenior.github.io/snoocore/advancedUsage.html) are supported as well.
 
 **No special syntax or fluff**
 
