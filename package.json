@@ -14,8 +14,8 @@
   },
   "dependencies": {
     "reddit-api-generator": "0.0.9",
-    "superagent": "~0.16.0",
-    "when": "^2.8.0"
+    "superagent": "^0.18.0",
+    "when": "^3.2.2"
   },
   "devDependencies": {
     "browserify": "~3.24.1",
