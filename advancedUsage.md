@@ -14,7 +14,7 @@ There are some endpoints that end with `.json`.
  - [http://www.reddit.com/.json](http://www.reddit.com/.json)
  - [http://www.reddit.com/r/aww/.json](http://www.reddit.com/r/aww/.json)
 
-This will give you the front page listing, and the subreddit listing respectively. To make use of these calls, append `.json` to the end of your call:
+This will give you the front page listing, and the subreddit listing respectively. To make use of these calls, append `.json` to the end of your chain:
 
 ```
 var frontPagePromise = reddit.json();
@@ -59,7 +59,7 @@ The free form API does *not* handle the base Reddit URL. It is up to you to dete
  - https://ssl.reddit.com/
  - https://oauth.reddit.com/
 
-Also, extension management is left to the user as well. Some endpoints define multiple return types such as `[ .json | .xml ]` - you will want to make sure to append '.json' to the end of your call if this is the case.
+Also, extension management is left to the user as well. Some endpoints define multiple return types such as `[ .json | .xml ]` - you will want to make sure to append '.json' to the end of your call if this is the case (The "hot" example would be one of those casess)
 
 ### Notes
 
