@@ -234,7 +234,7 @@ function Snoocore(config) {
 			var node = root[nodeName];
 
 			if (typeof node.method !== 'undefined') {
-				reddit[nodeName] = buildCall(nodeName, root[nodeName]);
+				reddit[nodeName] = buildCall(root[nodeName]);
 			} else {
 				reddit[nodeName] = buildRedditApi(node);
 			}
