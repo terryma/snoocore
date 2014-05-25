@@ -38,18 +38,6 @@ var promise = reddit.api.multi.$multipath.rename({
 });
 ```
 
-## Additional Listings (*.json)
+# Advanced Usage
 
-Reddit does not cover everything in their API documentation, take for example the URLs
-
- - [http://www.reddit.com/.json](http://www.reddit.com/.json)
- - [http://www.reddit.com/r/aww/.json](http://www.reddit.com/r/aww/.json)
-
-This will give you the front page listing, and the subreddit listing respectively. To make use of these non-oauth listings:
-
-```
-var frontPagePromise = reddit.json();
-var awwPromise = reddit.r.$subreddit.json({
-	$subreddit: 'aww'
-});
-```
+There are some undocumented resources on Reddit that can be used. See the advanced usage section for more information on how to access these.
