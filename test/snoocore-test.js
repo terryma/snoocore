@@ -180,7 +180,7 @@ describe('Snoocore', function () {
 
 	describe('#freeformRedditApiCall()', function() {
 
-		it.only('should call a free form route', function() {
+		it('should call a free form route', function() {
 			return reddit._test.freeformRedditApiCall(
 				'get',
 				'http://www.reddit.com/r/netsec/hot.json')
