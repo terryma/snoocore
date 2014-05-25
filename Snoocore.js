@@ -49,11 +49,9 @@ function Snoocore(config) {
 		// replace with the argument provided
 		params.forEach(function(param) {
 			if (typeof givenArgs[param] === 'undefined') {
-				throw new Error('missing required url parameter ' +
-					param);
+				throw new Error('missing required url parameter ' + param);
 			}
-			endpointUrl = endpointUrl
-				.replace(param, givenArgs[param]);
+			endpointUrl = endpointUrl.replace(param, givenArgs[param]);
 		});
 
 		return endpointUrl;
@@ -119,7 +117,7 @@ function Snoocore(config) {
 	self.throttleDelay = 1;
 
 	// Build a single API call
-	function buildCall(name, endpoint) {
+	function buildCall(endpoint) {
 
 		return function callRedditApi(givenArgs) {
 
@@ -244,6 +242,38 @@ function Snoocore(config) {
 		return reddit;
 	}
 
+	function freeformRedditApiCall(method, url, args) {
+		var endpoint = {
+            url: { standard: url },
+            method: method
+        };
+        return buildCall(endpoint)(args);
+	}
+
+	self.get = function(url, args) {
+		return freeformRedditApiCall('get', url, args);
+	};
+
+	self.post = function(url, args) {
+		return freeformRedditApiCall('post', url, args);
+	};
+
+	self.put = function(url, args) {
+		return freeformRedditApiCall('put', url, args);
+	};
+
+	self.patch = function(url, args) {
+		return freeformRedditApiCall('patch', url, args);
+	};
+
+	self.delete = function(url, args) {
+		return freeformRedditApiCall('delete', url, args);
+	};
+
+	self.update = function(url, args) {
+		return freeformRedditApiCall('update', url, args);
+	};
+
 	// Sets the modhash & cookie to allow for cookie-based calls
 	self.login = function(options) {
 
@@ -326,7 +356,8 @@ function Snoocore(config) {
 		addUrlExtension: addUrlExtension,
 		buildUrl: buildUrl,
 		buildArgs: buildArgs,
-		buildCall: buildCall
+		buildCall: buildCall,
+		freeformRedditApiCall: freeformRedditApiCall
 	};
 
 	return self;

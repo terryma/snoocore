@@ -181,4 +181,32 @@ describe('Snoocore', function () {
 
 	});
 
+	describe('#freeformRedditApiCall()', function() {
+
+		it('should call a free form route', function() {
+			return reddit._test.freeformRedditApiCall(
+				'get',
+				'http://www.reddit.com/r/netsec/hot.json')
+			.should.eventually.haveOwnProperty('kind', 'Listing');
+		});
+
+		it('should call a free form route (parameters)', function() {
+			return reddit._test.freeformRedditApiCall(
+				'get',
+				'http://www.reddit.com/r/$subreddit/hot.json',
+				{ $subreddit: 'netsec' })
+			.should.eventually.haveOwnProperty('kind', 'Listing');
+		});
+
+	});
+
+	describe('freeform rest calls (get, post, put, etc...)', function() {
+		it('should call a free form route (reddit.get)', function() {
+			return reddit.get(
+				'http://www.reddit.com/r/$subreddit/hot.json',
+				{ $subreddit: 'netsec' })
+			.should.eventually.haveOwnProperty('kind', 'Listing');
+		});
+	});
+
 });
