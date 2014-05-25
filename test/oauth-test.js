@@ -11,7 +11,6 @@ var oauth = require('../oauth')
 
 chai.Should();
 chai.use(chaiAsPromised);
-require("mocha-as-promised")();
 
 /* global describe */
 /* global it */

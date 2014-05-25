@@ -11,7 +11,6 @@ var Snoocore = require('../Snoocore')
 
 chai.Should();
 chai.use(chaiAsPromised);
-require("mocha-as-promised")();
 
 /* global describe */
 /* global it */
@@ -72,7 +71,7 @@ describe('Snoocore.oauth', function () {
 			return snoocore.deauth();
 		});
 
-		it('should authenticate with OAuth, and call an oauth endpoint (WEB)', function() {
+		it.only('should authenticate with OAuth, and call an oauth endpoint (WEB)', function() {
 			// because there is user intervention with these tests, give them
 			// two minutes before timing out!
 			this.timeout(30000);
@@ -86,6 +85,8 @@ describe('Snoocore.oauth', function () {
 			openAndAuth(url);
 
 			return testServer.waitForRequest().then(function(params) {
+
+				console.log('params', params); //!!!debug
 
 				var authorizationCode = params.code;
 				return Snoocore.oauth.getAuthData('web', {

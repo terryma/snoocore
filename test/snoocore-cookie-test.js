@@ -12,8 +12,6 @@ if (isNode)
 	, config = require('./testConfig')
 	, chai = require('chai')
 	, chaiAsPromised = require('chai-as-promised');
-
-	require("mocha-as-promised")();
 } else {
 	/* global window */
 	delay = window.when.delay;
