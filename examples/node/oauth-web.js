@@ -48,7 +48,7 @@ function getOauthInfo() {
 
 function waitForResponseUrl() {
 	var defer = when.defer()
-	, rl = readline.createInterface({ 
+	, rl = readline.createInterface({
 		input: process.stdin,
 		output: process.stdout
 	});
@@ -78,7 +78,7 @@ getOauthInfo().then(function(oauthInfo) {
 	// used to prevent CSRF... use something better than this!
 	, state = String(parseInt(Math.random() * 1000, 10))
 	, authUrl = Snoocore.oauth.getAuthUrl({
-		consumerKey: consumerKey, 
+		consumerKey: consumerKey,
 		redirectUri: redirectUri,
 		state: state
 	});
@@ -96,7 +96,7 @@ getOauthInfo().then(function(oauthInfo) {
 		// check for any errors with authenticating, exit if any
 		if (errorMsg) { return when.reject(new Error(errorMsg)); }
 
-		// check that our state is the same as the one we provided 
+		// check that our state is the same as the one we provided
 		// above else exit!
 		if (state !== returnedState) {
 			return when.reject(new Error('state returned did not match!'));

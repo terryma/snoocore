@@ -37,23 +37,18 @@ function getUserInfo() {
 	return defer.promise;
 }
 
-require('main')(module)
-.usage('./basicAuth.js')
-.run(function($) {
 
-	getUserInfo().then(function(userInfo) {
-		return reddit.login({
-			username: userInfo.username,
-			password: userInfo.password
-		});
-	}).then(function(loginData) {
-		console.log(loginData);
-		return reddit.api['me.json']();
-	}).then(function(meJsonData) {
-		console.log(meJsonData);
-	}).catch(function(error) {
-		console.error('oh no! something went wrong!');
-		console.error(error.stack || error);
+getUserInfo().then(function(userInfo) {
+	return reddit.login({
+		username: userInfo.username,
+		password: userInfo.password
 	});
-
-});
+}).then(function(loginData) {
+	console.log(loginData);
+	return reddit.api['me.json']();
+}).then(function(meJsonData) {
+	console.log(meJsonData);
+}).catch(function(error) {
+	console.error('oh no! something went wrong!');
+	console.error(error.stack || error);
+}).done();
