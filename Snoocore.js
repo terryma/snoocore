@@ -244,10 +244,10 @@ function Snoocore(config) {
 
 	function freeformRedditApiCall(method, url, args) {
 		var endpoint = {
-            url: { standard: url },
-            method: method
-        };
-        return buildCall(endpoint)(args);
+			url: { standard: url },
+			method: method
+		};
+		return buildCall(endpoint)(args);
 	}
 
 	self.get = function(url, args) {
