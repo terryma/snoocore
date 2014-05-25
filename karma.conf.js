@@ -14,7 +14,6 @@ module.exports = function(config) {
 
 	// list of files / patterns to load in the browser
 	files: [
-		'node_modules/mocha-as-promised/mocha-as-promised.js',
 		'node_modules/chai/chai.js',
 		'node_modules/chai-as-promised/lib/chai-as-promised.js',
 		'node_modules/when/build/when.js',
@@ -63,7 +62,7 @@ module.exports = function(config) {
 	// - IE (only Windows; has to be installed with `npm install karma-ie-launcher`)
 	browsers: [
 		'PhantomJsNoWebSecurity',
-		'ChromeNoWebWecutity'
+		'ChromeNoWebSecutity'
 	],
 
 
@@ -72,7 +71,7 @@ module.exports = function(config) {
 			base: 'PhantomJS',
 			flags: ['--web-security=false']
 		},
-		ChromeNoWebWecutity: {
+		ChromeNoWebSecutity: {
 			base: 'Chrome',
 			flags: ['--disable-web-security']
 		}

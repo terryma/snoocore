@@ -12,8 +12,8 @@ if (isNode)
 	, chaiAsPromised = require('chai-as-promised');
 }
 
-chai.Should();
 chai.use(chaiAsPromised);
+var expect = chai.expect;
 
 /* global describe */
 /* global it */
@@ -51,12 +51,12 @@ describe('Snoocore', function () {
 				access_token: 'foo',
 				token_type: 'foo'
 			}).then(function() {
-				reddit._test.isAuthenticated().should.equal(true);
+				expect(reddit._test.isAuthenticated()).to.equal(true);
 			});
 		});
 
 		it('should not be authenticated', function() {
-			reddit._test.isAuthenticated().should.equal(false);
+			expect(reddit._test.isAuthenticated()).to.equal(false);
 		});
 
 	});
@@ -76,7 +76,7 @@ describe('Snoocore', function () {
 
 		it('should get a standard url', function() {
 			var url = reddit._test.getAuthOrStandardUrl(endpoint);
-			url.should.equal('http://foo.bar');
+			expect(url).to.equal('http://foo.bar');
 		});
 
 		it('should get an authenticated url', function() {
@@ -85,7 +85,7 @@ describe('Snoocore', function () {
 				token_type: 'foo'
 			}).then(function() {
 				var url = reddit._test.getAuthOrStandardUrl(endpoint);
-				url.should.equal('https://oauth.foo.bar');
+				expect(url).to.equal('https://oauth.foo.bar');
 			});
 		});
 
@@ -96,7 +96,7 @@ describe('Snoocore', function () {
 		it('should not replace anything', function() {
 			var url = reddit._test.replaceUrlParams(
 				'http://foo/bar/baz', { hello: 'world' });
-			url.should.equal('http://foo/bar/baz');
+			expect(url).to.equal('http://foo/bar/baz');
 		});
 
 		it('should replace parameters', function() {
@@ -104,7 +104,7 @@ describe('Snoocore', function () {
 				'http://foo/$hello/baz', {
 					$hello: 'world'
 				});
-			url.should.equal('http://foo/world/baz');
+			expect(url).to.equal('http://foo/world/baz');
 		});
 
 		it('should replace more than one parameter', function() {
@@ -113,7 +113,7 @@ describe('Snoocore', function () {
 					$hello: 'world',
 					$foo: 'bar'
 				});
-			url.should.equal('http://foo/world/bar');
+			expect(url).to.equal('http://foo/world/bar');
 		});
 
 	});
@@ -122,17 +122,17 @@ describe('Snoocore', function () {
 
 		it('should not add anything', function() {
 			var url = reddit._test.addUrlExtension('http://foo', []);
-			url.should.equal('http://foo');
+			expect(url).to.equal('http://foo');
 		});
 
 		it('should add *.json extension', function() {
 			var url = reddit._test.addUrlExtension(
 				'http://foo', [ '.xml', '.json' ]);
-			url.should.equal('http://foo.json');
+			expect(url).to.equal('http://foo.json');
 		});
 
 		it('should throw an error if json is not an extension', function() {
-			chai.expect(function() {
+			expect(function() {
 				reddit._test.addUrlExtension('http://foo', [ '.xml' ]);
 			}).to.throw();
 		});
@@ -156,7 +156,7 @@ describe('Snoocore', function () {
 				$urlparam: 'something'
 			}, endpoint);
 
-			url.should.equal('http://foo/something/bar');
+			expect(url).to.equal('http://foo/something/bar');
 		});
 
 	});
@@ -165,13 +165,12 @@ describe('Snoocore', function () {
 
 		it('should remove `$` arguments', function() {
 			reddit = new Snoocore({ browser: false });
-			reddit._test.buildArgs({ $foo: 'bar' }).should.eql({});
-
+			expect(reddit._test.buildArgs({ $foo: 'bar' })).to.eql({});
 		});
 
 		it('should add an "app" key (browser specified)', function() {
 			reddit = new Snoocore({ browser: true });
-			reddit._test.buildArgs({ foo: 'bar' }).should.eql({
+			expect(reddit._test.buildArgs({ foo: 'bar' })).to.eql({
 				foo: 'bar',
 				app: 'snoocore-default-User-Agent'
 			});
@@ -181,11 +180,13 @@ describe('Snoocore', function () {
 
 	describe('#freeformRedditApiCall()', function() {
 
-		it('should call a free form route', function() {
+		it.only('should call a free form route', function() {
 			return reddit._test.freeformRedditApiCall(
 				'get',
 				'http://www.reddit.com/r/netsec/hot.json')
-			.should.eventually.haveOwnProperty('kind', 'Listing');
+			.then(function(result) {
+				expect(result).to.haveOwnProperty('kind', 'Listing');
+			});
 		});
 
 		it('should call a free form route (parameters)', function() {
@@ -193,7 +194,9 @@ describe('Snoocore', function () {
 				'get',
 				'http://www.reddit.com/r/$subreddit/hot.json',
 				{ $subreddit: 'netsec' })
-			.should.eventually.haveOwnProperty('kind', 'Listing');
+			.then(function(result) {
+				expect(result).to.haveOwnProperty('kind', 'Listing');
+			});
 		});
 
 	});
@@ -203,7 +206,9 @@ describe('Snoocore', function () {
 			return reddit.get(
 				'http://www.reddit.com/r/$subreddit/hot.json',
 				{ $subreddit: 'netsec' })
-			.should.eventually.haveOwnProperty('kind', 'Listing');
+			.then(function(result) {
+				expect(result).to.haveOwnProperty('kind', 'Listing');
+			});
 		});
 	});
 

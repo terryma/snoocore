@@ -61,7 +61,6 @@ exports.waitForRequest = function() {
 				return resolve(parsedUrl.query);
 			});
 
-			console.log('killing all connections'); //!!!debug
 			killAllConnections();
 		});
 
