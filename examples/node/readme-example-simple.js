@@ -9,11 +9,11 @@ var reddit = new Snoocore({ userAgent: 'myApp v0.0.0' });
 
 // Brackets `[]` denote optional sections of the URL, we can
 // Leave out [/r/subreddit] to get new posts site wide
-reddit.new().done(function(results) {
+reddit.new.get().done(function(results) {
 	console.log(results);
 });
 
 // Or specify a subreddit with the url parameter *subreddit*
-reddit.r.$subreddit.new({ $subreddit: 'netsec' }).done(function(r) {
+reddit.r.$subreddit.new.get({ $subreddit: 'netsec' }).done(function(r) {
 	console.log(r);
 });

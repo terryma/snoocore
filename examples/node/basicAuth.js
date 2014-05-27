@@ -45,7 +45,7 @@ getUserInfo().then(function(userInfo) {
 	});
 }).then(function(loginData) {
 	console.log(loginData);
-	return reddit.api['me.json']();
+	return reddit.api['me.json'].get();
 }).then(function(meJsonData) {
 	console.log(meJsonData);
 }).catch(function(error) {

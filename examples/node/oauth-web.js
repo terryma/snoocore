@@ -127,7 +127,7 @@ getOauthInfo().then(function(oauthInfo) {
 }).then(function() {
 
 	// We can now make OAuth calls using the authenticated user:
-	return reddit.api.v1.me();
+	return reddit.api.v1.me.get();
 
 }).then(function(data) {
 
