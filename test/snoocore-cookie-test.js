@@ -57,7 +57,7 @@ describe('Snoocore', function () {
 			.then(reddit.logout)
 			.then(wait)
 			.then(function() {
-				return reddit.api.login({
+				return reddit.api.login.post({
 					user: config.reddit.REDDIT_USERNAME,
 					passwd: config.reddit.REDDIT_PASSWORD,
 					api_type: 'json',
@@ -81,7 +81,7 @@ describe('Snoocore', function () {
 					password: config.reddit.REDDIT_PASSWORD
 				});
 			})
-			.then(reddit.api['me.json'])
+			.then(reddit.api['me.json'].get)
 			.then(function(result) {
 				result.data.name.should.equal(config.reddit.REDDIT_USERNAME);
 			});
@@ -119,7 +119,7 @@ describe('Snoocore', function () {
 						cookie: cookie
 					});
 				})
-				.then(reddit.api['me.json'])
+				.then(reddit.api['me.json'].get)
 				.then(function(result) {
 					result.data.name.should.equal(config.reddit.REDDIT_USERNAME);
 				});
@@ -134,7 +134,7 @@ describe('Snoocore', function () {
 			return wait()
 			.then(reddit.logout)
 			// ensure we're logged out
-			.then(reddit.api['me.json'])
+			.then(reddit.api['me.json'].get)
 			.then(function(result) {
 				result.should.eql({});
 			})
@@ -143,7 +143,7 @@ describe('Snoocore', function () {
 			.then(login)
 			.then(wait)
 			// check that we are logged in
-			.then(reddit.api['me.json'])
+			.then(reddit.api['me.json'].get)
 			.then(function(result) {
 				result.data.name.should.equal(config.reddit.REDDIT_USERNAME);
 			})
@@ -151,7 +151,7 @@ describe('Snoocore', function () {
 			// logout
 			.then(reddit.logout)
 			// ensure we're logged out
-			.then(reddit.api['me.json'])
+			.then(reddit.api['me.json'].get)
 			.then(function(result) {
 				result.should.eql({});
 			});
@@ -168,7 +168,7 @@ describe('Snoocore', function () {
 		it('should GET resources while not logged in', function() {
 			return wait()
 			.then(function() {
-				return reddit.r.$subreddit.new({
+				return reddit.r.$subreddit.new.get({
 					$subreddit: 'pcmasterrace'
 				});
 			})
@@ -180,7 +180,7 @@ describe('Snoocore', function () {
 
 		it('should not get resources when not logged in', function() {
 			return wait()
-			.then(reddit.api['me.json'])
+			.then(reddit.api['me.json'].get)
 			.then(function(data) {
 				return data.should.eql({});
 			});
@@ -190,7 +190,7 @@ describe('Snoocore', function () {
 			return wait()
 			.then(login)
 			.then(wait)
-			.then(reddit.api['me.json'])
+			.then(reddit.api['me.json'].get)
 			.then(function(result) {
 				result.data.name.should.equal(config.reddit.REDDIT_USERNAME);
 			});
@@ -201,7 +201,7 @@ describe('Snoocore', function () {
 			.then(login)
 			.then(wait)
 			.then(function() {
-				return reddit.subreddits.mine.$where({
+				return reddit.subreddits.mine.$where.get({
 					$where: 'subscriber',
 					limit: 2
 				});
@@ -219,7 +219,7 @@ describe('Snoocore', function () {
 			.then(login)
 			.then(wait)
 			.then(function() {
-				return reddit.api.setappicon({
+				return reddit.api.setappicon.post({
 					client_id: config.reddit.REDDIT_KEY_SCRIPT,
 					api_type: 'json',
 					file: appIcon
@@ -237,7 +237,7 @@ describe('Snoocore', function () {
 			.then(login)
 			.then(wait)
 			.then(function() {
-				return reddit.r.$subreddit['about.json']({
+				return reddit.r.$subreddit['about.json'].get({
 					$subreddit: 'snoocoreTest'
 				});
 			})
@@ -248,14 +248,14 @@ describe('Snoocore', function () {
 
 				return wait()
 				.then(function() {
-					return reddit.api.subscribe({
+					return reddit.api.subscribe.post({
 						action: isSubbed ? 'unsub' : 'sub',
 						sr: subName
 					});
 				})
 				.then(wait)
 				.then(function() {
-					return reddit.r.$subreddit['about.json']({
+					return reddit.r.$subreddit['about.json'].get({
 						$subreddit: 'snoocoreTest'
 					});
 				}).then(function(secondResp) {
@@ -264,14 +264,6 @@ describe('Snoocore', function () {
 				});
 			});
 
-		});
-
-		it('should get the front page', function() {
-			return wait()
-			.then(reddit.json)
-			.then(function(response) {
-				response.kind.should.equal('Listing');
-			});
 		});
 
 	});
