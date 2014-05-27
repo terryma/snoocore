@@ -5,10 +5,10 @@ layout: default
 
 # Authenticating with Cookies
 
-Simply apply the parameter guidelines and make a call to [`/api/login`](http://www.reddit.com/dev/api#POST_api_login):
+Simply apply the basic usage guidelines and make a call to [`POST /api/login`](http://www.reddit.com/dev/api#POST_api_login):
 
 ```javascript
-var loginPromise = reddit.api.login({
+var loginPromise = reddit.api.login.post({
     user: 'yourUsername',
     passwd: 'yourPassword',
     rem: true,
@@ -23,9 +23,9 @@ Note that the parameters `api_type` and `rem` are *required*. Snoocore does not 
 The above works, but the url parameters `rem` and `api_type` are a little clunky for the average user. Snoocore provides an alternate login function that can be used:
 
 ```javascript
-var loginPromise = reddit.login({ 
-    username: 'yourUsername', 
-    password: 'yourPasswd' 
+var loginPromise = reddit.login({
+    username: 'yourUsername',
+    password: 'yourPasswd'
 });
 ```
 
@@ -37,7 +37,7 @@ A function `logout` is provided if the functionality is needed.
 
 ```javascript
 var logoutPromise = reddit.logout();
-``` 
+```
 
 
 ## Modhash & Cookie login

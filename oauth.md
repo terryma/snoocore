@@ -37,7 +37,7 @@ var authData = Snoocore.oauth.getAuthData('script', {
 // Give our client the authentication data
 return reddit.auth(authData).then(function() {
     // Make an OAuth call to show that it is working
-    return reddit.api.v1.me();
+    return reddit.api.v1.me.get();
 })
 .then(function(data) {
     console.log(data); // Log the response
@@ -97,7 +97,7 @@ var authData = Snoocore.oauth.getAuthData('web', {
 // Give our client the authentication data
 return reddit.auth(authData).then(function() {
     // Make an OAuth call to show that it is working
-    return reddit.api.v1.me();
+    return reddit.api.v1.me.get();
 })
 .then(function(data) {
     console.log(data); // Log the response
@@ -116,4 +116,4 @@ A function `deauth` is provided if the functionality is needed.
 
 ```javascript
 var deauthPromise = reddit.deauth();
-``` 
+```
