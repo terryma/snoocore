@@ -227,51 +227,61 @@ function Snoocore(config) {
 
 	}
 
-	// Build this glorious API
-	function buildRedditApi(root) {
+	// Build the API calls
+	function buildRedditApi(rawApi) {
 		var reddit = {};
-		for (var nodeName in root) {
-			var node = root[nodeName];
 
-			if (typeof node.method !== 'undefined') {
-				reddit[nodeName] = buildCall(root[nodeName]);
-			} else {
-				reddit[nodeName] = buildRedditApi(node);
+		rawApi.forEach(function(endpoint) {
+			var pathSections = endpoint.path.substring(1).split('/');
+			var leaf = reddit; // start at the root
+
+			// move down to where we need to be in the chain for this endpoint
+			pathSections.forEach(function(section) {
+				if (typeof leaf[section] === 'undefined') {
+					leaf[section] = {};
+				}
+				leaf = leaf[section];
+			});
+
+			// set the appropriate method call in the chain
+			switch (endpoint.method.toLowerCase()) {
+				case 'get':
+					leaf.get = buildCall(endpoint); break;
+				case 'post':
+					leaf.post = buildCall(endpoint); break;
+				case 'put':
+					leaf.put = buildCall(endpoint); break;
+				case 'patch':
+					leaf.patch = buildCall(endpoint); break;
+				case 'delete':
+					leaf.delete = buildCall(endpoint); break;
+				case 'update':
+					leaf.update = buildCall(endpoint); break;
 			}
-		}
+		});
+
 		return reddit;
 	}
 
-	function freeformRedditApiCall(method, url, args) {
-		var endpoint = {
-            url: { standard: url },
-            method: method
-        };
-        return buildCall(endpoint)(args);
-	}
+	// Build support for the raw API calls
+	self.raw = function(url) {
 
-	self.get = function(url, args) {
-		return freeformRedditApiCall('get', url, args);
-	};
+		function build(method) {
+			var endpoint = {
+				url: { standard: url },
+				method: method
+			};
+			return buildCall(endpoint);
+		}
 
-	self.post = function(url, args) {
-		return freeformRedditApiCall('post', url, args);
-	};
-
-	self.put = function(url, args) {
-		return freeformRedditApiCall('put', url, args);
-	};
-
-	self.patch = function(url, args) {
-		return freeformRedditApiCall('patch', url, args);
-	};
-
-	self.delete = function(url, args) {
-		return freeformRedditApiCall('delete', url, args);
-	};
-
-	self.update = function(url, args) {
-		return freeformRedditApiCall('update', url, args);
+		return {
+			get: build('get'),
+			post: build('post'),
+			put: build('put'),
+			patch: build('patch'),
+			delete: build('delete'),
+			update: build('update')
+		};
 	};
 
 	// Sets the modhash & cookie to allow for cookie-based calls
@@ -293,7 +303,7 @@ function Snoocore(config) {
 				? options.api_type
 				: 'json';
 
-			return self.api.login({
+			return self.api.login.post({
 				user: options.username,
 				passwd: options.password,
 				rem: rem,
@@ -310,7 +320,7 @@ function Snoocore(config) {
 	self.logout = function() {
 		var getModhash = self.modhash
 			? when.resolve(self.modhash)
-			: self.api['me.json']().then(function(result) {
+			: self.api['me.json'].get().then(function(result) {
 				return result.data ? result.data.modhash : void 0;
 			});
 
@@ -356,8 +366,7 @@ function Snoocore(config) {
 		addUrlExtension: addUrlExtension,
 		buildUrl: buildUrl,
 		buildArgs: buildArgs,
-		buildCall: buildCall,
-		freeformRedditApiCall: freeformRedditApiCall
+		buildCall: buildCall
 	};
 
 	return self;

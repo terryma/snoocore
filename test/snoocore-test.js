@@ -181,7 +181,7 @@ describe('Snoocore', function () {
 	describe('#raw()', function() {
 
 		it('should call a raw route', function() {
-			return reddit._test
+			return reddit
 				.raw('http://www.reddit.com/r/netsec/hot.json')
 				.get()
 			.then(function(result) {
@@ -190,7 +190,7 @@ describe('Snoocore', function () {
 		});
 
 		it('should call a raw route (with parameters)', function() {
-			return reddit._test
+			return reddit
 				.raw('http://www.reddit.com/r/$subreddit/hot.json')
 				.get({ $subreddit: 'netsec' })
 			.then(function(result) {
