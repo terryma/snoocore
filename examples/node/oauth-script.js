@@ -60,7 +60,7 @@ getOauthInfo().then(function(oauthInfo) {
 		return reddit.auth(authData);
 	})
 	.then(function() {
-		return reddit.api.v1.me();
+		return reddit.api.v1.me.get();
 	})
 	.then(function(data) {
 		console.log(data);

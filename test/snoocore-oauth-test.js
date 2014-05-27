@@ -60,7 +60,7 @@ describe('Snoocore.oauth', function () {
 		});
 
 		it('should get back error 403 when not authenticated', function() {
-			return snoocore.api.v1.me().should.be.rejected;
+			return snoocore.api.v1.me.get().should.be.rejected;
 		});
 
 	});
@@ -97,7 +97,7 @@ describe('Snoocore.oauth', function () {
 					return snoocore.auth(authData);
 				})
 				.then(function() {
-					return snoocore.api.v1.me();
+					return snoocore.api.v1.me.get();
 				})
 				.then(function(data) {
 					chai.expect(data.error).to.be.undefined;
@@ -122,7 +122,7 @@ describe('Snoocore.oauth', function () {
 				return snoocore.auth(authData);
 			})
 			.then(function() {
-				return snoocore.api.v1.me();
+				return snoocore.api.v1.me.get();
 			})
 			.then(function(data) {
 				chai.expect(data.error).to.be.undefined;
@@ -143,7 +143,7 @@ describe('Snoocore.oauth', function () {
 			});
 
 			return snoocore.auth(authData).then(function() {
-				return snoocore.api.v1.me();
+				return snoocore.api.v1.me.get();
 			})
 			.then(function(data) {
 				chai.expect(data.error).to.be.undefined;
@@ -163,7 +163,7 @@ describe('Snoocore.oauth', function () {
 			return wait()
 			.then(auth)
 			.then(wait)
-			.then(snoocore.api.v1.me)
+			.then(snoocore.api.v1.me.get)
 			.then(function(data) {
 				data.name.should.equal(config.reddit.REDDIT_USERNAME);
 			});
@@ -174,7 +174,7 @@ describe('Snoocore.oauth', function () {
 			.then(auth)
 			.then(wait)
 			.then(function() {
-				return snoocore.subreddits.mine.$where({
+				return snoocore.subreddits.mine.$where.get({
 					$where: 'subscriber',
 					limit: 2
 				});

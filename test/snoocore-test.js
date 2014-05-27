@@ -178,38 +178,26 @@ describe('Snoocore', function () {
 
 	});
 
-	describe('#freeformRedditApiCall()', function() {
+	describe('#raw()', function() {
 
-		it('should call a free form route', function() {
-			return reddit._test.freeformRedditApiCall(
-				'get',
-				'http://www.reddit.com/r/netsec/hot.json')
+		it('should call a raw route', function() {
+			return reddit
+				.raw('http://www.reddit.com/r/netsec/hot.json')
+				.get()
 			.then(function(result) {
 				expect(result).to.haveOwnProperty('kind', 'Listing');
 			});
 		});
 
-		it('should call a free form route (parameters)', function() {
-			return reddit._test.freeformRedditApiCall(
-				'get',
-				'http://www.reddit.com/r/$subreddit/hot.json',
-				{ $subreddit: 'netsec' })
+		it('should call a raw route (with parameters)', function() {
+			return reddit
+				.raw('http://www.reddit.com/r/$subreddit/hot.json')
+				.get({ $subreddit: 'netsec' })
 			.then(function(result) {
 				expect(result).to.haveOwnProperty('kind', 'Listing');
 			});
 		});
 
-	});
-
-	describe('freeform rest calls (get, post, put, etc...)', function() {
-		it('should call a free form route (reddit.get)', function() {
-			return reddit.get(
-				'http://www.reddit.com/r/$subreddit/hot.json',
-				{ $subreddit: 'netsec' })
-			.then(function(result) {
-				expect(result).to.haveOwnProperty('kind', 'Listing');
-			});
-		});
 	});
 
 });
