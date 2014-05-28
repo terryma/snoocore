@@ -6,9 +6,9 @@ var Snoocore = require('../../Snoocore');
 var reddit = new Snoocore({ userAgent: 'snoocoreExample' });
 
 function printNetSecAbout(i) {
-	reddit.r.$subreddit['about.json'].get({
+	reddit('/r/$subreddit/about.json').get({
 		$subreddit: 'netsec'
-	}).then(function(res) {
+	}).done(function(res) {
 		console.log(i + ': ' +
 			res.data.public_description.substring(0, 45) + '...');
 	});

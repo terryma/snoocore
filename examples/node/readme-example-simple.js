@@ -1,19 +1,29 @@
 #!/usr/bin/env node
 "use strict";
 
-var Snoocore = require('../../Snoocore');
+var Snoocore = require('snoocore');
 var reddit = new Snoocore({ userAgent: 'myApp v0.0.0' });
 
 // Example code for http://www.reddit.com/dev/api#GET_new
 // [/r/*subreddit*]/new
 
+
 // Brackets `[]` denote optional sections of the URL, we can
 // Leave out [/r/subreddit] to get new posts site wide
-reddit.new.get().done(function(results) {
+var frontpagePromise = reddit('/hot').get();
+
+// Or specify a subreddit with the url parameter *subreddit*
+var netsecFrontpagePromise = reddit('/r/$subreddit/hot').get({
+	$subreddit: 'netsec',
+	limit: 10
+});
+
+frontpagePromise.done(function(results) {
+	console.log('FRONTPAGE');
 	console.log(results);
 });
 
-// Or specify a subreddit with the url parameter *subreddit*
-reddit.r.$subreddit.new.get({ $subreddit: 'netsec' }).done(function(r) {
-	console.log(r);
+netsecFrontpagePromise.done(function(results) {
+	console.log('NETSEC FRONTPAGE');
+	console.log(results);
 });

@@ -60,6 +60,8 @@ getOauthInfo().then(function(oauthInfo) {
 		return reddit.auth(authData);
 	})
 	.then(function() {
+		// Using the dot notation syntax below. Can be replaced with
+		// reddit('/api/v1/me').get();
 		return reddit.api.v1.me.get();
 	})
 	.then(function(data) {

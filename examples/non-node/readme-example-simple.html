@@ -29,13 +29,13 @@
 
 	// Brackets `[]` denote optional sections of the URL, we can
 	// Leave out [/r/subreddit] to get new posts site wide
-	reddit.new.get().done(function(results) {
+	reddit('/new').get().done(function(results) {
 		document.getElementById('reddit_new').innerText =
 			JSON.stringify(results, null, 4);
 	});
 
 	// Or specify a subreddit with the url parameter *subreddit*
-	reddit.r.$subreddit.new.get({
+	reddit('/r/$subreddit/new').get({
 		$subreddit: 'netsec'
 	}).done(function(r) {
 		document.getElementById('netsec_new').innerText =
