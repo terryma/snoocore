@@ -17,10 +17,10 @@ A minimal and complete JavaScript driver for the Reddit API.
 
 **Quick Demo**
 
-Get new posts site wide or from a specific subreddit.
+Get "hot" posts site wide or from a specific subreddit.
 
- - API Endpoint: http://www.reddit.com/dev/api#GET_new
- - Path: `GET [/r/subreddit]/new`
+ - API Endpoint: http://www.reddit.com/dev/api#GET_hot
+ - Path: `GET [/r/subreddit]/hot`
 
 ```javascript
 var Snoocore = require('snoocore');
@@ -28,7 +28,7 @@ var reddit = new Snoocore({ userAgent: 'myApp v0.0.0' });
 
 var frontpagePromise = reddit('/hot').get();
 
-var netsecFrontpagePromise = reddit('/r/$subreddit/hot').get({
+var netsecPromise = reddit('/r/$subreddit/hot').get({
 	$subreddit: 'netsec',
 	limit: 10
 });
