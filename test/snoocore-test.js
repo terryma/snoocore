@@ -200,4 +200,25 @@ describe('Snoocore', function () {
 
 	});
 
+	describe('#path()', function() {
+
+		it('should allow a "path" syntax', function() {
+			return reddit
+			.path('/r/$subreddit/hot')
+			.get({ $subreddit: 'aww' })
+			.then(function(result) {
+				expect(result).to.haveOwnProperty('kind', 'Listing');
+			});
+		});
+
+		it('should allow a "path" syntax (where reddit === path fn)', function() {
+			return reddit('/r/$subreddit/hot')
+			.get({ $subreddit: 'aww' })
+			.then(function(result) {
+				expect(result).to.haveOwnProperty('kind', 'Listing');
+			});
+		});
+
+	});
+
 });
