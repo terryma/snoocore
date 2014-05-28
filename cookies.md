@@ -38,18 +38,3 @@ A function `logout` is provided if the functionality is needed.
 ```javascript
 var logoutPromise = reddit.logout();
 ```
-
-
-## Modhash & Cookie login
-
-If for some reason you need to login with a Modhash & Cookie instead of the traditional Username & Password cookie login, you can do so using the `reddit.login` provided to perform traditional logins, just pass it a modhash and cookie instead:
-
-```javascript
-var Snoocore = require('snoocore');
-var reddit = new Snoocore({ userAgent: 'someUserAgent' });
-
-var loginPromise = reddit.login({
-    cookie: {}, /* your cookie */
-    modhash: 'yourModhash'
-});
-```

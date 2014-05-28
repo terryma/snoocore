@@ -10,16 +10,16 @@ Calls in Snoocore map *directly* to the Reddit API.
 To use the endpoint [`GET /api/v1/me`](http://www.reddit.com/dev/api#GET_api_v1_me):
 
 ```javascript
+var promise = reddit('/api/v1/me').get();
+```
+
+Or if you prefer, use the dot-syntax:
+
+```javascript
 var promise = reddit.api.v1.me.get();
 ```
 
 We can determine what to call based on the path (in this case `/api/v1/me`) and the HTTP verb that is uses (in this case `GET`).
-
-The formula is:
-
-```
-reddit[path][httpVerb](/* parameters */)
-```
 
 <sub>If you are new to promises or want a quick overview on how they work with snoocore take a look [here](promises.html). The rest of this readme assumes basic knowledge on how they work.</sub>
 
@@ -28,7 +28,7 @@ reddit[path][httpVerb](/* parameters */)
 Calls to endpoints such as  [`POST /api/subscribe`](http://www.reddit.com/dev/api#POST_api_subscribe) take parameters. These simply get passed in as an object:
 
 ```javascript
-var promise = reddit.api.subscribe.post({
+var promise = reddit('/api/subscribe').post({
 	action: 'sub',
 	sr: 't5_2qh1o' // The "fullname" for the "aww" subreddit.
 });
@@ -46,6 +46,8 @@ var promise = reddit.api.multi.$multipath.rename.post({
     from: '9',
     to:  '5'
 });
+
+// or reddit('/api/multi/$multipath/rename').post(...)
 ```
 
 # Advanced Usage
