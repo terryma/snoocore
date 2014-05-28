@@ -12,7 +12,7 @@ A minimal and complete JavaScript driver for the Reddit API.
 
 **Examples**
 
- - [Online Demo](http://plnkr.co/edit/XKywhjRpeCr0F3owlapq?p=preview)
+ - [Online Demo](http://plnkr.co/edit/7zppWOM9QjSMdVuYQU2s?p=preview)
  - [Code Examples](https://github.com/trevorsenior/snoocore/tree/master/examples)
 
 **Quick Demo**
