@@ -123,11 +123,6 @@ function Snoocore(config) {
 
 		return function callRedditApi(givenArgs) {
 
-			console.log('---------------'); //!!!debug
-			console.log('call reddit api'); //!!!debug
-			console.log('modhash, ' + self._modhash); //!!!debug
-
-
 			self._throttleDelay += self._throttle;
 
 			// Wait for the throttle delay amount, then call the Reddit API
@@ -332,39 +327,32 @@ function Snoocore(config) {
 	// Sets the modhash & cookie to allow for cookie-based calls
 	self.login = function(options) {
 
-		if (options.modhash && options.cookie) {
-			self._modhash = options.modhash;
-			self._cookie = options.cookie;
-			return when.resolve();
+		if (!options.username || !options.password) {
+			return when.reject(new Error(
+				'login expects either a username/password, or a ' +
+				'cookie/modhash'));
 		}
 
-		if (options.username && options.password) {
+		var rem = typeof options.rem !== 'undefined'
+			? options.rem
+			: true;
 
-			var rem = typeof options.rem !== 'undefined'
-				? options.rem
-				: true;
+		var api_type = typeof options.api_type !== 'undefined'
+			? options.api_type
+			: 'json';
 
-			var api_type = typeof options.api_type !== 'undefined'
-				? options.api_type
-				: 'json';
-
-			return self.api.login.post({
-				user: options.username,
-				passwd: options.password,
-				rem: rem,
-				api_type: api_type
-			});
-		}
-
-		return when.reject(new Error(
-			'login expects either a username/password, or a ' +
-			'cookie/modhash'));
+		return self.api.login.post({
+			user: options.username,
+			passwd: options.password,
+			rem: rem,
+			api_type: api_type
+		});
 	};
 
 	// Clears the modhash & cookie that was set
 	self.logout = function() {
-		var getModhash = self.modhash
-			? when.resolve(self.modhash)
+		var getModhash = self._modhash
+			? when.resolve(self._modhash)
 			: self.api['me.json'].get().then(function(result) {
 				return result.data ? result.data.modhash : void 0;
 			});
@@ -376,7 +364,7 @@ function Snoocore(config) {
 			var defer = when.defer();
 
 			request.post('http://www.reddit.com/logout')
-			.set('X-Modhash', self.modhash)
+			.set('X-Modhash', self._modhash)
 			.type('form')
 			.send({ uh: modhash })
 			.end(function(error, res) {
