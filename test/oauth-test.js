@@ -179,7 +179,7 @@ describe('oauth', function (require) {
 		});
 
 		it('should get an access token (SCRIPT)', function() {
-			this.timeout(5000);
+			this.timeout(10000);
 
 			return oauth.getAuthData('script', {
 				consumerKey: config.reddit.REDDIT_KEY_SCRIPT,
@@ -199,7 +199,7 @@ describe('oauth', function (require) {
 		});
 
 		it('should get an access token (SCRIPT + 1 scope string)', function() {
-			this.timeout(5000);
+			this.timeout(10000);
 
 			return oauth.getAuthData('script', {
 				consumerKey: config.reddit.REDDIT_KEY_SCRIPT,
@@ -220,7 +220,7 @@ describe('oauth', function (require) {
 		});
 
 		it('should get an access token (SCRIPT + 1 scope array)', function() {
-			this.timeout(5000);
+			this.timeout(10000);
 
 			return oauth.getAuthData('script', {
 				consumerKey: config.reddit.REDDIT_KEY_SCRIPT,
@@ -241,7 +241,7 @@ describe('oauth', function (require) {
 		});
 
 		it('should get an access token (SCRIPT + multi scope array)', function() {
-			this.timeout(5000);
+			this.timeout(10000);
 
 			return oauth.getAuthData('script', {
 				consumerKey: config.reddit.REDDIT_KEY_SCRIPT,

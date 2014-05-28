@@ -16,7 +16,7 @@ chai.use(chaiAsPromised);
 /* global it */
 /* global beforeEach */
 
-describe('Snoocore.oauth', function () {
+describe('Snoocore OAuth Test', function () {
 
 	this.timeout(20000);
 

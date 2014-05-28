@@ -3,6 +3,7 @@
 var when = require('when')
 , delay = require('when/delay')
 , request = require('superagent')
+, lodash = require('lodash')
 , rawApi = require('reddit-api-generator');
 
 module.exports = Snoocore;
@@ -11,6 +12,7 @@ Snoocore.oauth = require('./oauth');
 
 function Snoocore(config) {
 
+	// Attach the API calls to self for dot-syntax
 	var self = buildRedditApi(rawApi);
 
 	self._userAgent = config.userAgent || 'snoocore-default-User-Agent';
@@ -114,17 +116,22 @@ function Snoocore(config) {
 	// call finishes.
 	//
 	// Time is added / removed based on the self._throttle variable.
-	self.throttleDelay = 1;
+	self._throttleDelay = 1;
 
 	// Build a single API call
 	function buildCall(endpoint) {
 
 		return function callRedditApi(givenArgs) {
 
-			self.throttleDelay += self._throttle;
+			console.log('---------------'); //!!!debug
+			console.log('call reddit api'); //!!!debug
+			console.log('modhash, ' + self._modhash); //!!!debug
+
+
+			self._throttleDelay += self._throttle;
 
 			// Wait for the throttle delay amount, then call the Reddit API
-			return delay(self.throttleDelay - self._throttle).then(function() {
+			return delay(self._throttleDelay - self._throttle).then(function() {
 
 				var redditCall = when.defer()
 				, method = endpoint.method.toLowerCase()
@@ -220,7 +227,7 @@ function Snoocore(config) {
 				});
 			}).finally(function() {
 				// decrement the throttle delay
-				self.throttleDelay -= self._throttle;
+				self._throttleDelay -= self._throttle;
 			});
 
 		};
@@ -282,6 +289,44 @@ function Snoocore(config) {
 			delete: build('delete'),
 			update: build('update')
 		};
+	};
+
+	// Path syntax support. Gets back the object that has the restful verbs
+	// attached to them to call
+	self.path = function(path) {
+
+		var errorMessage =
+			'Invalid path provided! This endpoint does not exist. Make ' +
+			'sure that your call matches the routes that are defined ' +
+			'in Reddit\'s API documentation';
+
+		path = path.replace(/^\//, ''); // remove leading slash if any
+		var sections = path.split('/'); // sections to traverse down
+		var endpoint = self;
+
+		// Travel down the dot-syntax until we get to the call we want
+		for (var i = 0, len = sections.length; i < len; ++i) {
+			endpoint = endpoint[sections[i]];
+			if (typeof endpoint === 'undefined') {
+				throw new Error(errorMessage);
+			}
+		}
+
+		// check that at least one rest method is defined
+		var isValid = (
+			typeof endpoint.get === 'function' ||
+			typeof endpoint.post === 'function' ||
+			typeof endpoint.put === 'function' ||
+			typeof endpoint.patch === 'function' ||
+			typeof endpoint.delete === 'function' ||
+			typeof endpoint.update === 'function'
+		);
+
+		if (!isValid) {
+			throw new Error(errorMessage);
+		}
+
+		return endpoint;
 	};
 
 	// Sets the modhash & cookie to allow for cookie-based calls
@@ -369,5 +414,5 @@ function Snoocore(config) {
 		buildCall: buildCall
 	};
 
-	return self;
+	return lodash.assign(self.path, self);
 }

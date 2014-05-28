@@ -24,7 +24,7 @@ chai.use(chaiAsPromised);
 /* global it */
 /* global beforeEach */
 
-describe('Snoocore', function () {
+describe('Snoocore Cookie Test', function () {
 
 	this.timeout(20000);
 

@@ -20,7 +20,7 @@ var expect = chai.expect;
 /* global afterEach */
 /* global beforeEach */
 
-describe('Snoocore', function () {
+describe('Snoocore Test', function () {
 
 	this.timeout(20000);
 
@@ -209,6 +209,21 @@ describe('Snoocore', function () {
 			.then(function(result) {
 				expect(result).to.haveOwnProperty('kind', 'Listing');
 			});
+		});
+
+		it('should tolerate a missing beginning slash', function() {
+			return reddit
+			.path('r/$subreddit/hot')
+			.get({ $subreddit: 'aww' })
+			.then(function(result) {
+				expect(result).to.haveOwnProperty('kind', 'Listing');
+			});
+		});
+
+		it('should crash if an invalid endpoint is provided', function() {
+			expect(function() {
+				return reddit.path('/invalid/endpoint');
+			}).to.throw();
 		});
 
 		it('should allow a "path" syntax (where reddit === path fn)', function() {

@@ -13,6 +13,7 @@
     "url": "https://github.com/trevorsenior/snoocore/issues"
   },
   "dependencies": {
+    "lodash": "^2.4.1",
     "reddit-api-generator": "1.0.0",
     "superagent": "^0.18.0",
     "when": "^3.2.2"
