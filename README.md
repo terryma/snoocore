@@ -12,7 +12,7 @@ A minimal and complete JavaScript driver for the Reddit API.
 
 **Examples**
 
- - [Sample Browser Application](http://plnkr.co/edit/XKywhjRpeCr0F3owlapq?p=preview)
+ - [Online Demo](http://plnkr.co/edit/XKywhjRpeCr0F3owlapq?p=preview)
  - [Code Examples](https://github.com/trevorsenior/snoocore/tree/master/examples)
 
 **Quick Demo**
@@ -20,25 +20,21 @@ A minimal and complete JavaScript driver for the Reddit API.
 Get new posts site wide or from a specific subreddit.
 
  - API Endpoint: http://www.reddit.com/dev/api#GET_new
- - Path: **[/r/subreddit]/new**
+ - Path: `GET [/r/subreddit]/new`
 
 ```javascript
 var Snoocore = require('snoocore');
 var reddit = new Snoocore({ userAgent: 'myApp v0.0.0' });
 
-// Brackets `[]` denote optional sections of the path...
-// Leave out [/r/subreddit] to get new posts site wide
-reddit.new.get().done(function(results) {
-	console.log(results);
-});
+var frontpagePromise = reddit('/hot').get();
 
-// Or specify a subreddit with the url parameter `subreddit`
-reddit.r.$subreddit.new.get({ $subreddit: 'netsec' }).done(function(r) {
-	console.log(r);
+var netsecFrontpagePromise = reddit('/r/$subreddit/hot').get({
+	$subreddit: 'netsec',
+	limit: 10
 });
 ```
 
- - See [Basic Usage](http://trevorsenior.github.io/snoocore/basicUsage.html) for an explanation on calling endpoints with paramaters, url parameters (as in `$subreddit` above), and more.
+ - See [Basic Usage](http://trevorsenior.github.io/snoocore/basicUsage.html) for an explanation on calling endpoints with parameters, URL parameters (as in `$subreddit` above), and more.
  - Check out a [basic overview of promises](http://trevorsenior.github.io/snoocore/promises.html) if you're not familiar with them. Every call to snoocore will return one.
 
 ## Features
@@ -49,7 +45,11 @@ Calls are [dynamically generated](https://github.com/trevorsenior/reddit-api-gen
 
 **No special syntax or fluff**
 
-All calls follow the reddit API directly. To use the endpoint [`/api/v1/me`](http://www.reddit.com/dev/api#GET_api_v1_me), call `reddit.api.v1.me()`.
+All calls follow the reddit API directly. To use the endpoint [`GET /api/v1/me`](http://www.reddit.com/dev/api#GET_api_v1_me), call:
+
+```javascript
+reddit('/api/v1/me').get()
+```
 
 For routes that take parameters and url parameters, see the [basic usage](http://trevorsenior.github.io/snoocore/basicUsage.html) section of the documentation.
 
