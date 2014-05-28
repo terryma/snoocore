@@ -117,17 +117,17 @@ function Snoocore(config) {
 	// call finishes.
 	//
 	// Time is added / removed based on the self._throttle variable.
-	self.throttleDelay = 1;
+	self._throttleDelay = 1;
 
 	// Build a single API call
 	function buildCall(endpoint) {
 
 		return function callRedditApi(givenArgs) {
 
-			self.throttleDelay += self._throttle;
+			self._throttleDelay += self._throttle;
 
 			// Wait for the throttle delay amount, then call the Reddit API
-			return delay(self.throttleDelay - self._throttle).then(function() {
+			return delay(self._throttleDelay - self._throttle).then(function() {
 
 				var redditCall = when.defer()
 				, method = endpoint.method.toLowerCase()
@@ -223,7 +223,7 @@ function Snoocore(config) {
 				});
 			}).finally(function() {
 				// decrement the throttle delay
-				self.throttleDelay -= self._throttle;
+				self._throttleDelay -= self._throttle;
 			});
 
 		};
@@ -328,39 +328,32 @@ function Snoocore(config) {
 	// Sets the modhash & cookie to allow for cookie-based calls
 	self.login = function(options) {
 
-		if (options.modhash && options.cookie) {
-			self._modhash = options.modhash;
-			self._cookie = options.cookie;
-			return when.resolve();
+		if (!options.username || !options.password) {
+			return when.reject(new Error(
+				'login expects either a username/password, or a ' +
+				'cookie/modhash'));
 		}
 
-		if (options.username && options.password) {
+		var rem = typeof options.rem !== 'undefined'
+			? options.rem
+			: true;
 
-			var rem = typeof options.rem !== 'undefined'
-				? options.rem
-				: true;
+		var api_type = typeof options.api_type !== 'undefined'
+			? options.api_type
+			: 'json';
 
-			var api_type = typeof options.api_type !== 'undefined'
-				? options.api_type
-				: 'json';
-
-			return self.api.login.post({
-				user: options.username,
-				passwd: options.password,
-				rem: rem,
-				api_type: api_type
-			});
-		}
-
-		return when.reject(new Error(
-			'login expects either a username/password, or a ' +
-			'cookie/modhash'));
+		return self.api.login.post({
+			user: options.username,
+			passwd: options.password,
+			rem: rem,
+			api_type: api_type
+		});
 	};
 
 	// Clears the modhash & cookie that was set
 	self.logout = function() {
-		var getModhash = self.modhash
-			? when.resolve(self.modhash)
+		var getModhash = self._modhash
+			? when.resolve(self._modhash)
 			: self.api['me.json'].get().then(function(result) {
 				return result.data ? result.data.modhash : void 0;
 			});
@@ -372,7 +365,7 @@ function Snoocore(config) {
 			var defer = when.defer();
 
 			request.post('http://www.reddit.com/logout')
-			.set('X-Modhash', self.modhash)
+			.set('X-Modhash', self._modhash)
 			.type('form')
 			.send({ uh: modhash })
 			.end(function(error, res) {
@@ -409,7 +402,6 @@ function Snoocore(config) {
 		buildArgs: buildArgs,
 		buildCall: buildCall
 	};
-
 
 	return lodash.assign(self.path, self);
 }
