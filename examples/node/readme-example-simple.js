@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 "use strict";
 
-var Snoocore = require('snoocore');
+var Snoocore = require('../../Snoocore');
 var reddit = new Snoocore({ userAgent: 'myApp v0.0.0' });
 
 // Example code for http://www.reddit.com/dev/api#GET_new
