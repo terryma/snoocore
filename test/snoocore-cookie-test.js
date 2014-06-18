@@ -87,6 +87,49 @@ describe('Snoocore Cookie Test', function () {
 			});
 		});
 
+		// We can only use cookie / modhash login in non-browser JS.
+		if (isNode) {
+			it('should login with cookie & modhash', function() {
+				// first login with a username & password to get a cookie
+				// and modhash. logout, and re-login with them instead of
+				// a username & password.
+				var cookie, modhash;
+
+				return wait()
+				.then(reddit.logout)
+				.then(wait)
+				.then(function() {
+					return reddit.login({
+						username: config.reddit.REDDIT_USERNAME,
+						password: config.reddit.REDDIT_PASSWORD
+					});
+				})
+				.then(function(result) {
+					modhash = result.json.data.modhash;
+					cookie = result.json.data.cookie;
+				})
+				.then(reddit.api['me.json'].get)
+				.then(function(result) {
+					result.data.name.should.equal(config.reddit.REDDIT_USERNAME);
+				})
+				.then(reddit.logout)
+				.then(reddit.api['me.json'].get)
+				.then(function(result) {
+					result.should.eql({});
+				})
+				.then(function() {
+					return reddit.login({
+						modhash: modhash,
+						cookie: cookie
+					});
+				})
+				.then(reddit.api['me.json'].get)
+				.then(function(result) {
+					result.data.name.should.equal(config.reddit.REDDIT_USERNAME);
+				});
+			});
+		}
+
 	});
 
 	describe('#logout()', function() {

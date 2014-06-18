@@ -12,12 +12,9 @@ Snoocore.oauth = require('./oauth');
 
 function Snoocore(config) {
 
-	// Attach the API calls to self for dot-syntax
-	var self = buildRedditApi(rawApi);
+	var self = this;
 
 	self._userAgent = config.userAgent || 'snoocore-default-User-Agent';
-
-	self._throttle = config.throttle || 2000;
 
 	self._isNode = typeof config.browser !== 'undefined'
 		? !config.browser
@@ -27,8 +24,19 @@ function Snoocore(config) {
 			typeof window === "undefined");
 
 	self._modhash = ''; // The current mod hash of whatever user we have
-	self._cookie = ''; // The current cookie of the user we have
+	self._redditSession = ''; // The current cookie (reddit_session)
 	self._authData = {}; // Set if user has authenticated with OAuth
+
+	// The built calls for the Reddit API.
+	var redditApi = buildRedditApi(rawApi);
+
+	// The current throttle delay before a request will go through
+	// increments every time a call is made, and is reduced when a
+	// call finishes.
+	//
+	// Time is added / removed based on the throttle variable.
+	var throttle = config.throttle || 2000;
+	var throttleDelay = 1;
 
 	function isAuthenticated() {
 		return typeof self._authData.access_token !== 'undefined' &&
@@ -111,22 +119,15 @@ function Snoocore(config) {
 		return args;
 	}
 
-	// The current throttle delay before a request will go through
-	// increments every time a call is made, and is reduced when a
-	// call finishes.
-	//
-	// Time is added / removed based on the self._throttle variable.
-	self._throttleDelay = 1;
-
 	// Build a single API call
 	function buildCall(endpoint) {
 
 		return function callRedditApi(givenArgs) {
 
-			self._throttleDelay += self._throttle;
+			throttleDelay += throttle;
 
 			// Wait for the throttle delay amount, then call the Reddit API
-			return delay(self._throttleDelay - self._throttle).then(function() {
+			return delay(throttleDelay - throttle).then(function() {
 
 				var redditCall = when.defer()
 				, method = endpoint.method.toLowerCase()
@@ -137,14 +138,15 @@ function Snoocore(config) {
 
 				// Can't set User-Agent in browser based JavaScript!
 				if (self._isNode) {
-					call.set('User-Agent', config.userAgent);
+					call.set('User-Agent', self._userAgent);
 				}
 
 				// If we're logged in, set the modhash & cookie
 				if (isLoggedIn()) {
 					call.set('X-Modhash', self._modhash);
 					if (self._isNode) {
-						call.set('Cookie', self._cookie);
+						call.set('Cookie',
+							'reddit_session=' + self._redditSession + ';');
 					}
 				}
 
@@ -165,7 +167,6 @@ function Snoocore(config) {
 						var file = args.file;
 						delete args.file;
 						for (var field in args) {
-							console.log(field, args[field]); void('debug');
 							call.field(field, args[field]);
 						}
 						call.attach('file', file);
@@ -205,9 +206,10 @@ function Snoocore(config) {
 						self._modhash = data.json.data.modhash;
 					}
 
-					// set the cookie if it is in the response
+					// set the reddit_session if it is in the set-cookies
 					if (typeof response.headers['set-cookie'] !== 'undefined') {
-						self._cookie = response.headers['set-cookie'];
+						self._redditSession = response.headers['set-cookie'][0].match(
+								/reddit_session=(.*);/)[1];
 					}
 
 					return redditCall.resolve(data);
@@ -222,7 +224,7 @@ function Snoocore(config) {
 				});
 			}).finally(function() {
 				// decrement the throttle delay
-				self._throttleDelay -= self._throttle;
+				throttleDelay -= throttle;
 			});
 
 		};
@@ -231,11 +233,11 @@ function Snoocore(config) {
 
 	// Build the API calls
 	function buildRedditApi(rawApi) {
-		var reddit = {};
+		var redditApi = {};
 
 		rawApi.forEach(function(endpoint) {
 			var pathSections = endpoint.path.substring(1).split('/');
-			var leaf = reddit; // start at the root
+			var leaf = redditApi; // start at the root
 
 			// move down to where we need to be in the chain for this endpoint
 			pathSections.forEach(function(section) {
@@ -262,7 +264,7 @@ function Snoocore(config) {
 			}
 		});
 
-		return reddit;
+		return redditApi;
 	}
 
 	// Build support for the raw API calls
@@ -326,11 +328,19 @@ function Snoocore(config) {
 
 	// Sets the modhash & cookie to allow for cookie-based calls
 	self.login = function(options) {
+		var hasUserPass = options.username && options.password
+		, hasCookieModhash = options.modhash && options.cookie;
 
-		if (!options.username || !options.password) {
+		if (!hasUserPass && !hasCookieModhash) {
 			return when.reject(new Error(
 				'login expects either a username/password, or a ' +
 				'cookie/modhash'));
+		}
+
+		if (hasCookieModhash) {
+			self._modhash = options.modhash;
+			self._redditSession = options.cookie;
+			return when.resolve();
 		}
 
 		var rem = typeof options.rem !== 'undefined'
@@ -341,7 +351,7 @@ function Snoocore(config) {
 			? options.api_type
 			: 'json';
 
-		return self.api.login.post({
+		return redditApi.api.login.post({
 			user: options.username,
 			passwd: options.password,
 			rem: rem,
@@ -349,11 +359,12 @@ function Snoocore(config) {
 		});
 	};
 
-	// Clears the modhash & cookie that was set
+	// Clears the modhash & cookie that was set, and pings the `/logout` path
+	// on Reddit for good measure.
 	self.logout = function() {
 		var getModhash = self._modhash
 			? when.resolve(self._modhash)
-			: self.api['me.json'].get().then(function(result) {
+			: redditApi.api['me.json'].get().then(function(result) {
 				return result.data ? result.data.modhash : void 0;
 			});
 
@@ -364,7 +375,7 @@ function Snoocore(config) {
 			var defer = when.defer();
 
 			request.post('http://www.reddit.com/logout')
-			.set('X-Modhash', self._modhash)
+			.set('X-Modhash', modhash)
 			.type('form')
 			.send({ uh: modhash })
 			.end(function(error, res) {
@@ -373,15 +384,16 @@ function Snoocore(config) {
 
 			return defer.promise.then(function() {
 				self._modhash = '';
-				self._cookie = '';
+				self._redditSession = '';
 			});
 		});
 	};
 
-	// Sets the auth data from the oauth module to allow OAuth calls
+	// Sets the auth data from the oauth module to allow OAuth calls.
+	// Can accept a promise for the authentication data as well.
 	self.auth = function(authenticationData) {
-		return when(authenticationData).then(function(authData) {
-			self._authData = authData;
+		return when(authenticationData).then(function(authDataResult) {
+			self._authData = authDataResult;
 		});
 	};
 
@@ -402,5 +414,7 @@ function Snoocore(config) {
 		buildCall: buildCall
 	};
 
-	return lodash.assign(self.path, self);
+	self = lodash.assign(self.path, self);
+	self = lodash.assign(self, redditApi);
+	return self;
 }
