@@ -38,3 +38,28 @@ A function `logout` is provided if the functionality is needed.
 ```javascript
 var logoutPromise = reddit.logout();
 ```
+
+## Modhash / Cookie login
+
+It is also possible to login with a modhash & cookie:
+
+```javascript
+var loginPromise = reddit.login({
+    modhash: 'yourModhash',
+    cookie: 'yourCookie'
+});
+```
+
+You can get the modhash and cookie when logging in with the username and password:
+
+```javascript
+var loginPromise = reddit.login({
+    username: 'yourUsername',
+    password: 'yourPasswd'
+}).then(function(result) {
+	console.log(result.json.data.modhash);
+	console.log(result.json.data.cookie);
+});
+```
+
+Or get the modhash and the `reddit_session` cookie value from an existing session elsewhere (browser, etc.)
