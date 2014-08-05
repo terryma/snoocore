@@ -9,7 +9,7 @@ var when = require('when')
 module.exports = Snoocore;
 
 Snoocore.oauth = require('./oauth');
-Snoocore.when = when
+Snoocore.when = when;
 
 function Snoocore(config) {
 
