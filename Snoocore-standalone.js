@@ -10,6 +10,7 @@ var when = _dereq_('when')
 module.exports = Snoocore;
 
 Snoocore.oauth = _dereq_('./oauth');
+Snoocore.when = when;
 
 function Snoocore(config) {
 
