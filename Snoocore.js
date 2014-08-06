@@ -201,16 +201,16 @@ function Snoocore(config) {
 					// set the modhash if the data contains it
 					if (typeof data !== 'undefined' &&
 						typeof data.json !== 'undefined' &&
-						typeof data.json.data !== 'undefined' &&
-						typeof data.json.data.modhash !== 'undefined')
+						typeof data.json.data !== 'undefined')
 					{
-						self._modhash = data.json.data.modhash;
-					}
 
-					// set the reddit_session if it is in the set-cookies
-					if (typeof response.headers['set-cookie'] !== 'undefined') {
-						self._redditSession = response.headers['set-cookie'][0].match(
-								/reddit_session=(.*);/)[1];
+						if (typeof data.json.data.modhash !== 'undefined') {
+							self._modhash = data.json.data.modhash;
+						}
+
+						if (typeof data.json.data.cookie !== 'undefined') {
+							self._redditSession = data.json.data.cookie;
+						}
 					}
 
 					return redditCall.resolve(data);
