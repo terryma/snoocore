@@ -66,14 +66,18 @@ function buildWhenStandalone(done) {
 }
 
 exports.buildStandalone = function(done) {
-	exec(path.join(__dirname, 'node_modules', '.bin', 'browserify') +
-		 ' -s Snoocore' +
-		 ' -o Snoocore-standalone.js' +
-		 ' Snoocore.js', 
-		 { cwd: __dirname },
-		function(error, stdout, stderr) {
-			return done(error);
-		});
+	buildWhenStandalone(function(error) {
+		if (error) { return done(error); }
+
+		return exec(path.join(__dirname, 'node_modules', '.bin', 'browserify') +
+					' -s Snoocore' +
+					' -o Snoocore-standalone.js' +
+					' Snoocore.js', 
+					{ cwd: __dirname },
+					function(error, stdout, stderr) {
+						return done(error);
+					});
+	});
 };
 
 exports.karmaTests = function(done) {
