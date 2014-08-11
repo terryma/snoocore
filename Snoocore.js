@@ -266,9 +266,6 @@ function Snoocore(config) {
 						return child.data.stickied;
 					});
 
-					slice.links = slice.children;
-					slice.stickiedLinks = slice.stickiedLinks;
-
 					slice.next = function() {
 						count += limit;
 
