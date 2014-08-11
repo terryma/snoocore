@@ -20,6 +20,8 @@ if (isNode)
 chai.Should();
 chai.use(chaiAsPromised);
 
+var expect = chai.expect;
+
 /* global describe */
 /* global it */
 /* global beforeEach */
@@ -266,6 +268,52 @@ describe('Snoocore Cookie Test', function () {
 					// should have subbed / unsubbed from the subreddit
 					secondResp.data.user_is_subscriber.should.equal(!isSubbed);
 				});
+			});
+
+		});
+
+	});
+
+	describe('General tests for listings', function() {
+		
+		it.only('should get the front page listing and nav through it (basic)', function() {
+
+			var after = ''
+			, before = '';
+
+			function printShit(slice) {
+				slice.children.forEach(function(child, i) {
+					console.log(i + 1 + slice.count, child.data.title);
+				});
+			}
+
+			// or reddit('/hot').listing
+			return reddit.hot.listing().then(function(slice) {
+				expect(slice.get).to.be.a('object');
+				expect(slice.after).to.be.a('string');
+				expect(slice.before).to.be.null;
+				expect(slice.next).to.be.a('function');
+				expect(slice.previous).to.be.a('function');
+				expect(slice.start).to.be.a('function');
+				
+				expect(slice.count).to.equal(0);
+				printShit(slice);
+				return slice.next();
+			}).then(function(slice) {
+				expect(slice.count).to.equal(25);
+				printShit(slice);
+				return slice.next();
+			}).then(function(slice) {
+				printShit(slice);
+				expect(slice.count).to.equal(50);
+				return slice.previous();
+			}).then(function(slice) {
+				printShit(slice);
+				expect(slice.count).to.equal(25);
+				return slice.start();
+			}).then(function(slice) {
+				printShit(slice);
+				expect(slice.count).to.equal(0);
 			});
 
 		});

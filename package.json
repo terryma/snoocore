@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "lodash": "^2.4.1",
-    "reddit-api-generator": "1.1.0",
+    "reddit-api-generator": "1.2.1",
     "superagent": "^0.18.0",
     "when": "^3.4.3"
   },
@@ -43,7 +43,7 @@
     "snoocore"
   ],
   "scripts": {
-    "test": "./runTests.sh",
+    "test": "./node_modules/.bin/mocha",
     "standalone": "./node_modules/.bin/browserify ./Snoocore.js -s Snoocore -o ./Snoocore-standalone.js"
   }
 }

@@ -232,6 +232,83 @@ function Snoocore(config) {
 
 	}
 
+	function buildListing(endpoint) {
+		var callApi = buildCall(endpoint);
+
+		return function getListing(givenArgs) {
+
+			givenArgs = givenArgs || {};
+
+			// number of results that we have loaded so far. It will
+			// increase / decrease when calling next / previous.
+			var count = 0
+			, limit = givenArgs.limit || 25
+			// keep a reference to the start of this listing
+			, start = givenArgs.after || null;
+
+			function getSlice(givenArgs) {
+				return callApi(givenArgs).then(function(result) {
+					
+					var slice = {};
+					
+					slice.count = count;
+										
+					slice.get = result;
+					slice.before = slice.get.data.before;
+					slice.after = slice.get.data.after;
+					slice.allChildren = slice.get.data.children;
+
+					slice.children = slice.allChildren.filter(function(child) {
+						return !child.data.stickied;
+					});
+
+					slice.stickied = slice.allChildren.filter(function(child) {
+						return child.data.stickied;
+					});
+
+					slice.links = slice.children;
+					slice.stickiedLinks = slice.stickiedLinks;
+
+					slice.next = function() {
+						count += limit;
+
+						var args = givenArgs;
+						args.before = null;
+						args.after = slice.children[slice.children.length - 1].data.name;
+						args.count = count;
+						return getSlice(args);
+					};
+
+					slice.previous = function() {
+						count -= limit;
+
+						var args = givenArgs;
+						args.before = slice.children[0].data.name;
+						args.after = null;
+						args.count = count;
+						return getSlice(args);
+					};
+
+					slice.start = function() {
+						count = 0;
+						
+						var args = givenArgs;
+						args.before = null;
+						args.after = start;
+						args.count = count;
+						return getSlice(args);
+					};
+					
+					return slice;
+				});
+
+			}
+
+			return getSlice(givenArgs);
+		};
+
+	}
+
 	// Build the API calls
 	function buildRedditApi(rawApi) {
 		var redditApi = {};
@@ -262,6 +339,11 @@ function Snoocore(config) {
 					leaf.delete = buildCall(endpoint); break;
 				case 'update':
 					leaf.update = buildCall(endpoint); break;
+			}
+
+			// add on a listing call if endpoint is a listing
+			if (endpoint.isListing) {
+				leaf.listing = buildListing(endpoint);
 			}
 		});
 
