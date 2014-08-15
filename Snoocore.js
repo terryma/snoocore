@@ -255,9 +255,9 @@ function Snoocore(config) {
 										
 					slice.get = result;
 
-					slice.before = slice.get.data.before;
-					slice.after = slice.get.data.after;
-					slice.allChildren = slice.get.data.children;
+					slice.before = slice.get.data.before || null;
+					slice.after = slice.get.data.after || null;
+					slice.allChildren = slice.get.data.children || [];
 
 					slice.empty = slice.allChildren.length === 0;
 
