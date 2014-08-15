@@ -125,6 +125,7 @@ function Snoocore(config) {
 
 		return function callRedditApi(givenArgs) {
 
+			var startCallTime = Date.now();
 			throttleDelay += throttle;
 
 			// Wait for the throttle delay amount, then call the Reddit API
@@ -224,8 +225,16 @@ function Snoocore(config) {
 					return data;
 				});
 			}).finally(function() {
-				// decrement the throttle delay
-				throttleDelay -= throttle;
+				// decrement the throttle delay. If the call is quick and snappy, we
+				// only decrement the total time that it took to make the call.
+				var endCallTime = Date.now()
+				, callDuration = endCallTime - startCallTime;
+
+				if (callDuration < throttle) {
+					throttleDelay -= callDuration;
+				} else {
+					throttleDelay -= throttle;
+				}
 			});
 
 		};
