@@ -1,6 +1,14 @@
 #!/usr/bin/env node
 "use strict";
 
+/*
+
+EXAMPLE: readme-example-simple.js
+
+A working example from the README
+
+*/
+
 var Snoocore = require('../../Snoocore');
 var reddit = new Snoocore({ userAgent: 'myApp v0.0.0' });
 

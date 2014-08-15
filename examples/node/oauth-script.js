@@ -1,6 +1,15 @@
 #!/usr/bin/env node
 "use strict";
 
+/*
+
+EXAMPLE: oauth-script.js
+
+Goes over how to authenticate with OAuth using script based
+authentication.
+
+*/
+
 var readline = require('readline')
 , url = require('url')
 , open = require('open')

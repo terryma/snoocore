@@ -1,6 +1,14 @@
 #!/usr/bin/env node
 "use strict";
 
+/*
+
+EXAMPLE: oauth-web.js
+
+An example of how to use web based OAuth
+
+*/
+
 var readline = require('readline')
 , url = require('url')
 , open = require('open')

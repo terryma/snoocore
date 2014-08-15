@@ -1,6 +1,15 @@
 #!/usr/bin/env node
 "use strict";
 
+/*
+
+EXAMPLE: throttle-test.js
+
+A quick demonstration that illustrates how the internal
+throttle of Snoocore works. 
+
+*/
+
 var Snoocore = require('../../Snoocore');
 
 var reddit = new Snoocore({ userAgent: 'snoocoreExample' });

@@ -1,6 +1,19 @@
 #!/usr/bin/env node
 "use strict";
 
+/*
+
+EXAMPLE: basicAuth.js 
+
+Goes over basic authentication using Cookies.
+
+You should consider using OAuth based authentication instead
+of username/password based authentication.
+
+View the documentation for more information.
+
+*/
+
 var readline = require('readline')
 , when = require('when')
 , Snoocore = require('../../Snoocore');
