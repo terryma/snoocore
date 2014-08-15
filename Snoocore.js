@@ -254,9 +254,12 @@ function Snoocore(config) {
 					slice.count = count;
 										
 					slice.get = result;
+
 					slice.before = slice.get.data.before;
 					slice.after = slice.get.data.after;
 					slice.allChildren = slice.get.data.children;
+
+					slice.empty = slice.allChildren.length === 0;
 
 					slice.children = slice.allChildren.filter(function(child) {
 						return !child.data.stickied;

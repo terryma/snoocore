@@ -276,16 +276,7 @@ describe('Snoocore Cookie Test', function () {
 
 	describe('General tests for listings', function() {
 		
-		it.only('should get the front page listing and nav through it (basic)', function() {
-
-			var after = ''
-			, before = '';
-
-			function printShit(slice) {
-				slice.children.forEach(function(child, i) {
-					console.log(i + 1 + slice.count, child.data.title);
-				});
-			}
+		it('should get the front page listing and nav through it (basic)', function() {
 
 			// or reddit('/hot').listing
 			return reddit.hot.listing().then(function(slice) {
@@ -297,25 +288,30 @@ describe('Snoocore Cookie Test', function () {
 				expect(slice.start).to.be.a('function');
 				
 				expect(slice.count).to.equal(0);
-				printShit(slice);
 				return slice.next();
 			}).then(function(slice) {
 				expect(slice.count).to.equal(25);
-				printShit(slice);
 				return slice.next();
 			}).then(function(slice) {
-				printShit(slice);
 				expect(slice.count).to.equal(50);
 				return slice.previous();
 			}).then(function(slice) {
-				printShit(slice);
 				expect(slice.count).to.equal(25);
 				return slice.start();
 			}).then(function(slice) {
-				printShit(slice);
 				expect(slice.count).to.equal(0);
 			});
 
+		});
+
+		it.only('should handle empty listings', function() {
+			// or reddit('/user/$username/$where').listing
+			return reddit.user.$username.$where.listing({
+				$username: 'emptyListing', // an account with no comments
+				$where: 'comments' 
+			}).then(function(slice) {
+				expect(slice.empty).to.be.true;
+			});
 		});
 
 	});
