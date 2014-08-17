@@ -1,6 +1,7 @@
 "use strict";
 
-var when = require('when')
+var qs = require('querystring')
+, when = require('when')
 , request = require('superagent');
 
 var oauth = {};
@@ -33,17 +34,7 @@ oauth.getAuthUrl = function(options) {
 		delete options.mobile;
 	}
 
-	var serialize = function(obj) {
-		var str = [], encode = encodeURIComponent;
-		for (var key in obj) {
-			if (obj.hasOwnProperty(key)) {
-				str.push(encode(key) + "=" + encode(obj[key]));
-			}
-		}
-		return str.join("&");
-	};
-
-	return baseUrl + '?' + serialize(options);
+	return baseUrl + '?' + querystring.stringify(options);
 };
 
 /*
