@@ -1,6 +1,7 @@
 "use strict";
 
-var qs = require('querystring')
+var querystring = require('querystring')
+, util = require('util')
 , when = require('when')
 , request = require('superagent');
 
@@ -10,7 +11,7 @@ function normalizeScope(scope) {
 	// Set options.scope if not set, or convert an array into a string
 	if (typeof scope === 'undefined') {
 		scope = 'identity';
-	} else if (scope instanceof Array) {
+	} else if (util.isArray(scope)) {
 		scope = scope.join(',');
 	}
 	return scope;
