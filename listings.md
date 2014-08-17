@@ -9,12 +9,16 @@ From the reddit documentation
 
 > Many endpoints on reddit use the same protocol for controlling pagination and filtering. These endpoints are called Listings and share five common parameters: after / before, limit, count, and show.
 
-Along side the basic HTTP verbs that you can use to call reddit endpoints (See [Basic Usage](basicUsage.html)), you can also use a listing helper for endpoints that are listings.
+Along side the basic HTTP verbs that you can use to call reddit endpoints (See [Basic Usage](basicUsage.html)). The listing helper can also be used for endpoints that are listings.
 
 Quick Example ([GET /r/hot](http://www.reddit.com/dev/api#GET_hot)):
 
 ```javascript
-reddit('/r/hot').listing({ limit: 10 }).then(function(slice) {
+reddit('/r/hot').listing({ 
+    // Any parameters for the endpoints can be used here as usual.
+    // In this case, we specify a limit of 10 children per slice
+    limit: 10
+}).then(function(slice) {
 
     console.log(slice.children); // The children that are not stickied
     console.log(slice.stickied); // The children that are stickied
@@ -43,7 +47,7 @@ For full working examples checkout the [examples on GitHub](https://github.com/t
 
 - - -
 
-## Attributes
+## Slice attributes
 
 ### `slice.children`
 
@@ -69,7 +73,7 @@ The `before` fullname.
 
 The `after` fullname. 
 
-## Functions
+## Slice functions
 
 ### `slice.next()`
 
