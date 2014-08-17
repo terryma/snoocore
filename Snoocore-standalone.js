@@ -126,6 +126,7 @@ function Snoocore(config) {
 
 		return function callRedditApi(givenArgs) {
 
+			var startCallTime = Date.now();
 			throttleDelay += throttle;
 
 			// Wait for the throttle delay amount, then call the Reddit API
@@ -225,10 +226,95 @@ function Snoocore(config) {
 					return data;
 				});
 			}).finally(function() {
-				// decrement the throttle delay
-				throttleDelay -= throttle;
+				// decrement the throttle delay. If the call is quick and snappy, we
+				// only decrement the total time that it took to make the call.
+				var endCallTime = Date.now()
+				, callDuration = endCallTime - startCallTime;
+
+				if (callDuration < throttle) {
+					throttleDelay -= callDuration;
+				} else {
+					throttleDelay -= throttle;
+				}
 			});
 
+		};
+
+	}
+
+	function buildListing(endpoint) {
+		var callApi = buildCall(endpoint);
+
+		return function getListing(givenArgs) {
+
+			givenArgs = givenArgs || {};
+
+			// number of results that we have loaded so far. It will
+			// increase / decrease when calling next / previous.
+			var count = 0
+			, limit = givenArgs.limit || 25
+			// keep a reference to the start of this listing
+			, start = givenArgs.after || null;
+
+			function getSlice(givenArgs) {
+				return callApi(givenArgs).then(function(result) {
+					
+					var slice = {};
+					
+					slice.count = count;
+										
+					slice.get = result;
+
+					slice.before = slice.get.data.before || null;
+					slice.after = slice.get.data.after || null;
+					slice.allChildren = slice.get.data.children || [];
+
+					slice.empty = slice.allChildren.length === 0;
+
+					slice.children = slice.allChildren.filter(function(child) {
+						return !child.data.stickied;
+					});
+
+					slice.stickied = slice.allChildren.filter(function(child) {
+						return child.data.stickied;
+					});
+
+					slice.next = function() {
+						count += limit;
+
+						var args = givenArgs;
+						args.before = null;
+						args.after = slice.children[slice.children.length - 1].data.name;
+						args.count = count;
+						return getSlice(args);
+					};
+
+					slice.previous = function() {
+						count -= limit;
+
+						var args = givenArgs;
+						args.before = slice.children[0].data.name;
+						args.after = null;
+						args.count = count;
+						return getSlice(args);
+					};
+
+					slice.start = function() {
+						count = 0;
+						
+						var args = givenArgs;
+						args.before = null;
+						args.after = start;
+						args.count = count;
+						return getSlice(args);
+					};
+					
+					return slice;
+				});
+
+			}
+
+			return getSlice(givenArgs);
 		};
 
 	}
@@ -263,6 +349,11 @@ function Snoocore(config) {
 					leaf.delete = buildCall(endpoint); break;
 				case 'update':
 					leaf.update = buildCall(endpoint); break;
+			}
+
+			// add on a listing call if endpoint is a listing
+			if (endpoint.isListing) {
+				leaf.listing = buildListing(endpoint);
 			}
 		});
 
@@ -421,7 +512,32 @@ function Snoocore(config) {
 	return self;
 }
 
-},{"./oauth":26,"lodash":3,"reddit-api-generator":4,"superagent":5,"when":25,"when/delay":8}],2:[function(_dereq_,module,exports){
+},{"./oauth":32,"lodash":9,"reddit-api-generator":10,"superagent":11,"when":31,"when/delay":14}],2:[function(_dereq_,module,exports){
+if (typeof Object.create === 'function') {
+  // implementation from standard node.js 'util' module
+  module.exports = function inherits(ctor, superCtor) {
+    ctor.super_ = superCtor
+    ctor.prototype = Object.create(superCtor.prototype, {
+      constructor: {
+        value: ctor,
+        enumerable: false,
+        writable: true,
+        configurable: true
+      }
+    });
+  };
+} else {
+  // old school shim for old browsers
+  module.exports = function inherits(ctor, superCtor) {
+    ctor.super_ = superCtor
+    var TempCtor = function () {}
+    TempCtor.prototype = superCtor.prototype
+    ctor.prototype = new TempCtor()
+    ctor.prototype.constructor = ctor
+  }
+}
+
+},{}],3:[function(_dereq_,module,exports){
 // shim for using process in browser
 
 var process = module.exports = {};
@@ -476,7 +592,783 @@ process.chdir = function (dir) {
     throw new Error('process.chdir is not supported');
 };
 
-},{}],3:[function(_dereq_,module,exports){
+},{}],4:[function(_dereq_,module,exports){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+'use strict';
+
+// If obj.hasOwnProperty has been overridden, then calling
+// obj.hasOwnProperty(prop) will break.
+// See: https://github.com/joyent/node/issues/1707
+function hasOwnProperty(obj, prop) {
+  return Object.prototype.hasOwnProperty.call(obj, prop);
+}
+
+module.exports = function(qs, sep, eq, options) {
+  sep = sep || '&';
+  eq = eq || '=';
+  var obj = {};
+
+  if (typeof qs !== 'string' || qs.length === 0) {
+    return obj;
+  }
+
+  var regexp = /\+/g;
+  qs = qs.split(sep);
+
+  var maxKeys = 1000;
+  if (options && typeof options.maxKeys === 'number') {
+    maxKeys = options.maxKeys;
+  }
+
+  var len = qs.length;
+  // maxKeys <= 0 means that we should not limit keys count
+  if (maxKeys > 0 && len > maxKeys) {
+    len = maxKeys;
+  }
+
+  for (var i = 0; i < len; ++i) {
+    var x = qs[i].replace(regexp, '%20'),
+        idx = x.indexOf(eq),
+        kstr, vstr, k, v;
+
+    if (idx >= 0) {
+      kstr = x.substr(0, idx);
+      vstr = x.substr(idx + 1);
+    } else {
+      kstr = x;
+      vstr = '';
+    }
+
+    k = decodeURIComponent(kstr);
+    v = decodeURIComponent(vstr);
+
+    if (!hasOwnProperty(obj, k)) {
+      obj[k] = v;
+    } else if (isArray(obj[k])) {
+      obj[k].push(v);
+    } else {
+      obj[k] = [obj[k], v];
+    }
+  }
+
+  return obj;
+};
+
+var isArray = Array.isArray || function (xs) {
+  return Object.prototype.toString.call(xs) === '[object Array]';
+};
+
+},{}],5:[function(_dereq_,module,exports){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+'use strict';
+
+var stringifyPrimitive = function(v) {
+  switch (typeof v) {
+    case 'string':
+      return v;
+
+    case 'boolean':
+      return v ? 'true' : 'false';
+
+    case 'number':
+      return isFinite(v) ? v : '';
+
+    default:
+      return '';
+  }
+};
+
+module.exports = function(obj, sep, eq, name) {
+  sep = sep || '&';
+  eq = eq || '=';
+  if (obj === null) {
+    obj = undefined;
+  }
+
+  if (typeof obj === 'object') {
+    return map(objectKeys(obj), function(k) {
+      var ks = encodeURIComponent(stringifyPrimitive(k)) + eq;
+      if (isArray(obj[k])) {
+        return obj[k].map(function(v) {
+          return ks + encodeURIComponent(stringifyPrimitive(v));
+        }).join(sep);
+      } else {
+        return ks + encodeURIComponent(stringifyPrimitive(obj[k]));
+      }
+    }).join(sep);
+
+  }
+
+  if (!name) return '';
+  return encodeURIComponent(stringifyPrimitive(name)) + eq +
+         encodeURIComponent(stringifyPrimitive(obj));
+};
+
+var isArray = Array.isArray || function (xs) {
+  return Object.prototype.toString.call(xs) === '[object Array]';
+};
+
+function map (xs, f) {
+  if (xs.map) return xs.map(f);
+  var res = [];
+  for (var i = 0; i < xs.length; i++) {
+    res.push(f(xs[i], i));
+  }
+  return res;
+}
+
+var objectKeys = Object.keys || function (obj) {
+  var res = [];
+  for (var key in obj) {
+    if (Object.prototype.hasOwnProperty.call(obj, key)) res.push(key);
+  }
+  return res;
+};
+
+},{}],6:[function(_dereq_,module,exports){
+'use strict';
+
+exports.decode = exports.parse = _dereq_('./decode');
+exports.encode = exports.stringify = _dereq_('./encode');
+
+},{"./decode":4,"./encode":5}],7:[function(_dereq_,module,exports){
+module.exports = function isBuffer(arg) {
+  return arg && typeof arg === 'object'
+    && typeof arg.copy === 'function'
+    && typeof arg.fill === 'function'
+    && typeof arg.readUInt8 === 'function';
+}
+},{}],8:[function(_dereq_,module,exports){
+(function (process,global){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+var formatRegExp = /%[sdj%]/g;
+exports.format = function(f) {
+  if (!isString(f)) {
+    var objects = [];
+    for (var i = 0; i < arguments.length; i++) {
+      objects.push(inspect(arguments[i]));
+    }
+    return objects.join(' ');
+  }
+
+  var i = 1;
+  var args = arguments;
+  var len = args.length;
+  var str = String(f).replace(formatRegExp, function(x) {
+    if (x === '%%') return '%';
+    if (i >= len) return x;
+    switch (x) {
+      case '%s': return String(args[i++]);
+      case '%d': return Number(args[i++]);
+      case '%j':
+        try {
+          return JSON.stringify(args[i++]);
+        } catch (_) {
+          return '[Circular]';
+        }
+      default:
+        return x;
+    }
+  });
+  for (var x = args[i]; i < len; x = args[++i]) {
+    if (isNull(x) || !isObject(x)) {
+      str += ' ' + x;
+    } else {
+      str += ' ' + inspect(x);
+    }
+  }
+  return str;
+};
+
+
+// Mark that a method should not be used.
+// Returns a modified function which warns once by default.
+// If --no-deprecation is set, then it is a no-op.
+exports.deprecate = function(fn, msg) {
+  // Allow for deprecating things in the process of starting up.
+  if (isUndefined(global.process)) {
+    return function() {
+      return exports.deprecate(fn, msg).apply(this, arguments);
+    };
+  }
+
+  if (process.noDeprecation === true) {
+    return fn;
+  }
+
+  var warned = false;
+  function deprecated() {
+    if (!warned) {
+      if (process.throwDeprecation) {
+        throw new Error(msg);
+      } else if (process.traceDeprecation) {
+        console.trace(msg);
+      } else {
+        console.error(msg);
+      }
+      warned = true;
+    }
+    return fn.apply(this, arguments);
+  }
+
+  return deprecated;
+};
+
+
+var debugs = {};
+var debugEnviron;
+exports.debuglog = function(set) {
+  if (isUndefined(debugEnviron))
+    debugEnviron = process.env.NODE_DEBUG || '';
+  set = set.toUpperCase();
+  if (!debugs[set]) {
+    if (new RegExp('\\b' + set + '\\b', 'i').test(debugEnviron)) {
+      var pid = process.pid;
+      debugs[set] = function() {
+        var msg = exports.format.apply(exports, arguments);
+        console.error('%s %d: %s', set, pid, msg);
+      };
+    } else {
+      debugs[set] = function() {};
+    }
+  }
+  return debugs[set];
+};
+
+
+/**
+ * Echos the value of a value. Trys to print the value out
+ * in the best way possible given the different types.
+ *
+ * @param {Object} obj The object to print out.
+ * @param {Object} opts Optional options object that alters the output.
+ */
+/* legacy: obj, showHidden, depth, colors*/
+function inspect(obj, opts) {
+  // default options
+  var ctx = {
+    seen: [],
+    stylize: stylizeNoColor
+  };
+  // legacy...
+  if (arguments.length >= 3) ctx.depth = arguments[2];
+  if (arguments.length >= 4) ctx.colors = arguments[3];
+  if (isBoolean(opts)) {
+    // legacy...
+    ctx.showHidden = opts;
+  } else if (opts) {
+    // got an "options" object
+    exports._extend(ctx, opts);
+  }
+  // set default options
+  if (isUndefined(ctx.showHidden)) ctx.showHidden = false;
+  if (isUndefined(ctx.depth)) ctx.depth = 2;
+  if (isUndefined(ctx.colors)) ctx.colors = false;
+  if (isUndefined(ctx.customInspect)) ctx.customInspect = true;
+  if (ctx.colors) ctx.stylize = stylizeWithColor;
+  return formatValue(ctx, obj, ctx.depth);
+}
+exports.inspect = inspect;
+
+
+// http://en.wikipedia.org/wiki/ANSI_escape_code#graphics
+inspect.colors = {
+  'bold' : [1, 22],
+  'italic' : [3, 23],
+  'underline' : [4, 24],
+  'inverse' : [7, 27],
+  'white' : [37, 39],
+  'grey' : [90, 39],
+  'black' : [30, 39],
+  'blue' : [34, 39],
+  'cyan' : [36, 39],
+  'green' : [32, 39],
+  'magenta' : [35, 39],
+  'red' : [31, 39],
+  'yellow' : [33, 39]
+};
+
+// Don't use 'blue' not visible on cmd.exe
+inspect.styles = {
+  'special': 'cyan',
+  'number': 'yellow',
+  'boolean': 'yellow',
+  'undefined': 'grey',
+  'null': 'bold',
+  'string': 'green',
+  'date': 'magenta',
+  // "name": intentionally not styling
+  'regexp': 'red'
+};
+
+
+function stylizeWithColor(str, styleType) {
+  var style = inspect.styles[styleType];
+
+  if (style) {
+    return '\u001b[' + inspect.colors[style][0] + 'm' + str +
+           '\u001b[' + inspect.colors[style][1] + 'm';
+  } else {
+    return str;
+  }
+}
+
+
+function stylizeNoColor(str, styleType) {
+  return str;
+}
+
+
+function arrayToHash(array) {
+  var hash = {};
+
+  array.forEach(function(val, idx) {
+    hash[val] = true;
+  });
+
+  return hash;
+}
+
+
+function formatValue(ctx, value, recurseTimes) {
+  // Provide a hook for user-specified inspect functions.
+  // Check that value is an object with an inspect function on it
+  if (ctx.customInspect &&
+      value &&
+      isFunction(value.inspect) &&
+      // Filter out the util module, it's inspect function is special
+      value.inspect !== exports.inspect &&
+      // Also filter out any prototype objects using the circular check.
+      !(value.constructor && value.constructor.prototype === value)) {
+    var ret = value.inspect(recurseTimes, ctx);
+    if (!isString(ret)) {
+      ret = formatValue(ctx, ret, recurseTimes);
+    }
+    return ret;
+  }
+
+  // Primitive types cannot have properties
+  var primitive = formatPrimitive(ctx, value);
+  if (primitive) {
+    return primitive;
+  }
+
+  // Look up the keys of the object.
+  var keys = Object.keys(value);
+  var visibleKeys = arrayToHash(keys);
+
+  if (ctx.showHidden) {
+    keys = Object.getOwnPropertyNames(value);
+  }
+
+  // IE doesn't make error fields non-enumerable
+  // http://msdn.microsoft.com/en-us/library/ie/dww52sbt(v=vs.94).aspx
+  if (isError(value)
+      && (keys.indexOf('message') >= 0 || keys.indexOf('description') >= 0)) {
+    return formatError(value);
+  }
+
+  // Some type of object without properties can be shortcutted.
+  if (keys.length === 0) {
+    if (isFunction(value)) {
+      var name = value.name ? ': ' + value.name : '';
+      return ctx.stylize('[Function' + name + ']', 'special');
+    }
+    if (isRegExp(value)) {
+      return ctx.stylize(RegExp.prototype.toString.call(value), 'regexp');
+    }
+    if (isDate(value)) {
+      return ctx.stylize(Date.prototype.toString.call(value), 'date');
+    }
+    if (isError(value)) {
+      return formatError(value);
+    }
+  }
+
+  var base = '', array = false, braces = ['{', '}'];
+
+  // Make Array say that they are Array
+  if (isArray(value)) {
+    array = true;
+    braces = ['[', ']'];
+  }
+
+  // Make functions say that they are functions
+  if (isFunction(value)) {
+    var n = value.name ? ': ' + value.name : '';
+    base = ' [Function' + n + ']';
+  }
+
+  // Make RegExps say that they are RegExps
+  if (isRegExp(value)) {
+    base = ' ' + RegExp.prototype.toString.call(value);
+  }
+
+  // Make dates with properties first say the date
+  if (isDate(value)) {
+    base = ' ' + Date.prototype.toUTCString.call(value);
+  }
+
+  // Make error with message first say the error
+  if (isError(value)) {
+    base = ' ' + formatError(value);
+  }
+
+  if (keys.length === 0 && (!array || value.length == 0)) {
+    return braces[0] + base + braces[1];
+  }
+
+  if (recurseTimes < 0) {
+    if (isRegExp(value)) {
+      return ctx.stylize(RegExp.prototype.toString.call(value), 'regexp');
+    } else {
+      return ctx.stylize('[Object]', 'special');
+    }
+  }
+
+  ctx.seen.push(value);
+
+  var output;
+  if (array) {
+    output = formatArray(ctx, value, recurseTimes, visibleKeys, keys);
+  } else {
+    output = keys.map(function(key) {
+      return formatProperty(ctx, value, recurseTimes, visibleKeys, key, array);
+    });
+  }
+
+  ctx.seen.pop();
+
+  return reduceToSingleString(output, base, braces);
+}
+
+
+function formatPrimitive(ctx, value) {
+  if (isUndefined(value))
+    return ctx.stylize('undefined', 'undefined');
+  if (isString(value)) {
+    var simple = '\'' + JSON.stringify(value).replace(/^"|"$/g, '')
+                                             .replace(/'/g, "\\'")
+                                             .replace(/\\"/g, '"') + '\'';
+    return ctx.stylize(simple, 'string');
+  }
+  if (isNumber(value))
+    return ctx.stylize('' + value, 'number');
+  if (isBoolean(value))
+    return ctx.stylize('' + value, 'boolean');
+  // For some reason typeof null is "object", so special case here.
+  if (isNull(value))
+    return ctx.stylize('null', 'null');
+}
+
+
+function formatError(value) {
+  return '[' + Error.prototype.toString.call(value) + ']';
+}
+
+
+function formatArray(ctx, value, recurseTimes, visibleKeys, keys) {
+  var output = [];
+  for (var i = 0, l = value.length; i < l; ++i) {
+    if (hasOwnProperty(value, String(i))) {
+      output.push(formatProperty(ctx, value, recurseTimes, visibleKeys,
+          String(i), true));
+    } else {
+      output.push('');
+    }
+  }
+  keys.forEach(function(key) {
+    if (!key.match(/^\d+$/)) {
+      output.push(formatProperty(ctx, value, recurseTimes, visibleKeys,
+          key, true));
+    }
+  });
+  return output;
+}
+
+
+function formatProperty(ctx, value, recurseTimes, visibleKeys, key, array) {
+  var name, str, desc;
+  desc = Object.getOwnPropertyDescriptor(value, key) || { value: value[key] };
+  if (desc.get) {
+    if (desc.set) {
+      str = ctx.stylize('[Getter/Setter]', 'special');
+    } else {
+      str = ctx.stylize('[Getter]', 'special');
+    }
+  } else {
+    if (desc.set) {
+      str = ctx.stylize('[Setter]', 'special');
+    }
+  }
+  if (!hasOwnProperty(visibleKeys, key)) {
+    name = '[' + key + ']';
+  }
+  if (!str) {
+    if (ctx.seen.indexOf(desc.value) < 0) {
+      if (isNull(recurseTimes)) {
+        str = formatValue(ctx, desc.value, null);
+      } else {
+        str = formatValue(ctx, desc.value, recurseTimes - 1);
+      }
+      if (str.indexOf('\n') > -1) {
+        if (array) {
+          str = str.split('\n').map(function(line) {
+            return '  ' + line;
+          }).join('\n').substr(2);
+        } else {
+          str = '\n' + str.split('\n').map(function(line) {
+            return '   ' + line;
+          }).join('\n');
+        }
+      }
+    } else {
+      str = ctx.stylize('[Circular]', 'special');
+    }
+  }
+  if (isUndefined(name)) {
+    if (array && key.match(/^\d+$/)) {
+      return str;
+    }
+    name = JSON.stringify('' + key);
+    if (name.match(/^"([a-zA-Z_][a-zA-Z_0-9]*)"$/)) {
+      name = name.substr(1, name.length - 2);
+      name = ctx.stylize(name, 'name');
+    } else {
+      name = name.replace(/'/g, "\\'")
+                 .replace(/\\"/g, '"')
+                 .replace(/(^"|"$)/g, "'");
+      name = ctx.stylize(name, 'string');
+    }
+  }
+
+  return name + ': ' + str;
+}
+
+
+function reduceToSingleString(output, base, braces) {
+  var numLinesEst = 0;
+  var length = output.reduce(function(prev, cur) {
+    numLinesEst++;
+    if (cur.indexOf('\n') >= 0) numLinesEst++;
+    return prev + cur.replace(/\u001b\[\d\d?m/g, '').length + 1;
+  }, 0);
+
+  if (length > 60) {
+    return braces[0] +
+           (base === '' ? '' : base + '\n ') +
+           ' ' +
+           output.join(',\n  ') +
+           ' ' +
+           braces[1];
+  }
+
+  return braces[0] + base + ' ' + output.join(', ') + ' ' + braces[1];
+}
+
+
+// NOTE: These type checking functions intentionally don't use `instanceof`
+// because it is fragile and can be easily faked with `Object.create()`.
+function isArray(ar) {
+  return Array.isArray(ar);
+}
+exports.isArray = isArray;
+
+function isBoolean(arg) {
+  return typeof arg === 'boolean';
+}
+exports.isBoolean = isBoolean;
+
+function isNull(arg) {
+  return arg === null;
+}
+exports.isNull = isNull;
+
+function isNullOrUndefined(arg) {
+  return arg == null;
+}
+exports.isNullOrUndefined = isNullOrUndefined;
+
+function isNumber(arg) {
+  return typeof arg === 'number';
+}
+exports.isNumber = isNumber;
+
+function isString(arg) {
+  return typeof arg === 'string';
+}
+exports.isString = isString;
+
+function isSymbol(arg) {
+  return typeof arg === 'symbol';
+}
+exports.isSymbol = isSymbol;
+
+function isUndefined(arg) {
+  return arg === void 0;
+}
+exports.isUndefined = isUndefined;
+
+function isRegExp(re) {
+  return isObject(re) && objectToString(re) === '[object RegExp]';
+}
+exports.isRegExp = isRegExp;
+
+function isObject(arg) {
+  return typeof arg === 'object' && arg !== null;
+}
+exports.isObject = isObject;
+
+function isDate(d) {
+  return isObject(d) && objectToString(d) === '[object Date]';
+}
+exports.isDate = isDate;
+
+function isError(e) {
+  return isObject(e) &&
+      (objectToString(e) === '[object Error]' || e instanceof Error);
+}
+exports.isError = isError;
+
+function isFunction(arg) {
+  return typeof arg === 'function';
+}
+exports.isFunction = isFunction;
+
+function isPrimitive(arg) {
+  return arg === null ||
+         typeof arg === 'boolean' ||
+         typeof arg === 'number' ||
+         typeof arg === 'string' ||
+         typeof arg === 'symbol' ||  // ES6 symbol
+         typeof arg === 'undefined';
+}
+exports.isPrimitive = isPrimitive;
+
+exports.isBuffer = _dereq_('./support/isBuffer');
+
+function objectToString(o) {
+  return Object.prototype.toString.call(o);
+}
+
+
+function pad(n) {
+  return n < 10 ? '0' + n.toString(10) : n.toString(10);
+}
+
+
+var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep',
+              'Oct', 'Nov', 'Dec'];
+
+// 26 Feb 16:19:34
+function timestamp() {
+  var d = new Date();
+  var time = [pad(d.getHours()),
+              pad(d.getMinutes()),
+              pad(d.getSeconds())].join(':');
+  return [d.getDate(), months[d.getMonth()], time].join(' ');
+}
+
+
+// log is just a thin wrapper to console.log that prepends a timestamp
+exports.log = function() {
+  console.log('%s - %s', timestamp(), exports.format.apply(exports, arguments));
+};
+
+
+/**
+ * Inherit the prototype methods from one constructor into another.
+ *
+ * The Function.prototype.inherits from lang.js rewritten as a standalone
+ * function (not on Function.prototype). NOTE: If this file is to be loaded
+ * during bootstrapping this function needs to be rewritten using some native
+ * functions as prototype setup using normal JavaScript does not work as
+ * expected during bootstrapping (see mirror.js in r114903).
+ *
+ * @param {function} ctor Constructor function which needs to inherit the
+ *     prototype.
+ * @param {function} superCtor Constructor function to inherit prototype from.
+ */
+exports.inherits = _dereq_('inherits');
+
+exports._extend = function(origin, add) {
+  // Don't do anything if add isn't an object
+  if (!add || !isObject(add)) return origin;
+
+  var keys = Object.keys(add);
+  var i = keys.length;
+  while (i--) {
+    origin[keys[i]] = add[keys[i]];
+  }
+  return origin;
+};
+
+function hasOwnProperty(obj, prop) {
+  return Object.prototype.hasOwnProperty.call(obj, prop);
+}
+
+}).call(this,_dereq_("/home/trev/git/snoocore/node_modules/browserify/node_modules/insert-module-globals/node_modules/process/browser.js"),typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{"./support/isBuffer":7,"/home/trev/git/snoocore/node_modules/browserify/node_modules/insert-module-globals/node_modules/process/browser.js":3,"inherits":2}],9:[function(_dereq_,module,exports){
 (function (global){
 /**
  * @license
@@ -7265,12 +8157,12 @@ process.chdir = function (dir) {
 }.call(this));
 
 }).call(this,typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],4:[function(_dereq_,module,exports){
+},{}],10:[function(_dereq_,module,exports){
 
-module.exports = [{"path":"/api/clear_sessions","url":{"standard":"https://ssl.reddit.com/api/clear_sessions"},"oauth":[],"extensions":[],"method":"POST","describe":"Clear all session cookies and replace the current one.\n\nA valid password (curpass) must be supplied.","args":{"api_type":{"describe":"the string json"},"curpass":{"describe":"the user's current password"},"dest":{"describe":"destination url (must be same-domain)"},"uh":{"describe":"a modhash"}}},{"path":"/api/delete_user","url":{"standard":"https://ssl.reddit.com/api/delete_user"},"oauth":[],"extensions":[],"method":"POST","describe":"Delete the currently logged in account.\n\nA valid username/password and confirmation must be supplied. An\noptional delete_message may be supplied to explain the reason the\naccount is to be deleted.\n\nCalled by /prefs/delete on the site.","args":{"api_type":{"describe":"the string json"},"confirm":{"describe":"boolean value"},"delete_message":{"describe":"a string no longer than 500 characters"},"passwd":{"describe":"the user's password"},"uh":{"describe":"a modhash"},"user":{"describe":"a username"}}},{"path":"/api/login","url":{"standard":"https://ssl.reddit.com/api/login"},"oauth":[],"extensions":[],"method":"POST","describe":"Log into an account.\n\nrem specifies whether or not the session cookie returned should last\nbeyond the current browser session (that is, if rem is True the\ncookie will have an explicit expiration far in the future indicating\nthat it is not a session cookie).","args":{"api_type":{"describe":"the string json"},"passwd":{"describe":"the user's password"},"rem":{"describe":"boolean value"},"user":{"describe":"a username"}}},{"path":"/api/me.json","url":{"standard":"http://www.reddit.com/api/me.json"},"oauth":[],"extensions":[],"method":"GET","describe":"Get info about the currently authenticated user.\n\nResponse includes a modhash, karma, and new mail status.","args":{}},{"path":"/api/register","url":{"standard":"https://ssl.reddit.com/api/register"},"oauth":[],"extensions":[],"method":"POST","describe":"Register a new account.\n\nrem specifies whether or not the session cookie returned should last\nbeyond the current browser session (that is, if rem is True the\ncookie will have an explicit expiration far in the future indicating\nthat it is not a session cookie).","args":{"api_type":{"describe":"the string json"},"captcha":{"describe":"the user's response to the CAPTCHA challenge"},"email":{"describe":"(optional) the user's email address"},"iden":{"describe":"the identifier of the CAPTCHA challenge"},"passwd":{"describe":"the new password"},"passwd2":{"describe":"the password again (for verification)"},"rem":{"describe":"boolean value"},"user":{"describe":"a valid, unused, username"}}},{"path":"/api/update","url":{"standard":"https://ssl.reddit.com/api/update"},"oauth":[],"extensions":[],"method":"POST","describe":"Update account email address and password.\n\nCalled by /prefs/update on the site. For frontend form verification\npurposes, newpass and verpass must be equal for a password change\nto succeed.","args":{"api_type":{"describe":"the string json"},"curpass":{"describe":""},"dest":{"describe":"destination url (must be same-domain)"},"email":{"describe":""},"newpass":{"describe":"the new password"},"uh":{"describe":"a modhash"},"verify":{"describe":"boolean value"},"verpass":{"describe":"the password again (for verification)"}}},{"path":"/api/update_email","url":{"standard":"https://ssl.reddit.com/api/update_email"},"oauth":[],"extensions":[],"method":"POST","describe":"Update account email address.\n\nCalled by /prefs/update on the site.","args":{"api_type":{"describe":"the string json"},"curpass":{"describe":""},"dest":{"describe":"destination url (must be same-domain)"},"email":{"describe":""},"uh":{"describe":"a modhash"},"verify":{"describe":"boolean value"}}},{"path":"/api/update_password","url":{"standard":"https://ssl.reddit.com/api/update_password"},"oauth":[],"extensions":[],"method":"POST","describe":"Update account password.\n\nCalled by /prefs/update on the site. For frontend form verification\npurposes, newpass and verpass must be equal for a password change\nto succeed.","args":{"api_type":{"describe":"the string json"},"curpass":{"describe":""},"newpass":{"describe":"the new password"},"uh":{"describe":"a modhash"},"verpass":{"describe":"the password again (for verification)"}}},{"path":"/api/v1/me","url":{"oauth":"https://oauth.reddit.com/api/v1/me","standard":"http://www.reddit.com/api/v1/me"},"oauth":["identity"],"extensions":[],"method":"GET","describe":"Returns the identity of the user currently authenticated via OAuth.","args":{}},{"path":"/api/v1/me/karma","url":{"oauth":"https://oauth.reddit.com/api/v1/me/karma","standard":"http://www.reddit.com/api/v1/me/karma"},"oauth":["mysubreddits"],"extensions":[],"method":"GET","describe":"Return a breakdown of subreddit karma.","args":{}},{"path":"/api/v1/me/prefs","url":{"oauth":"https://oauth.reddit.com/api/v1/me/prefs","standard":"http://www.reddit.com/api/v1/me/prefs"},"oauth":["identity"],"extensions":[],"method":"GET","describe":"Return the preference settings of the logged in user","args":{"fields":{"describe":"A comma-separated list of items from this set:\n\nthreaded_messages\nhide_downs\nshow_stylesheets\nframe\nshow_link_flair\nshow_trending\nprivate_feeds\nmonitor_mentions\nlocal_js\nresearch\nmedia\nshow_sponsors\nclickgadget\nuse_global_defaults\nlabel_nsfw\ndomain_details\nhighlight_controversial\nno_profanity\nover_18\nlang\nhide_ups\nhide_from_robots\ncompress\nstore_visits\nmin_link_score\ncontent_langs\nshow_promote\nmin_comment_score\npublic_votes\norganic\ncollapse_read_messages\nshow_flair\nmark_messages_read\nshow_sponsorships\nshow_adbox\nnewwindow\nnumsites\nnum_comments\nhighlight_new_comments\nhide_locationbar"}}},{"path":"/api/v1/me/prefs","url":{"oauth":"https://oauth.reddit.com/api/v1/me/prefs","standard":"https://ssl.reddit.com/api/v1/me/prefs"},"oauth":["account"],"extensions":[],"method":"PATCH","describe":"","args":{"This":{"describe":"{\n  \"clickgadget\": boolean value,\n  \"collapse_read_messages\": boolean value,\n  \"compress\": boolean value,\n  \"content_langs\": [\n    a valid IETF language tag (underscore separated),\n    ...\n  ],\n  \"domain_details\": boolean value,\n  \"frame\": boolean value,\n  \"hide_downs\": boolean value,\n  \"hide_from_robots\": boolean value,\n  \"hide_locationbar\": boolean value,\n  \"hide_ups\": boolean value,\n  \"highlight_controversial\": boolean value,\n  \"highlight_new_comments\": boolean value,\n  \"label_nsfw\": boolean value,\n  \"lang\": a valid IETF language tag (underscore separated),\n  \"local_js\": boolean value,\n  \"mark_messages_read\": boolean value,\n  \"media\": one of (`on`, `off`, `subreddit`),\n  \"min_comment_score\": an integer between -100 and 100,\n  \"min_link_score\": an integer between -100 and 100,\n  \"monitor_mentions\": boolean value,\n  \"newwindow\": boolean value,\n  \"no_profanity\": boolean value,\n  \"num_comments\": an integer between 1 and 500,\n  \"numsites\": an integer between 1 and 100,\n  \"organic\": boolean value,\n  \"over_18\": boolean value,\n  \"private_feeds\": boolean value,\n  \"public_votes\": boolean value,\n  \"research\": boolean value,\n  \"show_adbox\": boolean value,\n  \"show_flair\": boolean value,\n  \"show_link_flair\": boolean value,\n  \"show_promote\": boolean value,\n  \"show_sponsors\": boolean value,\n  \"show_sponsorships\": boolean value,\n  \"show_stylesheets\": boolean value,\n  \"show_trending\": boolean value,\n  \"store_visits\": boolean value,\n  \"threaded_messages\": boolean value,\n  \"use_global_defaults\": boolean value,\n}\n"}}},{"path":"/api/v1/me/trophies","url":{"oauth":"https://oauth.reddit.com/api/v1/me/trophies","standard":"http://www.reddit.com/api/v1/me/trophies"},"oauth":["identity"],"extensions":[],"method":"GET","describe":"Return a list of trophies for the current user.","args":{}},{"path":"/prefs/$where","url":{"oauth":"https://oauth.reddit.com/prefs/$where","standard":"http://www.reddit.com/prefs/$where"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"This endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"show":{"describe":"(optional) the string all"}}},{"path":"/api/adddeveloper","url":{"standard":"https://ssl.reddit.com/api/adddeveloper"},"oauth":[],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"client_id":{"describe":"an app developed by the user"},"name":{"describe":"the name of an existing user"},"uh":{"describe":"a modhash"}}},{"path":"/api/deleteapp","url":{"standard":"https://ssl.reddit.com/api/deleteapp"},"oauth":[],"extensions":[],"method":"POST","describe":"","args":{"client_id":{"describe":"an app developed by the user"},"uh":{"describe":"a modhash"}}},{"path":"/api/removedeveloper","url":{"standard":"https://ssl.reddit.com/api/removedeveloper"},"oauth":[],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"client_id":{"describe":"an app developed by the user"},"name":{"describe":"the name of an existing user"},"uh":{"describe":"a modhash"}}},{"path":"/api/revokeapp","url":{"standard":"https://ssl.reddit.com/api/revokeapp"},"oauth":[],"extensions":[],"method":"POST","describe":"","args":{"client_id":{"describe":"an app"},"uh":{"describe":"a modhash"}}},{"path":"/api/setappicon","url":{"standard":"https://ssl.reddit.com/api/setappicon"},"oauth":[],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"client_id":{"describe":"an app developed by the user"},"file":{"describe":"an icon (72x72)"},"uh":{"describe":"a modhash"}}},{"path":"/api/updateapp","url":{"standard":"https://ssl.reddit.com/api/updateapp"},"oauth":[],"extensions":[],"method":"POST","describe":"","args":{"about_url":{"describe":"a valid URL"},"api_type":{"describe":"the string json"},"app_type":{"describe":"one of (web, installed, script)"},"icon_url":{"describe":"a valid URL"},"name":{"describe":"a name for the app"},"redirect_uri":{"describe":"a valid URI"},"uh":{"describe":"a modhash"}}},{"path":"/api/needs_captcha.json","url":{"oauth":"https://oauth.reddit.com/api/needs_captcha.json","standard":"http://www.reddit.com/api/needs_captcha.json"},"oauth":["any"],"extensions":[],"method":"GET","describe":"Check whether CAPTCHAs are needed for API methods that define the\n\"captcha\" and \"iden\" parameters.","args":{}},{"path":"/api/new_captcha","url":{"oauth":"https://oauth.reddit.com/api/new_captcha","standard":"https://ssl.reddit.com/api/new_captcha"},"oauth":["any"],"extensions":[],"method":"POST","describe":"Responds with an iden of a new CAPTCHA.\n\nUse this endpoint if a user cannot read a given CAPTCHA,\nand wishes to receive a new CAPTCHA.\n\nTo request the CAPTCHA image for an iden, use\n/captcha/iden.","args":{"api_type":{"describe":"the string json"}}},{"path":"/captcha/$iden","url":{"oauth":"https://oauth.reddit.com/captcha/$iden","standard":"http://www.reddit.com/captcha/$iden"},"oauth":["any"],"extensions":[],"method":"GET","describe":"Request a CAPTCHA image given an iden.\n\nAn iden is given as the captcha field with a BAD_CAPTCHA\nerror, you should use this endpoint if you get a\nBAD_CAPTCHA error response.\n\nResponds with a 120x50 image/png which should be displayed\nto the user.\n\nThe user's response to the CAPTCHA should be sent as captcha\nalong with your request.\n\nTo request a new CAPTCHA,\nuse /api/new_captcha.","args":{}},{"path":"/api/clearflairtemplates","url":{"oauth":"https://oauth.reddit.com/api/clearflairtemplates","standard":"https://ssl.reddit.com/api/clearflairtemplates"},"oauth":["modflair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"flair_type":{"describe":"one of (USER_FLAIR, LINK_FLAIR)"},"uh":{"describe":"a modhash"}}},{"path":"/r/$subreddit/api/clearflairtemplates","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/clearflairtemplates","standard":"https://ssl.reddit.com/r/$subreddit/api/clearflairtemplates"},"oauth":["modflair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"flair_type":{"describe":"one of (USER_FLAIR, LINK_FLAIR)"},"uh":{"describe":"a modhash"}}},{"path":"/api/deleteflair","url":{"oauth":"https://oauth.reddit.com/api/deleteflair","standard":"https://ssl.reddit.com/api/deleteflair"},"oauth":["modflair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"name":{"describe":"a user by name"},"uh":{"describe":"a modhash"}}},{"path":"/r/$subreddit/api/deleteflair","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/deleteflair","standard":"https://ssl.reddit.com/r/$subreddit/api/deleteflair"},"oauth":["modflair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"name":{"describe":"a user by name"},"uh":{"describe":"a modhash"}}},{"path":"/api/deleteflairtemplate","url":{"oauth":"https://oauth.reddit.com/api/deleteflairtemplate","standard":"https://ssl.reddit.com/api/deleteflairtemplate"},"oauth":["modflair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"flair_template_id":{"describe":""},"uh":{"describe":"a modhash"}}},{"path":"/r/$subreddit/api/deleteflairtemplate","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/deleteflairtemplate","standard":"https://ssl.reddit.com/r/$subreddit/api/deleteflairtemplate"},"oauth":["modflair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"flair_template_id":{"describe":""},"uh":{"describe":"a modhash"}}},{"path":"/api/flair","url":{"oauth":"https://oauth.reddit.com/api/flair","standard":"https://ssl.reddit.com/api/flair"},"oauth":["modflair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"css_class":{"describe":"a valid subreddit image name"},"link":{"describe":"a fullname of a link"},"name":{"describe":"a user by name"},"text":{"describe":"a string no longer than 64 characters"},"uh":{"describe":"a modhash"}}},{"path":"/r/$subreddit/api/flair","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/flair","standard":"https://ssl.reddit.com/r/$subreddit/api/flair"},"oauth":["modflair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"css_class":{"describe":"a valid subreddit image name"},"link":{"describe":"a fullname of a link"},"name":{"describe":"a user by name"},"text":{"describe":"a string no longer than 64 characters"},"uh":{"describe":"a modhash"}}},{"path":"/api/flairconfig","url":{"oauth":"https://oauth.reddit.com/api/flairconfig","standard":"https://ssl.reddit.com/api/flairconfig"},"oauth":["modflair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"flair_enabled":{"describe":"boolean value"},"flair_position":{"describe":"one of (left, right)"},"flair_self_assign_enabled":{"describe":"boolean value"},"link_flair_position":{"describe":"one of (`,left,right`)"},"link_flair_self_assign_enabled":{"describe":"boolean value"},"uh":{"describe":"a modhash"}}},{"path":"/r/$subreddit/api/flairconfig","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/flairconfig","standard":"https://ssl.reddit.com/r/$subreddit/api/flairconfig"},"oauth":["modflair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"flair_enabled":{"describe":"boolean value"},"flair_position":{"describe":"one of (left, right)"},"flair_self_assign_enabled":{"describe":"boolean value"},"link_flair_position":{"describe":"one of (`,left,right`)"},"link_flair_self_assign_enabled":{"describe":"boolean value"},"uh":{"describe":"a modhash"}}},{"path":"/api/flaircsv","url":{"oauth":"https://oauth.reddit.com/api/flaircsv","standard":"https://ssl.reddit.com/api/flaircsv"},"oauth":["modflair"],"extensions":[],"method":"POST","describe":"","args":{"flair_csv":{"describe":""},"uh":{"describe":"a modhash"}}},{"path":"/r/$subreddit/api/flaircsv","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/flaircsv","standard":"https://ssl.reddit.com/r/$subreddit/api/flaircsv"},"oauth":["modflair"],"extensions":[],"method":"POST","describe":"","args":{"flair_csv":{"describe":""},"uh":{"describe":"a modhash"}}},{"path":"/api/flairlist","url":{"oauth":"https://oauth.reddit.com/api/flairlist","standard":"http://www.reddit.com/api/flairlist"},"oauth":["modflair"],"extensions":[],"method":"GET","describe":"This endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 1000)"},"name":{"describe":"a user by name"},"show":{"describe":"(optional) the string all"}}},{"path":"/r/$subreddit/api/flairlist","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/flairlist","standard":"http://www.reddit.com/r/$subreddit/api/flairlist"},"oauth":["modflair"],"extensions":[],"method":"GET","describe":"This endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 1000)"},"name":{"describe":"a user by name"},"show":{"describe":"(optional) the string all"}}},{"path":"/api/flairselector","url":{"oauth":"https://oauth.reddit.com/api/flairselector","standard":"https://ssl.reddit.com/api/flairselector"},"oauth":["flair"],"extensions":[],"method":"POST","describe":"Return information about a users's flair options.\n\nIf link is given, return link flair options.\nOtherwise, return user flair options for this subreddit.\n\nThe logged in user's flair is also returned.\nSubreddit moderators may give a user by name to instead\nretrieve that user's flair.","args":{"link":{"describe":"a fullname of a link"},"name":{"describe":"a user by name"}}},{"path":"/r/$subreddit/api/flairselector","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/flairselector","standard":"https://ssl.reddit.com/r/$subreddit/api/flairselector"},"oauth":["flair"],"extensions":[],"method":"POST","describe":"Return information about a users's flair options.\n\nIf link is given, return link flair options.\nOtherwise, return user flair options for this subreddit.\n\nThe logged in user's flair is also returned.\nSubreddit moderators may give a user by name to instead\nretrieve that user's flair.","args":{"link":{"describe":"a fullname of a link"},"name":{"describe":"a user by name"}}},{"path":"/api/flairtemplate","url":{"oauth":"https://oauth.reddit.com/api/flairtemplate","standard":"https://ssl.reddit.com/api/flairtemplate"},"oauth":["modflair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"css_class":{"describe":"a valid subreddit image name"},"flair_template_id":{"describe":""},"flair_type":{"describe":"one of (USER_FLAIR, LINK_FLAIR)"},"text":{"describe":"a string no longer than 64 characters"},"text_editable":{"describe":"boolean value"},"uh":{"describe":"a modhash"}}},{"path":"/r/$subreddit/api/flairtemplate","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/flairtemplate","standard":"https://ssl.reddit.com/r/$subreddit/api/flairtemplate"},"oauth":["modflair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"css_class":{"describe":"a valid subreddit image name"},"flair_template_id":{"describe":""},"flair_type":{"describe":"one of (USER_FLAIR, LINK_FLAIR)"},"text":{"describe":"a string no longer than 64 characters"},"text_editable":{"describe":"boolean value"},"uh":{"describe":"a modhash"}}},{"path":"/api/selectflair","url":{"oauth":"https://oauth.reddit.com/api/selectflair","standard":"https://ssl.reddit.com/api/selectflair"},"oauth":["flair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"flair_template_id":{"describe":""},"link":{"describe":"a fullname of a link"},"name":{"describe":"a user by name"},"text":{"describe":"a string no longer than 64 characters"},"uh":{"describe":"a modhash"}}},{"path":"/r/$subreddit/api/selectflair","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/selectflair","standard":"https://ssl.reddit.com/r/$subreddit/api/selectflair"},"oauth":["flair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"flair_template_id":{"describe":""},"link":{"describe":"a fullname of a link"},"name":{"describe":"a user by name"},"text":{"describe":"a string no longer than 64 characters"},"uh":{"describe":"a modhash"}}},{"path":"/api/setflairenabled","url":{"oauth":"https://oauth.reddit.com/api/setflairenabled","standard":"https://ssl.reddit.com/api/setflairenabled"},"oauth":["flair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"flair_enabled":{"describe":"boolean value"},"uh":{"describe":"a modhash"}}},{"path":"/r/$subreddit/api/setflairenabled","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/setflairenabled","standard":"https://ssl.reddit.com/r/$subreddit/api/setflairenabled"},"oauth":["flair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"flair_enabled":{"describe":"boolean value"},"uh":{"describe":"a modhash"}}},{"path":"/api/v1/gold/gild/$fullname","url":{"oauth":"https://oauth.reddit.com/api/v1/gold/gild/$fullname","standard":"https://ssl.reddit.com/api/v1/gold/gild/$fullname"},"oauth":["creddits"],"extensions":[],"method":"POST","describe":"","args":{"fullname":{"describe":"fullname of a thing"}}},{"path":"/api/v1/gold/give/$username","url":{"oauth":"https://oauth.reddit.com/api/v1/gold/give/$username","standard":"https://ssl.reddit.com/api/v1/gold/give/$username"},"oauth":["creddits"],"extensions":[],"method":"POST","describe":"","args":{"months":{"describe":"an integer between 1 and 36"},"username":{"describe":"A valid, existing reddit username"}}},{"path":"/api/comment","url":{"oauth":"https://oauth.reddit.com/api/comment","standard":"https://ssl.reddit.com/api/comment"},"oauth":["submit"],"extensions":[],"method":"POST","describe":"Submit a new comment or reply to a message.\n\nparent is the fullname of the thing being replied to. Its value\nchanges the kind of object created by this request:\n\n\nthe fullname of a Link: a top-level comment in that Link's thread.\nthe fullname of a Comment: a comment reply to that comment.\nthe fullname of a Message: a message reply to that message.\n\n\ntext should be the raw markdown body of the comment or message.\n\nTo start a new message thread, use /api/compose.","args":{"api_type":{"describe":"the string json"},"text":{"describe":"raw markdown text"},"thing_id":{"describe":"fullname of parent thing"},"uh":{"describe":"a modhash"}}},{"path":"/api/del","url":{"oauth":"https://oauth.reddit.com/api/del","standard":"https://ssl.reddit.com/api/del"},"oauth":["edit"],"extensions":[],"method":"POST","describe":"Delete a Link or Comment.","args":{"id":{"describe":"fullname of a thing created by the user"},"uh":{"describe":"a modhash"}}},{"path":"/api/editusertext","url":{"oauth":"https://oauth.reddit.com/api/editusertext","standard":"https://ssl.reddit.com/api/editusertext"},"oauth":["edit"],"extensions":[],"method":"POST","describe":"Edit the body text of a comment or self-post.","args":{"api_type":{"describe":"the string json"},"text":{"describe":"raw markdown text"},"thing_id":{"describe":"fullname of a thing created by the user"},"uh":{"describe":"a modhash"}}},{"path":"/api/hide","url":{"oauth":"https://oauth.reddit.com/api/hide","standard":"https://ssl.reddit.com/api/hide"},"oauth":["report"],"extensions":[],"method":"POST","describe":"Hide a link.\n\nThis removes it from the user's default view of subreddit listings.\n\nSee also: /api/unhide.","args":{"id":{"describe":"fullname of a link"},"uh":{"describe":"a modhash"}}},{"path":"/api/info","url":{"oauth":"https://oauth.reddit.com/api/info","standard":"http://www.reddit.com/api/info"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Get a link by fullname or a list of links by URL.\n\nIf id is provided, the link with the given fullname will be returned.\nIf url is provided, a list of links with the given URL will be\nreturned.\n\nIf both url and id are provided, id will take precedence.\n\nIf a subreddit is provided, only links in that subreddit will be\nreturned.","args":{"id":{"describe":"fullname of a thing"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"url":{"describe":"a valid URL"}}},{"path":"/r/$subreddit/api/info","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/info","standard":"http://www.reddit.com/r/$subreddit/api/info"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Get a link by fullname or a list of links by URL.\n\nIf id is provided, the link with the given fullname will be returned.\nIf url is provided, a list of links with the given URL will be\nreturned.\n\nIf both url and id are provided, id will take precedence.\n\nIf a subreddit is provided, only links in that subreddit will be\nreturned.","args":{"id":{"describe":"fullname of a thing"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"url":{"describe":"a valid URL"}}},{"path":"/api/marknsfw","url":{"oauth":"https://oauth.reddit.com/api/marknsfw","standard":"https://ssl.reddit.com/api/marknsfw"},"oauth":["modposts"],"extensions":[],"method":"POST","describe":"Mark a link NSFW.\n\nSee also: /api/unmarknsfw.","args":{"id":{"describe":"fullname of a thing"},"uh":{"describe":"a modhash"}}},{"path":"/api/morechildren","url":{"oauth":"https://oauth.reddit.com/api/morechildren","standard":"https://ssl.reddit.com/api/morechildren"},"oauth":["read"],"extensions":[],"method":"POST","describe":"Retrieve additional comments omitted from a base comment tree.\n\nWhen a comment tree is rendered, the most relevant comments are\nselected for display first. Remaining comments are stubbed out with\n\"MoreComments\" links. This API call is used to retrieve the additional\ncomments represented by those stubs, up to 20 at a time.\n\nThe two core parameters required are link and children.  link is\nthe fullname of the link whose comments are being fetched. children\nis a comma-delimited list of comment ID36s that need to be fetched.\n\nIf id is passed, it should be the ID of the MoreComments object this\ncall is replacing. This is needed only for the HTML UI's purposes and\nis optional otherwise.\n\npv_hex is part of the reddit gold \"previous visits\" feature. It is\noptional and deprecated.\n\nNOTE: you may only make one request at a time to this API endpoint.\nHigher concurrency will result in an error being returned.","args":{"api_type":{"describe":"the string json"},"children":{"describe":"a comma-delimited list of comment ID36s"},"id":{"describe":"(optional) id of the associated MoreChildren object"},"link_id":{"describe":"fullname of a thing"},"pv_hex":{"describe":"(optional) a previous-visits token"},"sort":{"describe":"one of (confidence, top, new, hot, controversial, old, random)"}}},{"path":"/api/report","url":{"oauth":"https://oauth.reddit.com/api/report","standard":"https://ssl.reddit.com/api/report"},"oauth":["report"],"extensions":[],"method":"POST","describe":"Report a link or comment.\n\nReporting a thing brings it to the attention of the subreddit's\nmoderators. The thing is implicitly hidden as well (see\n/api/hide for details).","args":{"id":{"describe":"fullname of a thing"},"uh":{"describe":"a modhash"}}},{"path":"/api/save","url":{"oauth":"https://oauth.reddit.com/api/save","standard":"https://ssl.reddit.com/api/save"},"oauth":["save"],"extensions":[],"method":"POST","describe":"Save a link or comment.\n\nSaved things are kept in the user's saved listing for later perusal.\n\nSee also: /api/unsave.","args":{"category":{"describe":"a category name"},"id":{"describe":"fullname of a thing"},"uh":{"describe":"a modhash"}}},{"path":"/api/saved_categories.json","url":{"oauth":"https://oauth.reddit.com/api/saved_categories.json","standard":"http://www.reddit.com/api/saved_categories.json"},"oauth":["save"],"extensions":[],"method":"GET","describe":"Get a list of categories in which things are currently saved.\n\nSee also: /api/save.","args":{}},{"path":"/api/sendreplies","url":{"oauth":"https://oauth.reddit.com/api/sendreplies","standard":"https://ssl.reddit.com/api/sendreplies"},"oauth":["edit"],"extensions":[],"method":"POST","describe":"Enable or disable inbox replies for a link.\n\nstate is a boolean that indicates whether you are enabling or\ndisabling inbox replies - true to enable, false to disable.","args":{"id":{"describe":"fullname of a thing created by the user"},"state":{"describe":"boolean value"},"uh":{"describe":"a modhash"}}},{"path":"/api/set_contest_mode","url":{"oauth":"https://oauth.reddit.com/api/set_contest_mode","standard":"https://ssl.reddit.com/api/set_contest_mode"},"oauth":["modposts"],"extensions":[],"method":"POST","describe":"Set or unset \"contest mode\" for a link's comments.\n\nstate is a boolean that indicates whether you are enabling or\ndisabling contest mode - true to enable, false to disable.","args":{"api_type":{"describe":"the string json"},"id":{"describe":"fullname of a thing"},"state":{"describe":"boolean value"},"uh":{"describe":"a modhash"}}},{"path":"/api/set_subreddit_sticky","url":{"oauth":"https://oauth.reddit.com/api/set_subreddit_sticky","standard":"https://ssl.reddit.com/api/set_subreddit_sticky"},"oauth":["modposts"],"extensions":[],"method":"POST","describe":"Set or unset a self-post as the sticky post in its subreddit.\n\nstate is a boolean that indicates whether to sticky or unsticky\nthis post - true to sticky, false to unsticky.\n\nNote that if another post was previously stickied, stickying a new\none will replace the previous one.","args":{"api_type":{"describe":"the string json"},"id":{"describe":"fullname of a thing"},"state":{"describe":"boolean value"},"uh":{"describe":"a modhash"}}},{"path":"/api/store_visits","url":{"oauth":"https://oauth.reddit.com/api/store_visits","standard":"https://ssl.reddit.com/api/store_visits"},"oauth":["save"],"extensions":[],"method":"POST","describe":"Requires a subscription to reddit gold","args":{"links":{"describe":"A comma-separated list of link fullnames"},"uh":{"describe":"a modhash"}}},{"path":"/api/submit","url":{"oauth":"https://oauth.reddit.com/api/submit","standard":"https://ssl.reddit.com/api/submit"},"oauth":["submit"],"extensions":[],"method":"POST","describe":"Submit a link to a subreddit.\n\nSubmit will create a link or self-post in the subreddit sr with the\ntitle title. If kind is \"link\", then url is expected to be a\nvalid URL to link to. Otherwise, text, if present, will be the\nbody of the self-post.\n\nIf a link with the same URL has already been submitted to the specified\nsubreddit an error will be returned unless resubmit is true.\nextension is used for determining which view-type (e.g. json,\ncompact etc.) to use for the redirect that is generated if the\nresubmit error occurs.\n\nIf save is true, the link will be implicitly saved after submission\n(see /api/save for more information).","args":{"api_type":{"describe":"the string json"},"captcha":{"describe":"the user's response to the CAPTCHA challenge"},"extension":{"describe":"extension used for redirects"},"iden":{"describe":"the identifier of the CAPTCHA challenge"},"kind":{"describe":"one of (link, self)"},"resubmit":{"describe":"boolean value"},"save":{"describe":"boolean value"},"sendreplies":{"describe":"boolean value"},"sr":{"describe":"name of a subreddit"},"text":{"describe":"raw markdown text"},"then":{"describe":"one of (tb, comments)"},"title":{"describe":"title of the submission. up to 300 characters long"},"uh":{"describe":"a modhash"},"url":{"describe":"a valid URL"}}},{"path":"/api/unhide","url":{"oauth":"https://oauth.reddit.com/api/unhide","standard":"https://ssl.reddit.com/api/unhide"},"oauth":["report"],"extensions":[],"method":"POST","describe":"Unhide a link.\n\nSee also: /api/hide.","args":{"id":{"describe":"fullname of a thing"},"uh":{"describe":"a modhash"}}},{"path":"/api/unmarknsfw","url":{"oauth":"https://oauth.reddit.com/api/unmarknsfw","standard":"https://ssl.reddit.com/api/unmarknsfw"},"oauth":["modposts"],"extensions":[],"method":"POST","describe":"Remove the NSFW marking from a link.\n\nSee also: /api/marknsfw.","args":{"id":{"describe":"fullname of a thing"},"uh":{"describe":"a modhash"}}},{"path":"/api/unsave","url":{"oauth":"https://oauth.reddit.com/api/unsave","standard":"https://ssl.reddit.com/api/unsave"},"oauth":["save"],"extensions":[],"method":"POST","describe":"Unsave a link or comment.\n\nThis removes the thing from the user's saved listings as well.\n\nSee also: /api/save.","args":{"id":{"describe":"fullname of a thing"},"uh":{"describe":"a modhash"}}},{"path":"/api/vote","url":{"oauth":"https://oauth.reddit.com/api/vote","standard":"https://ssl.reddit.com/api/vote"},"oauth":["vote"],"extensions":[],"method":"POST","describe":"Cast a vote on a thing.\n\nid should be the fullname of the Link or Comment to vote on.\n\ndir indicates the direction of the vote. Voting 1 is an upvote,\n-1 is a downvote, and 0 is equivalent to \"un-voting\" by clicking\nagain on a highlighted arrow.\n\nNote: votes must be cast by humans. That is, API clients proxying a\nhuman's action one-for-one are OK, but bots deciding how to vote on\ncontent or amplifying a human's vote are not. See the reddit\nrules for more details on what constitutes vote cheating.","args":{"dir":{"describe":"vote direction. one of (1, 0, -1)"},"id":{"describe":"fullname of a thing"},"uh":{"describe":"a modhash"},"v":{"describe":"(optional) internal use only"}}},{"path":"/by_id/$names","url":{"oauth":"https://oauth.reddit.com/by_id/$names","standard":"http://www.reddit.com/by_id/$names"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Get a listing of links by fullname.\n\nnames is a list of fullnames for links separated by commas or spaces.","args":{"names":{"describe":"A comma-separated list of link fullnames"}}},{"path":"/comments/$article","url":{"oauth":"https://oauth.reddit.com/comments/$article","standard":"http://www.reddit.com/comments/$article"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"Get the comment tree for a given Link article.\n\nIf supplied, comment is the ID36 of a comment in the comment tree for\narticle. This comment will be the (highlighted) focal point of the\nreturned view and context will be the number of parents shown.\n\ndepth is the maximum depth of subtrees in the thread.\n\nlimit is the maximum number of comments to return.\n\nSee also: /api/morechildren and\n/api/comment.","args":{"article":{"describe":"ID36 of a link"},"comment":{"describe":"(optional) ID36 of a comment"},"context":{"describe":"an integer between 0 and 8"},"depth":{"describe":"(optional) an integer"},"limit":{"describe":"(optional) an integer"},"sort":{"describe":"one of (confidence, top, new, hot, controversial, old, random)"}}},{"path":"/r/$subreddit/comments/$article","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/comments/$article","standard":"http://www.reddit.com/r/$subreddit/comments/$article"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"Get the comment tree for a given Link article.\n\nIf supplied, comment is the ID36 of a comment in the comment tree for\narticle. This comment will be the (highlighted) focal point of the\nreturned view and context will be the number of parents shown.\n\ndepth is the maximum depth of subtrees in the thread.\n\nlimit is the maximum number of comments to return.\n\nSee also: /api/morechildren and\n/api/comment.","args":{"article":{"describe":"ID36 of a link"},"comment":{"describe":"(optional) ID36 of a comment"},"context":{"describe":"an integer between 0 and 8"},"depth":{"describe":"(optional) an integer"},"limit":{"describe":"(optional) an integer"},"sort":{"describe":"one of (confidence, top, new, hot, controversial, old, random)"}}},{"path":"/hot","url":{"oauth":"https://oauth.reddit.com/hot","standard":"http://www.reddit.com/hot"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"This endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"show":{"describe":"(optional) the string all"}}},{"path":"/r/$subreddit/hot","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/hot","standard":"http://www.reddit.com/r/$subreddit/hot"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"This endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"show":{"describe":"(optional) the string all"}}},{"path":"/new","url":{"oauth":"https://oauth.reddit.com/new","standard":"http://www.reddit.com/new"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"This endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"show":{"describe":"(optional) the string all"}}},{"path":"/r/$subreddit/new","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/new","standard":"http://www.reddit.com/r/$subreddit/new"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"This endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"show":{"describe":"(optional) the string all"}}},{"path":"/random","url":{"oauth":"https://oauth.reddit.com/random","standard":"http://www.reddit.com/random"},"oauth":["read"],"extensions":[],"method":"GET","describe":"The Serendipity button","args":{}},{"path":"/r/$subreddit/random","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/random","standard":"http://www.reddit.com/r/$subreddit/random"},"oauth":["read"],"extensions":[],"method":"GET","describe":"The Serendipity button","args":{}},{"path":"/$sort","url":{"oauth":"https://oauth.reddit.com/$sort","standard":"http://www.reddit.com/$sort"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"This endpoint is a listing.","args":{"t":{"describe":"one of (hour, day, week, month, year, all)"},"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"show":{"describe":"(optional) the string all"}}},{"path":"/r/$subreddit/$sort","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/$sort","standard":"http://www.reddit.com/r/$subreddit/$sort"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"This endpoint is a listing.","args":{"t":{"describe":"one of (hour, day, week, month, year, all)"},"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"show":{"describe":"(optional) the string all"}}},{"path":"/api/block","url":{"oauth":"https://oauth.reddit.com/api/block","standard":"https://ssl.reddit.com/api/block"},"oauth":["privatemessages"],"extensions":[],"method":"POST","describe":"For blocking via inbox.","args":{"id":{"describe":"fullname of a thing"},"uh":{"describe":"a modhash"}}},{"path":"/api/compose","url":{"oauth":"https://oauth.reddit.com/api/compose","standard":"https://ssl.reddit.com/api/compose"},"oauth":["privatemessages"],"extensions":[],"method":"POST","describe":"Handles message composition under /message/compose.","args":{"api_type":{"describe":"the string json"},"captcha":{"describe":"the user's response to the CAPTCHA challenge"},"iden":{"describe":"the identifier of the CAPTCHA challenge"},"subject":{"describe":"a string no longer than 100 characters"},"text":{"describe":"raw markdown text"},"to":{"describe":"the name of an existing user"},"uh":{"describe":"a modhash"}}},{"path":"/api/read_message","url":{"oauth":"https://oauth.reddit.com/api/read_message","standard":"https://ssl.reddit.com/api/read_message"},"oauth":["privatemessages"],"extensions":[],"method":"POST","describe":"","args":{"id":{"describe":"A comma-separated list of thing fullnames"},"uh":{"describe":"a modhash"}}},{"path":"/api/unread_message","url":{"oauth":"https://oauth.reddit.com/api/unread_message","standard":"https://ssl.reddit.com/api/unread_message"},"oauth":["privatemessages"],"extensions":[],"method":"POST","describe":"","args":{"id":{"describe":"A comma-separated list of thing fullnames"},"uh":{"describe":"a modhash"}}},{"path":"/message/$where","url":{"oauth":"https://oauth.reddit.com/message/$where","standard":"http://www.reddit.com/message/$where"},"oauth":["privatemessages"],"extensions":[".json",".xml"],"method":"GET","describe":"This endpoint is a listing.","args":{"mark":{"describe":"one of (true, false)"},"mid":{"describe":""},"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"show":{"describe":"(optional) the string all"}}},{"path":"/about/log","url":{"oauth":"https://oauth.reddit.com/about/log","standard":"http://www.reddit.com/about/log"},"oauth":["modlog"],"extensions":[".json",".xml"],"method":"GET","describe":"Get a list of recent moderation actions.\n\nModerator actions taken within a subreddit are logged. This listing is\na view of that log with various filters to aid in analyzing the\ninformation.\n\nThe optional mod parameter can be a comma-delimited list of moderator\nnames to restrict the results to, or the string a to restrict the\nresults to admin actions taken within the subreddit.\n\nThe type parameter is optional and if sent limits the log entries\nreturned to only those of the type specified.\n\nThis endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 500)"},"mod":{"describe":"(optional) a moderator filter"},"show":{"describe":"(optional) the string all"},"type":{"describe":"one of (banuser, unbanuser, removelink, approvelink, removecomment, approvecomment, addmoderator, invitemoderator, uninvitemoderator, acceptmoderatorinvite, removemoderator, addcontributor, removecontributor, editsettings, editflair, distinguish, marknsfw, wikibanned, wikicontributor, wikiunbanned, wikipagelisted, removewikicontributor, wikirevise, wikipermlevel, ignorereports, unignorereports, setpermissions, sticky, unsticky)"}}},{"path":"/r/$subreddit/about/log","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/about/log","standard":"http://www.reddit.com/r/$subreddit/about/log"},"oauth":["modlog"],"extensions":[".json",".xml"],"method":"GET","describe":"Get a list of recent moderation actions.\n\nModerator actions taken within a subreddit are logged. This listing is\na view of that log with various filters to aid in analyzing the\ninformation.\n\nThe optional mod parameter can be a comma-delimited list of moderator\nnames to restrict the results to, or the string a to restrict the\nresults to admin actions taken within the subreddit.\n\nThe type parameter is optional and if sent limits the log entries\nreturned to only those of the type specified.\n\nThis endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 500)"},"mod":{"describe":"(optional) a moderator filter"},"show":{"describe":"(optional) the string all"},"type":{"describe":"one of (banuser, unbanuser, removelink, approvelink, removecomment, approvecomment, addmoderator, invitemoderator, uninvitemoderator, acceptmoderatorinvite, removemoderator, addcontributor, removecontributor, editsettings, editflair, distinguish, marknsfw, wikibanned, wikicontributor, wikiunbanned, wikipagelisted, removewikicontributor, wikirevise, wikipermlevel, ignorereports, unignorereports, setpermissions, sticky, unsticky)"}}},{"path":"/about/$location","url":{"oauth":"https://oauth.reddit.com/about/$location","standard":"http://www.reddit.com/about/$location"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Return a listing of posts relevant to moderators.\n\n\nreports: Things that have been reported.\nspam: Things that have been marked as spam or otherwise removed.\nmodqueue: Things requiring moderator review, such as reported things\nand items caught by the spam filter.\nunmoderated: Things that have yet to be approved/removed by a mod.\n\n\nRequires the \"posts\" moderator permission for the subreddit.\n\nThis endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"location":{"describe":""},"only":{"describe":"one of (links, comments)"},"show":{"describe":"(optional) the string all"}}},{"path":"/r/$subreddit/about/$location","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/about/$location","standard":"http://www.reddit.com/r/$subreddit/about/$location"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Return a listing of posts relevant to moderators.\n\n\nreports: Things that have been reported.\nspam: Things that have been marked as spam or otherwise removed.\nmodqueue: Things requiring moderator review, such as reported things\nand items caught by the spam filter.\nunmoderated: Things that have yet to be approved/removed by a mod.\n\n\nRequires the \"posts\" moderator permission for the subreddit.\n\nThis endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"location":{"describe":""},"only":{"describe":"one of (links, comments)"},"show":{"describe":"(optional) the string all"}}},{"path":"/api/accept_moderator_invite","url":{"standard":"https://ssl.reddit.com/api/accept_moderator_invite"},"oauth":[],"extensions":[],"method":"POST","describe":"Accept an invite to moderate the specified subreddit.\n\nThe authenticated user must have been invited to moderate the subreddit\nby one of its current moderators.\n\nSee also: /api/friend and\n/subreddits/mine.","args":{"api_type":{"describe":"the string json"},"uh":{"describe":"a modhash"}}},{"path":"/r/$subreddit/api/accept_moderator_invite","url":{"standard":"https://ssl.reddit.com/r/$subreddit/api/accept_moderator_invite"},"oauth":[],"extensions":[],"method":"POST","describe":"Accept an invite to moderate the specified subreddit.\n\nThe authenticated user must have been invited to moderate the subreddit\nby one of its current moderators.\n\nSee also: /api/friend and\n/subreddits/mine.","args":{"api_type":{"describe":"the string json"},"uh":{"describe":"a modhash"}}},{"path":"/api/approve","url":{"oauth":"https://oauth.reddit.com/api/approve","standard":"https://ssl.reddit.com/api/approve"},"oauth":["modposts"],"extensions":[],"method":"POST","describe":"Approve a link or comment.\n\nIf the thing was removed, it will be re-inserted into appropriate\nlistings. Any reports on the approved thing will be discarded.\n\nSee also: /api/remove.","args":{"id":{"describe":"fullname of a thing"},"uh":{"describe":"a modhash"}}},{"path":"/api/distinguish","url":{"oauth":"https://oauth.reddit.com/api/distinguish","standard":"https://ssl.reddit.com/api/distinguish"},"oauth":["modposts"],"extensions":[],"method":"POST","describe":"Distinguish a thing's author with a sigil.\n\nThis can be useful to draw attention to and confirm the identity of the\nuser in the context of a link or comment of theirs. The options for\ndistinguish are as follows:\n\n\nyes - add a moderator distinguish ([M]). only if the user is a\n      moderator of the subreddit the thing is in.\nno - remove any distinguishes.\nadmin - add an admin distinguish ([A]). admin accounts only.\nspecial - add a user-specific distinguish. depends on user.\n\n\nThe first time a top-level comment is moderator distinguished, the\nauthor of the link the comment is in reply to will get a notification\nin their inbox.","args":{"api_type":{"describe":"the string json"},"how":{"describe":"one of (yes, no, admin, special)"},"id":{"describe":"fullname of a thing"},"uh":{"describe":"a modhash"}}},{"path":"/api/ignore_reports","url":{"oauth":"https://oauth.reddit.com/api/ignore_reports","standard":"https://ssl.reddit.com/api/ignore_reports"},"oauth":["modposts"],"extensions":[],"method":"POST","describe":"Prevent future reports on a thing from causing notifications.\n\nAny reports made about a thing after this flag is set on it will not\ncause notifications or make the thing show up in the various moderation\nlistings.\n\nSee also: /api/unignore_reports.","args":{"id":{"describe":"fullname of a thing"},"uh":{"describe":"a modhash"}}},{"path":"/api/leavecontributor","url":{"standard":"https://ssl.reddit.com/api/leavecontributor"},"oauth":[],"extensions":[],"method":"POST","describe":"Abdicate approved submitter status in a subreddit.\n\nSee also: /api/friend.","args":{"id":{"describe":"fullname of a thing"},"uh":{"describe":"a modhash"}}},{"path":"/api/leavemoderator","url":{"standard":"https://ssl.reddit.com/api/leavemoderator"},"oauth":[],"extensions":[],"method":"POST","describe":"Abdicate moderator status in a subreddit.\n\nSee also: /api/friend.","args":{"id":{"describe":"fullname of a thing"},"uh":{"describe":"a modhash"}}},{"path":"/api/remove","url":{"oauth":"https://oauth.reddit.com/api/remove","standard":"https://ssl.reddit.com/api/remove"},"oauth":["modposts"],"extensions":[],"method":"POST","describe":"Remove a link or comment.\n\nIf the thing is a link, it will be removed from all subreddit listings.\nIf the thing is a comment, it will be redacted and removed from all\nsubreddit comment listings.\n\nSee also: /api/approve.","args":{"id":{"describe":"fullname of a thing"},"spam":{"describe":"boolean value"},"uh":{"describe":"a modhash"}}},{"path":"/api/unignore_reports","url":{"oauth":"https://oauth.reddit.com/api/unignore_reports","standard":"https://ssl.reddit.com/api/unignore_reports"},"oauth":["modposts"],"extensions":[],"method":"POST","describe":"Allow future reports on a thing to cause notifications.\n\nSee also: /api/ignore_reports.","args":{"id":{"describe":"fullname of a thing"},"uh":{"describe":"a modhash"}}},{"path":"/stylesheet","url":{"oauth":"https://oauth.reddit.com/stylesheet","standard":"http://www.reddit.com/stylesheet"},"oauth":["modconfig"],"extensions":[],"method":"GET","describe":"Get the subreddit's current stylesheet.\n\nThis will return either the content of or a redirect to the subreddit's\ncurrent stylesheet if one exists.\n\nSee also: /api/subreddit_stylesheet.","args":{}},{"path":"/r/$subreddit/stylesheet","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/stylesheet","standard":"http://www.reddit.com/r/$subreddit/stylesheet"},"oauth":["modconfig"],"extensions":[],"method":"GET","describe":"Get the subreddit's current stylesheet.\n\nThis will return either the content of or a redirect to the subreddit's\ncurrent stylesheet if one exists.\n\nSee also: /api/subreddit_stylesheet.","args":{}},{"path":"/api/multi/mine","url":{"oauth":"https://oauth.reddit.com/api/multi/mine","standard":"http://www.reddit.com/api/multi/mine"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Fetch a list of multis belonging to the current user.","args":{}},{"path":"/api/multi/$multipath","url":{"oauth":"https://oauth.reddit.com/api/multi/$multipath","standard":"https://ssl.reddit.com/api/multi/$multipath"},"oauth":["subscribe"],"extensions":[],"method":"DELETE","describe":"Delete a multi.","args":{"multipath":{"describe":"multireddit url path"},"uh":{"describe":"a modhash"}}},{"path":"/api/multi/$multipath","url":{"oauth":"https://oauth.reddit.com/api/multi/$multipath","standard":"http://www.reddit.com/api/multi/$multipath"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Fetch a multi's data and subreddit list by name.","args":{"multipath":{"describe":"multireddit url path"}}},{"path":"/api/multi/$multipath","url":{"oauth":"https://oauth.reddit.com/api/multi/$multipath","standard":"https://ssl.reddit.com/api/multi/$multipath"},"oauth":["subscribe"],"extensions":[],"method":"POST","describe":"Create a multi. Responds with 409 Conflict if it already exists.","args":{"model":{"describe":"json data:\n\n{\n  \"subreddits\": [\n    {\n      \"name\": subreddit name,\n    },\n    ...\n  ],\n  \"visibility\": one of (`private`, `public`),\n}\n"},"multipath":{"describe":"multireddit url path"},"uh":{"describe":"a modhash"}}},{"path":"/api/multi/$multipath","url":{"oauth":"https://oauth.reddit.com/api/multi/$multipath","standard":"https://ssl.reddit.com/api/multi/$multipath"},"oauth":["subscribe"],"extensions":[],"method":"PUT","describe":"Create or update a multi.","args":{"model":{"describe":"json data:\n\n{\n  \"subreddits\": [\n    {\n      \"name\": subreddit name,\n    },\n    ...\n  ],\n  \"visibility\": one of (`private`, `public`),\n}\n"},"multipath":{"describe":"multireddit url path"},"uh":{"describe":"a modhash"}}},{"path":"/api/multi/$multipath/copy","url":{"oauth":"https://oauth.reddit.com/api/multi/$multipath/copy","standard":"https://ssl.reddit.com/api/multi/$multipath/copy"},"oauth":["subscribe"],"extensions":[],"method":"POST","describe":"Copy a multi.\n\nResponds with 409 Conflict if the target already exists.\n\nA \"copied from ...\" line will automatically be appended to the\ndescription.","args":{"from":{"describe":"multireddit url path"},"to":{"describe":"destination multireddit url path"},"uh":{"describe":"a modhash"}}},{"path":"/api/multi/$multipath/description","url":{"oauth":"https://oauth.reddit.com/api/multi/$multipath/description","standard":"http://www.reddit.com/api/multi/$multipath/description"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Get a multi's description.","args":{"multipath":{"describe":"multireddit url path"}}},{"path":"/api/multi/$multipath/description","url":{"oauth":"https://oauth.reddit.com/api/multi/$multipath/description","standard":"https://ssl.reddit.com/api/multi/$multipath/description"},"oauth":["read"],"extensions":[],"method":"PUT","describe":"Change a multi's markdown description.","args":{"model":{"describe":"json data:\n\n{\n  \"body_md\": raw markdown text,\n}\n"},"multipath":{"describe":"multireddit url path"},"uh":{"describe":"a modhash"}}},{"path":"/api/multi/$multipath/r/$srname","url":{"oauth":"https://oauth.reddit.com/api/multi/$multipath/r/$srname","standard":"https://ssl.reddit.com/api/multi/$multipath/r/$srname"},"oauth":["subscribe"],"extensions":[],"method":"DELETE","describe":"Remove a subreddit from a multi.","args":{"multipath":{"describe":"multireddit url path"},"srname":{"describe":"subreddit name"},"uh":{"describe":"a modhash"}}},{"path":"/api/multi/$multipath/r/$srname","url":{"oauth":"https://oauth.reddit.com/api/multi/$multipath/r/$srname","standard":"http://www.reddit.com/api/multi/$multipath/r/$srname"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Get data about a subreddit in a multi.","args":{"multipath":{"describe":"multireddit url path"},"srname":{"describe":"subreddit name"}}},{"path":"/api/multi/$multipath/r/$srname","url":{"oauth":"https://oauth.reddit.com/api/multi/$multipath/r/$srname","standard":"https://ssl.reddit.com/api/multi/$multipath/r/$srname"},"oauth":["subscribe"],"extensions":[],"method":"PUT","describe":"Add a subreddit to a multi.","args":{"model":{"describe":"json data:\n\n{\n  \"name\": subreddit name,\n}\n"},"multipath":{"describe":"multireddit url path"},"srname":{"describe":"subreddit name"},"uh":{"describe":"a modhash"}}},{"path":"/api/multi/$multipath/rename","url":{"oauth":"https://oauth.reddit.com/api/multi/$multipath/rename","standard":"https://ssl.reddit.com/api/multi/$multipath/rename"},"oauth":["subscribe"],"extensions":[],"method":"POST","describe":"Rename a multi.","args":{"from":{"describe":"multireddit url path"},"to":{"describe":"destination multireddit url path"},"uh":{"describe":"a modhash"}}},{"path":"/search","url":{"oauth":"https://oauth.reddit.com/search","standard":"http://www.reddit.com/search"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"Search links page.\n\nThis endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"q":{"describe":"a string no longer than 512 characters"},"restrict_sr":{"describe":"boolean value"},"show":{"describe":"(optional) the string all"},"sort":{"describe":"one of (relevance, new, hot, top, comments)"},"syntax":{"describe":"one of (cloudsearch, lucene, plain)"},"t":{"describe":"one of (hour, day, week, month, year, all)"}}},{"path":"/r/$subreddit/search","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/search","standard":"http://www.reddit.com/r/$subreddit/search"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"Search links page.\n\nThis endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"q":{"describe":"a string no longer than 512 characters"},"restrict_sr":{"describe":"boolean value"},"show":{"describe":"(optional) the string all"},"sort":{"describe":"one of (relevance, new, hot, top, comments)"},"syntax":{"describe":"one of (cloudsearch, lucene, plain)"},"t":{"describe":"one of (hour, day, week, month, year, all)"}}},{"path":"/about/$where","url":{"oauth":"https://oauth.reddit.com/about/$where","standard":"http://www.reddit.com/about/$where"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"This endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"show":{"describe":"(optional) the string all"},"user":{"describe":"A valid, existing reddit username"}}},{"path":"/r/$subreddit/about/$where","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/about/$where","standard":"http://www.reddit.com/r/$subreddit/about/$where"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"This endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"show":{"describe":"(optional) the string all"},"user":{"describe":"A valid, existing reddit username"}}},{"path":"/api/delete_sr_header","url":{"oauth":"https://oauth.reddit.com/api/delete_sr_header","standard":"https://ssl.reddit.com/api/delete_sr_header"},"oauth":["modconfig"],"extensions":[],"method":"POST","describe":"Remove the subreddit's custom header image.\n\nThe sitewide-default header image will be shown again after this call.\n\nSee also: /api/upload_sr_img.","args":{"api_type":{"describe":"the string json"},"uh":{"describe":"a modhash"}}},{"path":"/r/$subreddit/api/delete_sr_header","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/delete_sr_header","standard":"https://ssl.reddit.com/r/$subreddit/api/delete_sr_header"},"oauth":["modconfig"],"extensions":[],"method":"POST","describe":"Remove the subreddit's custom header image.\n\nThe sitewide-default header image will be shown again after this call.\n\nSee also: /api/upload_sr_img.","args":{"api_type":{"describe":"the string json"},"uh":{"describe":"a modhash"}}},{"path":"/api/delete_sr_img","url":{"oauth":"https://oauth.reddit.com/api/delete_sr_img","standard":"https://ssl.reddit.com/api/delete_sr_img"},"oauth":["modconfig"],"extensions":[],"method":"POST","describe":"Remove an image from the subreddit's custom image set.\n\nThe image will no longer count against the subreddit's image limit.\nHowever, the actual image data may still be accessible for an\nunspecified amount of time. If the image is currently referenced by the\nsubreddit's stylesheet, that stylesheet will no longer validate and\nwon't be editable until the image reference is removed.\n\nSee also: /api/upload_sr_img.","args":{"api_type":{"describe":"the string json"},"img_name":{"describe":"a valid subreddit image name"},"uh":{"describe":"a modhash"}}},{"path":"/r/$subreddit/api/delete_sr_img","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/delete_sr_img","standard":"https://ssl.reddit.com/r/$subreddit/api/delete_sr_img"},"oauth":["modconfig"],"extensions":[],"method":"POST","describe":"Remove an image from the subreddit's custom image set.\n\nThe image will no longer count against the subreddit's image limit.\nHowever, the actual image data may still be accessible for an\nunspecified amount of time. If the image is currently referenced by the\nsubreddit's stylesheet, that stylesheet will no longer validate and\nwon't be editable until the image reference is removed.\n\nSee also: /api/upload_sr_img.","args":{"api_type":{"describe":"the string json"},"img_name":{"describe":"a valid subreddit image name"},"uh":{"describe":"a modhash"}}},{"path":"/api/recommend/sr/$srnames","url":{"oauth":"https://oauth.reddit.com/api/recommend/sr/$srnames","standard":"http://www.reddit.com/api/recommend/sr/$srnames"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Return subreddits recommended for the given subreddit(s).\n\nGets a list of subreddits recommended for srnames, filtering out any\nthat appear in the optional omit param.","args":{"omit":{"describe":"comma-delimited list of subreddit names"},"srnames":{"describe":"comma-delimited list of subreddit names"}}},{"path":"/api/search_reddit_names.json","url":{"oauth":"https://oauth.reddit.com/api/search_reddit_names.json","standard":"https://ssl.reddit.com/api/search_reddit_names.json"},"oauth":["read"],"extensions":[],"method":"POST","describe":"List subreddit names that begin with a query string.\n\nSubreddits whose names begin with query will be returned. If\ninclude_over_18 is false, subreddits with over-18 content\nrestrictions will be filtered from the results.","args":{"include_over_18":{"describe":"boolean value"},"query":{"describe":"a string up to 50 characters long, consisting of printable characters."}}},{"path":"/api/site_admin","url":{"oauth":"https://oauth.reddit.com/api/site_admin","standard":"https://ssl.reddit.com/api/site_admin"},"oauth":["modconfig"],"extensions":[],"method":"POST","describe":"Create or configure a subreddit.\n\nIf sr is specified, the request will attempt to modify the specified\nsubreddit. If not, a subreddit with name name will be created.\n\nThis endpoint expects all values to be supplied on every request.  If\nmodifying a subset of options, it may be useful to get the current\nsettings from /about/edit.json\nfirst.\n\nFor backwards compatibility, description is the sidebar text and\npublic_description is the publicly visible subreddit description.\n\nMost of the parameters for this endpoint are identical to options\nvisible in the user interface and their meanings are best explained\nthere.\n\nSee also: /about/edit.json.","args":{"allow_top":{"describe":"boolean value"},"api_type":{"describe":"the string json"},"comment_score_hide_mins":{"describe":"an integer between 0 and 1440 (default: 0)"},"css_on_cname":{"describe":"boolean value"},"description":{"describe":"raw markdown text"},"exclude_banned_modqueue":{"describe":"boolean value"},"header-title":{"describe":"a string no longer than 500 characters"},"lang":{"describe":"a valid IETF language tag (underscore separated)"},"link_type":{"describe":"one of (any, link, self)"},"name":{"describe":"subreddit name"},"over_18":{"describe":"boolean value"},"public_description":{"describe":"raw markdown text"},"public_traffic":{"describe":"boolean value"},"show_cname_sidebar":{"describe":"boolean value"},"show_media":{"describe":"boolean value"},"spam_comments":{"describe":"one of (low, high, all)"},"spam_links":{"describe":"one of (low, high, all)"},"spam_selfposts":{"describe":"one of (low, high, all)"},"sr":{"describe":"fullname of a thing"},"submit_link_label":{"describe":"a string no longer than 60 characters"},"submit_text":{"describe":"raw markdown text"},"submit_text_label":{"describe":"a string no longer than 60 characters"},"title":{"describe":"a string no longer than 100 characters"},"type":{"describe":"one of (public, private, restricted, gold_restricted, archived)"},"uh":{"describe":"a modhash"},"wiki_edit_age":{"describe":"an integer greater than 0 (default: 0)"},"wiki_edit_karma":{"describe":"an integer greater than 0 (default: 0)"},"wikimode":{"describe":"one of (disabled, modonly, anyone)"}}},{"path":"/api/submit_text.json","url":{"oauth":"https://oauth.reddit.com/api/submit_text.json","standard":"http://www.reddit.com/api/submit_text.json"},"oauth":["submit"],"extensions":[],"method":"GET","describe":"Get the submission text for the subreddit.\n\nThis text is set by the subreddit moderators and intended to be\ndisplayed on the submission form.\n\nSee also: /api/site_admin.","args":{}},{"path":"/r/$subreddit/api/submit_text.json","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/submit_text.json","standard":"http://www.reddit.com/r/$subreddit/api/submit_text.json"},"oauth":["submit"],"extensions":[],"method":"GET","describe":"Get the submission text for the subreddit.\n\nThis text is set by the subreddit moderators and intended to be\ndisplayed on the submission form.\n\nSee also: /api/site_admin.","args":{}},{"path":"/api/$subreddit_stylesheet","url":{"oauth":"https://oauth.reddit.com/api/$subreddit_stylesheet","standard":"https://ssl.reddit.com/api/$subreddit_stylesheet"},"oauth":["modconfig"],"extensions":[],"method":"POST","describe":"Update a subreddit's stylesheet.\n\nop should be save to update the contents of the stylesheet.","args":{"api_type":{"describe":"the string json"},"op":{"describe":"one of (save, preview)"},"reason":{"describe":"a string up to 256 characters long, consisting of printable characters."},"stylesheet_contents":{"describe":"the new stylesheet content"},"uh":{"describe":"a modhash"}}},{"path":"/r/$subreddit/api/subreddit_stylesheet","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/subreddit_stylesheet","standard":"https://ssl.reddit.com/r/$subreddit/api/subreddit_stylesheet"},"oauth":["modconfig"],"extensions":[],"method":"POST","describe":"Update a subreddit's stylesheet.\n\nop should be save to update the contents of the stylesheet.","args":{"api_type":{"describe":"the string json"},"op":{"describe":"one of (save, preview)"},"reason":{"describe":"a string up to 256 characters long, consisting of printable characters."},"stylesheet_contents":{"describe":"the new stylesheet content"},"uh":{"describe":"a modhash"}}},{"path":"/api/subreddits_by_topic.json","url":{"oauth":"https://oauth.reddit.com/api/subreddits_by_topic.json","standard":"http://www.reddit.com/api/subreddits_by_topic.json"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Return a list of subreddits that are relevant to a search query.","args":{"query":{"describe":"a string no longer than 50 characters"}}},{"path":"/api/subscribe","url":{"oauth":"https://oauth.reddit.com/api/subscribe","standard":"https://ssl.reddit.com/api/subscribe"},"oauth":["subscribe"],"extensions":[],"method":"POST","describe":"Subscribe to or unsubscribe from a subreddit.\n\nTo subscribe, action should be sub. To unsubscribe, action should\nbe unsub. The user must have access to the subreddit to be able to\nsubscribe to it.\n\nSee also: /subreddits/mine/.","args":{"action":{"describe":"one of (sub, unsub)"},"sr":{"describe":"the fullname of a subreddit"},"uh":{"describe":"a modhash"}}},{"path":"/api/upload_sr_img","url":{"oauth":"https://oauth.reddit.com/api/upload_sr_img","standard":"https://ssl.reddit.com/api/upload_sr_img"},"oauth":["modconfig"],"extensions":[],"method":"POST","describe":"Add or replace a subreddit image or custom header logo.\n\nIf the header value is 0, an image for use in the subreddit\nstylesheet is uploaded with the name specified in name. If the value\nof header is 1 then the image uploaded will be the subreddit's new\nlogo and name will be ignored.\n\nThe img_type field specifies whether to store the uploaded image as a\nPNG or JPEG.\n\nSubreddits have a limited number of images that can be in use at any\ngiven time. If no image with the specified name already exists, one of\nthe slots will be consumed.\n\nIf an image with the specified name already exists, it will be\nreplaced.  This does not affect the stylesheet immediately, but will\ntake effect the next time the stylesheet is saved.\n\nSee also: /api/delete_sr_img and\n/api/delete_sr_header.","args":{"file":{"describe":"file upload with maximum size of 500 KiB"},"formid":{"describe":"(optional) can be ignored"},"header":{"describe":"an integer between 0 and 1"},"img_type":{"describe":"one of png or jpg (default: png)"},"name":{"describe":"a valid subreddit image name"},"uh":{"describe":"a modhash"}}},{"path":"/r/$subreddit/api/upload_sr_img","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/upload_sr_img","standard":"https://ssl.reddit.com/r/$subreddit/api/upload_sr_img"},"oauth":["modconfig"],"extensions":[],"method":"POST","describe":"Add or replace a subreddit image or custom header logo.\n\nIf the header value is 0, an image for use in the subreddit\nstylesheet is uploaded with the name specified in name. If the value\nof header is 1 then the image uploaded will be the subreddit's new\nlogo and name will be ignored.\n\nThe img_type field specifies whether to store the uploaded image as a\nPNG or JPEG.\n\nSubreddits have a limited number of images that can be in use at any\ngiven time. If no image with the specified name already exists, one of\nthe slots will be consumed.\n\nIf an image with the specified name already exists, it will be\nreplaced.  This does not affect the stylesheet immediately, but will\ntake effect the next time the stylesheet is saved.\n\nSee also: /api/delete_sr_img and\n/api/delete_sr_header.","args":{"file":{"describe":"file upload with maximum size of 500 KiB"},"formid":{"describe":"(optional) can be ignored"},"header":{"describe":"an integer between 0 and 1"},"img_type":{"describe":"one of png or jpg (default: png)"},"name":{"describe":"a valid subreddit image name"},"uh":{"describe":"a modhash"}}},{"path":"/r/$subreddit/about.json","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/about.json","standard":"http://www.reddit.com/r/$subreddit/about.json"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Return information about the subreddit.\n\nData includes the subscriber count, description, and header image.","args":{}},{"path":"/r/$subreddit/about/edit.json","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/about/edit.json","standard":"http://www.reddit.com/r/$subreddit/about/edit.json"},"oauth":["modconfig"],"extensions":[],"method":"GET","describe":"Get the current settings of a subreddit.\n\nIn the API, this returns the current settings of the subreddit as used\nby /api/site_admin.  On the HTML site, it will\ndisplay a form for editing the subreddit.","args":{"created":{"describe":"one of (true, false)"},"location":{"describe":""}}},{"path":"/subreddits/mine/$where","url":{"oauth":"https://oauth.reddit.com/subreddits/mine/$where","standard":"http://www.reddit.com/subreddits/mine/$where"},"oauth":["mysubreddits"],"extensions":[".json",".xml"],"method":"GET","describe":"Get subreddits the user has a relationship with.\n\nThe where parameter chooses which subreddits are returned as follows:\n\n\nsubscriber - subreddits the user is subscribed to\ncontributor - subreddits the user is an approved submitter in\nmoderator - subreddits the user is a moderator of\n\n\nSee also: /api/subscribe,\n/api/friend, and\n/api/accept_moderator_invite.\n\nThis endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"show":{"describe":"(optional) the string all"}}},{"path":"/subreddits/search","url":{"oauth":"https://oauth.reddit.com/subreddits/search","standard":"http://www.reddit.com/subreddits/search"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"Search subreddits by title and description.\n\nThis endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"q":{"describe":"a search query"},"show":{"describe":"(optional) the string all"}}},{"path":"/subreddits/$where","url":{"oauth":"https://oauth.reddit.com/subreddits/$where","standard":"http://www.reddit.com/subreddits/$where"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"Get all subreddits.\n\nThe where parameter chooses the order in which the subreddits are\ndisplayed.  popular sorts on the activity of the subreddit and the\nposition of the subreddits can shift around. new sorts the subreddits\nbased on their creation date, newest first.\n\nThis endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"show":{"describe":"(optional) the string all"}}},{"path":"/api/friend","url":{"standard":"https://ssl.reddit.com/api/friend"},"oauth":[],"extensions":[],"method":"POST","describe":"Complement to POST_unfriend: handles friending as well as\nprivilege changes on subreddits.","args":{"api_type":{"describe":"the string json"},"ban_message":{"describe":"raw markdown text"},"container":{"describe":""},"duration":{"describe":"an integer between 1 and 999"},"name":{"describe":"the name of an existing user"},"note":{"describe":"a string no longer than 300 characters"},"permissions":{"describe":""},"type":{"describe":"one of (friend, moderator, moderator_invite, contributor, banned, wikibanned, wikicontributor)"},"uh":{"describe":"a modhash"}}},{"path":"/api/setpermissions","url":{"standard":"https://ssl.reddit.com/api/setpermissions"},"oauth":[],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"name":{"describe":"the name of an existing user"},"permissions":{"describe":""},"type":{"describe":""},"uh":{"describe":"a modhash"}}},{"path":"/r/$subreddit/api/setpermissions","url":{"standard":"https://ssl.reddit.com/r/$subreddit/api/setpermissions"},"oauth":[],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"name":{"describe":"the name of an existing user"},"permissions":{"describe":""},"type":{"describe":""},"uh":{"describe":"a modhash"}}},{"path":"/api/unfriend","url":{"standard":"https://ssl.reddit.com/api/unfriend"},"oauth":[],"extensions":[],"method":"POST","describe":"Handles removal of a friend (a user-user relation) or removal\nof a user's privileges from a subreddit (a user-subreddit\nrelation).  The user can either be passed in by name (nuser)\nor by fullname (iuser).  If type is friend or enemy, 'container'\nwill be the current user, otherwise the subreddit must be set.","args":{"container":{"describe":""},"id":{"describe":"fullname of a thing"},"name":{"describe":"the name of an existing user"},"type":{"describe":"one of (friend, enemy, moderator, moderator_invite, contributor, banned, wikibanned, wikicontributor)"},"uh":{"describe":"a modhash"}}},{"path":"/api/username_available.json","url":{"standard":"http://www.reddit.com/api/username_available.json"},"oauth":[],"extensions":[],"method":"GET","describe":"Check whether a username is available for registration.","args":{"user":{"describe":"a valid, unused, username"}}},{"path":"/api/v1/me/friends/$username","url":{"oauth":"https://oauth.reddit.com/api/v1/me/friends/$username","standard":"https://ssl.reddit.com/api/v1/me/friends/$username"},"oauth":["subscribe"],"extensions":[],"method":"DELETE","describe":"Stop being friends with a user.","args":{"username":{"describe":"A valid, existing reddit username"}}},{"path":"/api/v1/me/friends/$username","url":{"oauth":"https://oauth.reddit.com/api/v1/me/friends/$username","standard":"http://www.reddit.com/api/v1/me/friends/$username"},"oauth":["mysubreddits"],"extensions":[],"method":"GET","describe":"Get information about a specific 'friend', such as notes.","args":{"username":{"describe":"A valid, existing reddit username"}}},{"path":"/api/v1/me/friends/$username","url":{"oauth":"https://oauth.reddit.com/api/v1/me/friends/$username","standard":"https://ssl.reddit.com/api/v1/me/friends/$username"},"oauth":["subscribe"],"extensions":[],"method":"PUT","describe":"Create or update a \"friend\" relationship.\n\nThis operation is idempotent. It can be used to add a new\nfriend, or update an existing friend (e.g., add/change the\nnote on that friend)","args":{"This":{"describe":"{\n  \"name\": A valid, existing reddit username,\n  \"note\": a string no longer than 300 characters,\n}\n"}}},{"path":"/api/v1/user/$username/trophies","url":{"oauth":"https://oauth.reddit.com/api/v1/user/$username/trophies","standard":"http://www.reddit.com/api/v1/user/$username/trophies"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Return a list of trophies for the a given user.","args":{"username":{"describe":"A valid, existing reddit username"}}},{"path":"/user/$username/about.json","url":{"oauth":"https://oauth.reddit.com/user/$username/about.json","standard":"http://www.reddit.com/user/$username/about.json"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Return information about the user, including karma and gold status.","args":{"username":{"describe":"the name of an existing user"}}},{"path":"/user/$username/$where","url":{"oauth":"https://oauth.reddit.com/user/$username/$where","standard":"http://www.reddit.com/user/$username/$where"},"oauth":["history"],"extensions":[".json",".xml"],"method":"GET","describe":"This endpoint is a listing.","args":{"show":{"describe":"one of (given)"},"sort":{"describe":"one of (hot, new, top, controversial)"},"t":{"describe":"one of (hour, day, week, month, year, all)"},"username":{"describe":"the name of an existing user"},"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"}}},{"path":"/api/wiki/alloweditor/$act","url":{"oauth":"https://oauth.reddit.com/api/wiki/alloweditor/$act","standard":"https://ssl.reddit.com/api/wiki/alloweditor/$act"},"oauth":["modwiki"],"extensions":[],"method":"POST","describe":"Allow/deny username to edit this wiki page","args":{"act":{"describe":"one of (del, add)"},"page":{"describe":"the name of an existing wiki page"},"uh":{"describe":"a modhash"},"username":{"describe":"the name of an existing user"}}},{"path":"/r/$subreddit/api/wiki/alloweditor/$act","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/wiki/alloweditor/$act","standard":"https://ssl.reddit.com/r/$subreddit/api/wiki/alloweditor/$act"},"oauth":["modwiki"],"extensions":[],"method":"POST","describe":"Allow/deny username to edit this wiki page","args":{"act":{"describe":"one of (del, add)"},"page":{"describe":"the name of an existing wiki page"},"uh":{"describe":"a modhash"},"username":{"describe":"the name of an existing user"}}},{"path":"/api/wiki/edit","url":{"oauth":"https://oauth.reddit.com/api/wiki/edit","standard":"https://ssl.reddit.com/api/wiki/edit"},"oauth":["wikiedit"],"extensions":[],"method":"POST","describe":"Edit a wiki page","args":{"content":{"describe":""},"page":{"describe":"the name of an existing page or a new page to create"},"previous":{"describe":"the starting point revision for this edit"},"reason":{"describe":"a string up to 256 characters long, consisting of printable characters."},"uh":{"describe":"a modhash"}}},{"path":"/r/$subreddit/api/wiki/edit","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/wiki/edit","standard":"https://ssl.reddit.com/r/$subreddit/api/wiki/edit"},"oauth":["wikiedit"],"extensions":[],"method":"POST","describe":"Edit a wiki page","args":{"content":{"describe":""},"page":{"describe":"the name of an existing page or a new page to create"},"previous":{"describe":"the starting point revision for this edit"},"reason":{"describe":"a string up to 256 characters long, consisting of printable characters."},"uh":{"describe":"a modhash"}}},{"path":"/api/wiki/hide","url":{"oauth":"https://oauth.reddit.com/api/wiki/hide","standard":"https://ssl.reddit.com/api/wiki/hide"},"oauth":["modwiki"],"extensions":[],"method":"POST","describe":"Toggle the public visibility of a wiki page revision","args":{"page":{"describe":"the name of an existing wiki page"},"revision":{"describe":"a wiki revision ID"},"uh":{"describe":"a modhash"}}},{"path":"/r/$subreddit/api/wiki/hide","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/wiki/hide","standard":"https://ssl.reddit.com/r/$subreddit/api/wiki/hide"},"oauth":["modwiki"],"extensions":[],"method":"POST","describe":"Toggle the public visibility of a wiki page revision","args":{"page":{"describe":"the name of an existing wiki page"},"revision":{"describe":"a wiki revision ID"},"uh":{"describe":"a modhash"}}},{"path":"/api/wiki/revert","url":{"oauth":"https://oauth.reddit.com/api/wiki/revert","standard":"https://ssl.reddit.com/api/wiki/revert"},"oauth":["modwiki"],"extensions":[],"method":"POST","describe":"Revert a wiki page to revision","args":{"page":{"describe":"the name of an existing wiki page"},"revision":{"describe":"a wiki revision ID"},"uh":{"describe":"a modhash"}}},{"path":"/r/$subreddit/api/wiki/revert","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/wiki/revert","standard":"https://ssl.reddit.com/r/$subreddit/api/wiki/revert"},"oauth":["modwiki"],"extensions":[],"method":"POST","describe":"Revert a wiki page to revision","args":{"page":{"describe":"the name of an existing wiki page"},"revision":{"describe":"a wiki revision ID"},"uh":{"describe":"a modhash"}}},{"path":"/wiki/discussions/$page","url":{"oauth":"https://oauth.reddit.com/wiki/discussions/$page","standard":"http://www.reddit.com/wiki/discussions/$page"},"oauth":["wikiread"],"extensions":[],"method":"GET","describe":"Retrieve a list of discussions about this wiki page\n\nThis endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"page":{"describe":"the name of an existing wiki page"},"show":{"describe":"(optional) the string all"}}},{"path":"/r/$subreddit/wiki/discussions/$page","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/wiki/discussions/$page","standard":"http://www.reddit.com/r/$subreddit/wiki/discussions/$page"},"oauth":["wikiread"],"extensions":[],"method":"GET","describe":"Retrieve a list of discussions about this wiki page\n\nThis endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"page":{"describe":"the name of an existing wiki page"},"show":{"describe":"(optional) the string all"}}},{"path":"/wiki/pages","url":{"oauth":"https://oauth.reddit.com/wiki/pages","standard":"http://www.reddit.com/wiki/pages"},"oauth":["wikiread"],"extensions":[],"method":"GET","describe":"Retrieve a list of wiki pages in this subreddit","args":{}},{"path":"/r/$subreddit/wiki/pages","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/wiki/pages","standard":"http://www.reddit.com/r/$subreddit/wiki/pages"},"oauth":["wikiread"],"extensions":[],"method":"GET","describe":"Retrieve a list of wiki pages in this subreddit","args":{}},{"path":"/wiki/revisions","url":{"oauth":"https://oauth.reddit.com/wiki/revisions","standard":"http://www.reddit.com/wiki/revisions"},"oauth":["wikiread"],"extensions":[],"method":"GET","describe":"Retrieve a list of recently changed wiki pages in this subreddit","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"show":{"describe":"(optional) the string all"}}},{"path":"/r/$subreddit/wiki/revisions","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/wiki/revisions","standard":"http://www.reddit.com/r/$subreddit/wiki/revisions"},"oauth":["wikiread"],"extensions":[],"method":"GET","describe":"Retrieve a list of recently changed wiki pages in this subreddit","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"show":{"describe":"(optional) the string all"}}},{"path":"/wiki/revisions/$page","url":{"oauth":"https://oauth.reddit.com/wiki/revisions/$page","standard":"http://www.reddit.com/wiki/revisions/$page"},"oauth":["wikiread"],"extensions":[],"method":"GET","describe":"Retrieve a list of revisions of this wiki page\n\nThis endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"page":{"describe":"the name of an existing wiki page"},"show":{"describe":"(optional) the string all"}}},{"path":"/r/$subreddit/wiki/revisions/$page","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/wiki/revisions/$page","standard":"http://www.reddit.com/r/$subreddit/wiki/revisions/$page"},"oauth":["wikiread"],"extensions":[],"method":"GET","describe":"Retrieve a list of revisions of this wiki page\n\nThis endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"page":{"describe":"the name of an existing wiki page"},"show":{"describe":"(optional) the string all"}}},{"path":"/wiki/settings/$page","url":{"oauth":"https://oauth.reddit.com/wiki/settings/$page","standard":"http://www.reddit.com/wiki/settings/$page"},"oauth":["modwiki"],"extensions":[],"method":"GET","describe":"Retrieve the current permission settings for page","args":{"page":{"describe":"the name of an existing wiki page"}}},{"path":"/r/$subreddit/wiki/settings/$page","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/wiki/settings/$page","standard":"http://www.reddit.com/r/$subreddit/wiki/settings/$page"},"oauth":["modwiki"],"extensions":[],"method":"GET","describe":"Retrieve the current permission settings for page","args":{"page":{"describe":"the name of an existing wiki page"}}},{"path":"/wiki/settings/$page","url":{"oauth":"https://oauth.reddit.com/wiki/settings/$page","standard":"https://ssl.reddit.com/wiki/settings/$page"},"oauth":["modwiki"],"extensions":[],"method":"POST","describe":"Update the permissions and visibility of wiki page","args":{"listed":{"describe":"boolean value"},"page":{"describe":"the name of an existing wiki page"},"permlevel":{"describe":"an integer"},"uh":{"describe":"a modhash"}}},{"path":"/r/$subreddit/wiki/settings/$page","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/wiki/settings/$page","standard":"https://ssl.reddit.com/r/$subreddit/wiki/settings/$page"},"oauth":["modwiki"],"extensions":[],"method":"POST","describe":"Update the permissions and visibility of wiki page","args":{"listed":{"describe":"boolean value"},"page":{"describe":"the name of an existing wiki page"},"permlevel":{"describe":"an integer"},"uh":{"describe":"a modhash"}}},{"path":"/wiki/$page","url":{"oauth":"https://oauth.reddit.com/wiki/$page","standard":"http://www.reddit.com/wiki/$page"},"oauth":["wikiread"],"extensions":[],"method":"GET","describe":"Return the content of a wiki page\n\nIf v is given, show the wiki page as it was at that version\nIf both v and v2 are given, show a diff of the two","args":{"page":{"describe":"the name of an existing wiki page"},"v":{"describe":"a wiki revision ID"},"v2":{"describe":"a wiki revision ID"}}},{"path":"/r/$subreddit/wiki/$page","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/wiki/$page","standard":"http://www.reddit.com/r/$subreddit/wiki/$page"},"oauth":["wikiread"],"extensions":[],"method":"GET","describe":"Return the content of a wiki page\n\nIf v is given, show the wiki page as it was at that version\nIf both v and v2 are given, show a diff of the two","args":{"page":{"describe":"the name of an existing wiki page"},"v":{"describe":"a wiki revision ID"},"v2":{"describe":"a wiki revision ID"}}}];
+module.exports = [{"path":"/api/clear_sessions","url":{"standard":"https://ssl.reddit.com/api/clear_sessions"},"oauth":[],"extensions":[],"method":"POST","describe":"Clear all session cookies and replace the current one.\n\nA valid password (curpass) must be supplied.","args":{"api_type":{"describe":"the string json"},"curpass":{"describe":"the user's current password"},"dest":{"describe":"destination url (must be same-domain)"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/delete_user","url":{"standard":"https://ssl.reddit.com/api/delete_user"},"oauth":[],"extensions":[],"method":"POST","describe":"Delete the currently logged in account.\n\nA valid username/password and confirmation must be supplied. An\noptional delete_message may be supplied to explain the reason the\naccount is to be deleted.\n\nCalled by /prefs/delete on the site.","args":{"api_type":{"describe":"the string json"},"confirm":{"describe":"boolean value"},"delete_message":{"describe":"a string no longer than 500 characters"},"passwd":{"describe":"the user's password"},"uh":{"describe":"a modhash"},"user":{"describe":"a username"}},"isListing":false},{"path":"/api/login","url":{"standard":"https://ssl.reddit.com/api/login"},"oauth":[],"extensions":[],"method":"POST","describe":"Log into an account.\n\nrem specifies whether or not the session cookie returned should last\nbeyond the current browser session (that is, if rem is True the\ncookie will have an explicit expiration far in the future indicating\nthat it is not a session cookie).","args":{"api_type":{"describe":"the string json"},"passwd":{"describe":"the user's password"},"rem":{"describe":"boolean value"},"user":{"describe":"a username"}},"isListing":false},{"path":"/api/me.json","url":{"standard":"http://www.reddit.com/api/me.json"},"oauth":[],"extensions":[],"method":"GET","describe":"Get info about the currently authenticated user.\n\nResponse includes a modhash, karma, and new mail status.","args":{},"isListing":false},{"path":"/api/register","url":{"standard":"https://ssl.reddit.com/api/register"},"oauth":[],"extensions":[],"method":"POST","describe":"Register a new account.\n\nrem specifies whether or not the session cookie returned should last\nbeyond the current browser session (that is, if rem is True the\ncookie will have an explicit expiration far in the future indicating\nthat it is not a session cookie).","args":{"api_type":{"describe":"the string json"},"captcha":{"describe":"the user's response to the CAPTCHA challenge"},"email":{"describe":"(optional) the user's email address"},"iden":{"describe":"the identifier of the CAPTCHA challenge"},"passwd":{"describe":"the new password"},"passwd2":{"describe":"the password again (for verification)"},"rem":{"describe":"boolean value"},"user":{"describe":"a valid, unused, username"}},"isListing":false},{"path":"/api/set_force_https","url":{"standard":"https://ssl.reddit.com/api/set_force_https"},"oauth":[],"extensions":[],"method":"POST","describe":"Toggle HTTPS-only sessions, invalidating other sessions.\n\nA valid password (curpass) must be supplied.","args":{"api_type":{"describe":"the string json"},"curpass":{"describe":"the user's current password"},"force_https":{"describe":"boolean value"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/update","url":{"standard":"https://ssl.reddit.com/api/update"},"oauth":[],"extensions":[],"method":"POST","describe":"Update account email address and password.\n\nCalled by /prefs/update on the site. For frontend form verification\npurposes, newpass and verpass must be equal for a password change\nto succeed.","args":{"api_type":{"describe":"the string json"},"curpass":{"describe":""},"dest":{"describe":"destination url (must be same-domain)"},"email":{"describe":""},"newpass":{"describe":"the new password"},"uh":{"describe":"a modhash"},"verify":{"describe":"boolean value"},"verpass":{"describe":"the password again (for verification)"}},"isListing":false},{"path":"/api/update_email","url":{"standard":"https://ssl.reddit.com/api/update_email"},"oauth":[],"extensions":[],"method":"POST","describe":"Update account email address.\n\nCalled by /prefs/update on the site.","args":{"api_type":{"describe":"the string json"},"curpass":{"describe":""},"dest":{"describe":"destination url (must be same-domain)"},"email":{"describe":""},"uh":{"describe":"a modhash"},"verify":{"describe":"boolean value"}},"isListing":false},{"path":"/api/update_password","url":{"standard":"https://ssl.reddit.com/api/update_password"},"oauth":[],"extensions":[],"method":"POST","describe":"Update account password.\n\nCalled by /prefs/update on the site. For frontend form verification\npurposes, newpass and verpass must be equal for a password change\nto succeed.","args":{"api_type":{"describe":"the string json"},"curpass":{"describe":""},"newpass":{"describe":"the new password"},"uh":{"describe":"a modhash"},"verpass":{"describe":"the password again (for verification)"}},"isListing":false},{"path":"/api/v1/me","url":{"oauth":"https://oauth.reddit.com/api/v1/me","standard":"http://www.reddit.com/api/v1/me"},"oauth":["identity"],"extensions":[],"method":"GET","describe":"Returns the identity of the user currently authenticated via OAuth.","args":{},"isListing":false},{"path":"/api/v1/me/karma","url":{"oauth":"https://oauth.reddit.com/api/v1/me/karma","standard":"http://www.reddit.com/api/v1/me/karma"},"oauth":["mysubreddits"],"extensions":[],"method":"GET","describe":"Return a breakdown of subreddit karma.","args":{},"isListing":false},{"path":"/api/v1/me/prefs","url":{"oauth":"https://oauth.reddit.com/api/v1/me/prefs","standard":"http://www.reddit.com/api/v1/me/prefs"},"oauth":["identity"],"extensions":[],"method":"GET","describe":"Return the preference settings of the logged in user","args":{"fields":{"describe":"A comma-separated list of items from this set:\n\nthreaded_messages\nhide_downs\nshow_stylesheets\nframe\nshow_link_flair\ncreddit_autorenew\nshow_trending\nprivate_feeds\nmonitor_mentions\nlocal_js\nresearch\nmedia\nshow_sponsors\nclickgadget\nuse_global_defaults\nlabel_nsfw\ndomain_details\nhighlight_controversial\nno_profanity\nover_18\nlang\nhide_ups\nhide_from_robots\ncompress\nstore_visits\nmin_link_score\nshow_promote\nmin_comment_score\npublic_votes\norganic\ncollapse_read_messages\nshow_flair\nmark_messages_read\nshow_sponsorships\nshow_adbox\nnewwindow\nnumsites\nnum_comments\nhighlight_new_comments\nhide_locationbar"}},"isListing":false},{"path":"/api/v1/me/prefs","url":{"oauth":"https://oauth.reddit.com/api/v1/me/prefs","standard":"https://ssl.reddit.com/api/v1/me/prefs"},"oauth":["account"],"extensions":[],"method":"PATCH","describe":"","args":{"This":{"describe":"{\n  \"clickgadget\": boolean value,\n  \"collapse_read_messages\": boolean value,\n  \"compress\": boolean value,\n  \"creddit_autorenew\": boolean value,\n  \"domain_details\": boolean value,\n  \"frame\": boolean value,\n  \"hide_downs\": boolean value,\n  \"hide_from_robots\": boolean value,\n  \"hide_locationbar\": boolean value,\n  \"hide_ups\": boolean value,\n  \"highlight_controversial\": boolean value,\n  \"highlight_new_comments\": boolean value,\n  \"label_nsfw\": boolean value,\n  \"lang\": a valid IETF language tag (underscore separated),\n  \"local_js\": boolean value,\n  \"mark_messages_read\": boolean value,\n  \"media\": one of (`on`, `off`, `subreddit`),\n  \"min_comment_score\": an integer between -100 and 100,\n  \"min_link_score\": an integer between -100 and 100,\n  \"monitor_mentions\": boolean value,\n  \"newwindow\": boolean value,\n  \"no_profanity\": boolean value,\n  \"num_comments\": an integer between 1 and 500,\n  \"numsites\": an integer between 1 and 100,\n  \"organic\": boolean value,\n  \"over_18\": boolean value,\n  \"private_feeds\": boolean value,\n  \"public_votes\": boolean value,\n  \"research\": boolean value,\n  \"show_adbox\": boolean value,\n  \"show_flair\": boolean value,\n  \"show_link_flair\": boolean value,\n  \"show_promote\": boolean value,\n  \"show_sponsors\": boolean value,\n  \"show_sponsorships\": boolean value,\n  \"show_stylesheets\": boolean value,\n  \"show_trending\": boolean value,\n  \"store_visits\": boolean value,\n  \"threaded_messages\": boolean value,\n  \"use_global_defaults\": boolean value,\n}\n"}},"isListing":false},{"path":"/api/v1/me/trophies","url":{"oauth":"https://oauth.reddit.com/api/v1/me/trophies","standard":"http://www.reddit.com/api/v1/me/trophies"},"oauth":["identity"],"extensions":[],"method":"GET","describe":"Return a list of trophies for the current user.","args":{},"isListing":false},{"path":"/prefs/$where","url":{"oauth":"https://oauth.reddit.com/prefs/$where","standard":"http://www.reddit.com/prefs/$where"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"This endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"show":{"describe":"(optional) the string all"}},"isListing":true},{"path":"/api/adddeveloper","url":{"standard":"https://ssl.reddit.com/api/adddeveloper"},"oauth":[],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"client_id":{"describe":"an app developed by the user"},"name":{"describe":"the name of an existing user"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/deleteapp","url":{"standard":"https://ssl.reddit.com/api/deleteapp"},"oauth":[],"extensions":[],"method":"POST","describe":"","args":{"client_id":{"describe":"an app developed by the user"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/removedeveloper","url":{"standard":"https://ssl.reddit.com/api/removedeveloper"},"oauth":[],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"client_id":{"describe":"an app developed by the user"},"name":{"describe":"the name of an existing user"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/revokeapp","url":{"standard":"https://ssl.reddit.com/api/revokeapp"},"oauth":[],"extensions":[],"method":"POST","describe":"","args":{"client_id":{"describe":"an app"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/setappicon","url":{"standard":"https://ssl.reddit.com/api/setappicon"},"oauth":[],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"client_id":{"describe":"an app developed by the user"},"file":{"describe":"an icon (72x72)"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/updateapp","url":{"standard":"https://ssl.reddit.com/api/updateapp"},"oauth":[],"extensions":[],"method":"POST","describe":"","args":{"about_url":{"describe":"a valid URL"},"api_type":{"describe":"the string json"},"app_type":{"describe":"one of (web, installed, script)"},"icon_url":{"describe":"a valid URL"},"name":{"describe":"a name for the app"},"redirect_uri":{"describe":"a valid URI"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/needs_captcha.json","url":{"oauth":"https://oauth.reddit.com/api/needs_captcha.json","standard":"http://www.reddit.com/api/needs_captcha.json"},"oauth":["any"],"extensions":[],"method":"GET","describe":"Check whether CAPTCHAs are needed for API methods that define the\n\"captcha\" and \"iden\" parameters.","args":{},"isListing":false},{"path":"/api/new_captcha","url":{"oauth":"https://oauth.reddit.com/api/new_captcha","standard":"https://ssl.reddit.com/api/new_captcha"},"oauth":["any"],"extensions":[],"method":"POST","describe":"Responds with an iden of a new CAPTCHA.\n\nUse this endpoint if a user cannot read a given CAPTCHA,\nand wishes to receive a new CAPTCHA.\n\nTo request the CAPTCHA image for an iden, use\n/captcha/iden.","args":{"api_type":{"describe":"the string json"}},"isListing":false},{"path":"/captcha/$iden","url":{"oauth":"https://oauth.reddit.com/captcha/$iden","standard":"http://www.reddit.com/captcha/$iden"},"oauth":["any"],"extensions":[],"method":"GET","describe":"Request a CAPTCHA image given an iden.\n\nAn iden is given as the captcha field with a BAD_CAPTCHA\nerror, you should use this endpoint if you get a\nBAD_CAPTCHA error response.\n\nResponds with a 120x50 image/png which should be displayed\nto the user.\n\nThe user's response to the CAPTCHA should be sent as captcha\nalong with your request.\n\nTo request a new CAPTCHA,\nuse /api/new_captcha.","args":{},"isListing":false},{"path":"/api/clearflairtemplates","url":{"oauth":"https://oauth.reddit.com/api/clearflairtemplates","standard":"https://ssl.reddit.com/api/clearflairtemplates"},"oauth":["modflair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"flair_type":{"describe":"one of (USER_FLAIR, LINK_FLAIR)"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/r/$subreddit/api/clearflairtemplates","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/clearflairtemplates","standard":"https://ssl.reddit.com/r/$subreddit/api/clearflairtemplates"},"oauth":["modflair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"flair_type":{"describe":"one of (USER_FLAIR, LINK_FLAIR)"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/deleteflair","url":{"oauth":"https://oauth.reddit.com/api/deleteflair","standard":"https://ssl.reddit.com/api/deleteflair"},"oauth":["modflair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"name":{"describe":"a user by name"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/r/$subreddit/api/deleteflair","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/deleteflair","standard":"https://ssl.reddit.com/r/$subreddit/api/deleteflair"},"oauth":["modflair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"name":{"describe":"a user by name"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/deleteflairtemplate","url":{"oauth":"https://oauth.reddit.com/api/deleteflairtemplate","standard":"https://ssl.reddit.com/api/deleteflairtemplate"},"oauth":["modflair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"flair_template_id":{"describe":""},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/r/$subreddit/api/deleteflairtemplate","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/deleteflairtemplate","standard":"https://ssl.reddit.com/r/$subreddit/api/deleteflairtemplate"},"oauth":["modflair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"flair_template_id":{"describe":""},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/flair","url":{"oauth":"https://oauth.reddit.com/api/flair","standard":"https://ssl.reddit.com/api/flair"},"oauth":["modflair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"css_class":{"describe":"a valid subreddit image name"},"link":{"describe":"a fullname of a link"},"name":{"describe":"a user by name"},"text":{"describe":"a string no longer than 64 characters"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/r/$subreddit/api/flair","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/flair","standard":"https://ssl.reddit.com/r/$subreddit/api/flair"},"oauth":["modflair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"css_class":{"describe":"a valid subreddit image name"},"link":{"describe":"a fullname of a link"},"name":{"describe":"a user by name"},"text":{"describe":"a string no longer than 64 characters"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/flairconfig","url":{"oauth":"https://oauth.reddit.com/api/flairconfig","standard":"https://ssl.reddit.com/api/flairconfig"},"oauth":["modflair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"flair_enabled":{"describe":"boolean value"},"flair_position":{"describe":"one of (left, right)"},"flair_self_assign_enabled":{"describe":"boolean value"},"link_flair_position":{"describe":"one of (`,left,right`)"},"link_flair_self_assign_enabled":{"describe":"boolean value"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/r/$subreddit/api/flairconfig","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/flairconfig","standard":"https://ssl.reddit.com/r/$subreddit/api/flairconfig"},"oauth":["modflair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"flair_enabled":{"describe":"boolean value"},"flair_position":{"describe":"one of (left, right)"},"flair_self_assign_enabled":{"describe":"boolean value"},"link_flair_position":{"describe":"one of (`,left,right`)"},"link_flair_self_assign_enabled":{"describe":"boolean value"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/flaircsv","url":{"oauth":"https://oauth.reddit.com/api/flaircsv","standard":"https://ssl.reddit.com/api/flaircsv"},"oauth":["modflair"],"extensions":[],"method":"POST","describe":"","args":{"flair_csv":{"describe":""},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/r/$subreddit/api/flaircsv","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/flaircsv","standard":"https://ssl.reddit.com/r/$subreddit/api/flaircsv"},"oauth":["modflair"],"extensions":[],"method":"POST","describe":"","args":{"flair_csv":{"describe":""},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/flairlist","url":{"oauth":"https://oauth.reddit.com/api/flairlist","standard":"http://www.reddit.com/api/flairlist"},"oauth":["modflair"],"extensions":[],"method":"GET","describe":"This endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 1000)"},"name":{"describe":"a user by name"},"show":{"describe":"(optional) the string all"}},"isListing":true},{"path":"/r/$subreddit/api/flairlist","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/flairlist","standard":"http://www.reddit.com/r/$subreddit/api/flairlist"},"oauth":["modflair"],"extensions":[],"method":"GET","describe":"This endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 1000)"},"name":{"describe":"a user by name"},"show":{"describe":"(optional) the string all"}},"isListing":true},{"path":"/api/flairselector","url":{"oauth":"https://oauth.reddit.com/api/flairselector","standard":"https://ssl.reddit.com/api/flairselector"},"oauth":["flair"],"extensions":[],"method":"POST","describe":"Return information about a users's flair options.\n\nIf link is given, return link flair options.\nOtherwise, return user flair options for this subreddit.\n\nThe logged in user's flair is also returned.\nSubreddit moderators may give a user by name to instead\nretrieve that user's flair.","args":{"link":{"describe":"a fullname of a link"},"name":{"describe":"a user by name"}},"isListing":false},{"path":"/r/$subreddit/api/flairselector","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/flairselector","standard":"https://ssl.reddit.com/r/$subreddit/api/flairselector"},"oauth":["flair"],"extensions":[],"method":"POST","describe":"Return information about a users's flair options.\n\nIf link is given, return link flair options.\nOtherwise, return user flair options for this subreddit.\n\nThe logged in user's flair is also returned.\nSubreddit moderators may give a user by name to instead\nretrieve that user's flair.","args":{"link":{"describe":"a fullname of a link"},"name":{"describe":"a user by name"}},"isListing":false},{"path":"/api/flairtemplate","url":{"oauth":"https://oauth.reddit.com/api/flairtemplate","standard":"https://ssl.reddit.com/api/flairtemplate"},"oauth":["modflair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"css_class":{"describe":"a valid subreddit image name"},"flair_template_id":{"describe":""},"flair_type":{"describe":"one of (USER_FLAIR, LINK_FLAIR)"},"text":{"describe":"a string no longer than 64 characters"},"text_editable":{"describe":"boolean value"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/r/$subreddit/api/flairtemplate","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/flairtemplate","standard":"https://ssl.reddit.com/r/$subreddit/api/flairtemplate"},"oauth":["modflair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"css_class":{"describe":"a valid subreddit image name"},"flair_template_id":{"describe":""},"flair_type":{"describe":"one of (USER_FLAIR, LINK_FLAIR)"},"text":{"describe":"a string no longer than 64 characters"},"text_editable":{"describe":"boolean value"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/selectflair","url":{"oauth":"https://oauth.reddit.com/api/selectflair","standard":"https://ssl.reddit.com/api/selectflair"},"oauth":["flair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"flair_template_id":{"describe":""},"link":{"describe":"a fullname of a link"},"name":{"describe":"a user by name"},"text":{"describe":"a string no longer than 64 characters"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/r/$subreddit/api/selectflair","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/selectflair","standard":"https://ssl.reddit.com/r/$subreddit/api/selectflair"},"oauth":["flair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"flair_template_id":{"describe":""},"link":{"describe":"a fullname of a link"},"name":{"describe":"a user by name"},"text":{"describe":"a string no longer than 64 characters"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/setflairenabled","url":{"oauth":"https://oauth.reddit.com/api/setflairenabled","standard":"https://ssl.reddit.com/api/setflairenabled"},"oauth":["flair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"flair_enabled":{"describe":"boolean value"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/r/$subreddit/api/setflairenabled","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/setflairenabled","standard":"https://ssl.reddit.com/r/$subreddit/api/setflairenabled"},"oauth":["flair"],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"flair_enabled":{"describe":"boolean value"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/v1/gold/gild/$fullname","url":{"oauth":"https://oauth.reddit.com/api/v1/gold/gild/$fullname","standard":"https://ssl.reddit.com/api/v1/gold/gild/$fullname"},"oauth":["creddits"],"extensions":[],"method":"POST","describe":"","args":{"fullname":{"describe":"fullname of a thing"}},"isListing":false},{"path":"/api/v1/gold/give/$username","url":{"oauth":"https://oauth.reddit.com/api/v1/gold/give/$username","standard":"https://ssl.reddit.com/api/v1/gold/give/$username"},"oauth":["creddits"],"extensions":[],"method":"POST","describe":"","args":{"months":{"describe":"an integer between 1 and 36"},"username":{"describe":"A valid, existing reddit username"}},"isListing":false},{"path":"/api/comment","url":{"oauth":"https://oauth.reddit.com/api/comment","standard":"https://ssl.reddit.com/api/comment"},"oauth":["submit"],"extensions":[],"method":"POST","describe":"Submit a new comment or reply to a message.\n\nparent is the fullname of the thing being replied to. Its value\nchanges the kind of object created by this request:\n\n\nthe fullname of a Link: a top-level comment in that Link's thread.\nthe fullname of a Comment: a comment reply to that comment.\nthe fullname of a Message: a message reply to that message.\n\n\ntext should be the raw markdown body of the comment or message.\n\nTo start a new message thread, use /api/compose.","args":{"api_type":{"describe":"the string json"},"text":{"describe":"raw markdown text"},"thing_id":{"describe":"fullname of parent thing"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/del","url":{"oauth":"https://oauth.reddit.com/api/del","standard":"https://ssl.reddit.com/api/del"},"oauth":["edit"],"extensions":[],"method":"POST","describe":"Delete a Link or Comment.","args":{"id":{"describe":"fullname of a thing created by the user"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/editusertext","url":{"oauth":"https://oauth.reddit.com/api/editusertext","standard":"https://ssl.reddit.com/api/editusertext"},"oauth":["edit"],"extensions":[],"method":"POST","describe":"Edit the body text of a comment or self-post.","args":{"api_type":{"describe":"the string json"},"text":{"describe":"raw markdown text"},"thing_id":{"describe":"fullname of a thing created by the user"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/hide","url":{"oauth":"https://oauth.reddit.com/api/hide","standard":"https://ssl.reddit.com/api/hide"},"oauth":["report"],"extensions":[],"method":"POST","describe":"Hide a link.\n\nThis removes it from the user's default view of subreddit listings.\n\nSee also: /api/unhide.","args":{"id":{"describe":"fullname of a link"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/info","url":{"oauth":"https://oauth.reddit.com/api/info","standard":"http://www.reddit.com/api/info"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Get a link by fullname or a list of links by URL.\n\nIf id is provided, the link with the given fullname will be returned.\nIf url is provided, a list of links with the given URL will be\nreturned.\n\nIf both url and id are provided, id will take precedence.\n\nIf a subreddit is provided, only links in that subreddit will be\nreturned.","args":{"id":{"describe":"fullname of a thing"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"url":{"describe":"a valid URL"}},"isListing":false},{"path":"/r/$subreddit/api/info","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/info","standard":"http://www.reddit.com/r/$subreddit/api/info"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Get a link by fullname or a list of links by URL.\n\nIf id is provided, the link with the given fullname will be returned.\nIf url is provided, a list of links with the given URL will be\nreturned.\n\nIf both url and id are provided, id will take precedence.\n\nIf a subreddit is provided, only links in that subreddit will be\nreturned.","args":{"id":{"describe":"fullname of a thing"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"url":{"describe":"a valid URL"}},"isListing":false},{"path":"/api/marknsfw","url":{"oauth":"https://oauth.reddit.com/api/marknsfw","standard":"https://ssl.reddit.com/api/marknsfw"},"oauth":["modposts"],"extensions":[],"method":"POST","describe":"Mark a link NSFW.\n\nSee also: /api/unmarknsfw.","args":{"id":{"describe":"fullname of a thing"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/morechildren","url":{"oauth":"https://oauth.reddit.com/api/morechildren","standard":"https://ssl.reddit.com/api/morechildren"},"oauth":["read"],"extensions":[],"method":"POST","describe":"Retrieve additional comments omitted from a base comment tree.\n\nWhen a comment tree is rendered, the most relevant comments are\nselected for display first. Remaining comments are stubbed out with\n\"MoreComments\" links. This API call is used to retrieve the additional\ncomments represented by those stubs, up to 20 at a time.\n\nThe two core parameters required are link and children.  link is\nthe fullname of the link whose comments are being fetched. children\nis a comma-delimited list of comment ID36s that need to be fetched.\n\nIf id is passed, it should be the ID of the MoreComments object this\ncall is replacing. This is needed only for the HTML UI's purposes and\nis optional otherwise.\n\npv_hex is part of the reddit gold \"previous visits\" feature. It is\noptional and deprecated.\n\nNOTE: you may only make one request at a time to this API endpoint.\nHigher concurrency will result in an error being returned.","args":{"api_type":{"describe":"the string json"},"children":{"describe":"a comma-delimited list of comment ID36s"},"id":{"describe":"(optional) id of the associated MoreChildren object"},"link_id":{"describe":"fullname of a thing"},"pv_hex":{"describe":"(optional) a previous-visits token"},"sort":{"describe":"one of (confidence, top, new, hot, controversial, old, random)"}},"isListing":false},{"path":"/api/report","url":{"oauth":"https://oauth.reddit.com/api/report","standard":"https://ssl.reddit.com/api/report"},"oauth":["report"],"extensions":[],"method":"POST","describe":"Report a link or comment.\n\nReporting a thing brings it to the attention of the subreddit's\nmoderators. The thing is implicitly hidden as well (see\n/api/hide for details).","args":{"id":{"describe":"fullname of a thing"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/save","url":{"oauth":"https://oauth.reddit.com/api/save","standard":"https://ssl.reddit.com/api/save"},"oauth":["save"],"extensions":[],"method":"POST","describe":"Save a link or comment.\n\nSaved things are kept in the user's saved listing for later perusal.\n\nSee also: /api/unsave.","args":{"category":{"describe":"a category name"},"id":{"describe":"fullname of a thing"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/saved_categories.json","url":{"oauth":"https://oauth.reddit.com/api/saved_categories.json","standard":"http://www.reddit.com/api/saved_categories.json"},"oauth":["save"],"extensions":[],"method":"GET","describe":"Get a list of categories in which things are currently saved.\n\nSee also: /api/save.","args":{},"isListing":false},{"path":"/api/sendreplies","url":{"oauth":"https://oauth.reddit.com/api/sendreplies","standard":"https://ssl.reddit.com/api/sendreplies"},"oauth":["edit"],"extensions":[],"method":"POST","describe":"Enable or disable inbox replies for a link.\n\nstate is a boolean that indicates whether you are enabling or\ndisabling inbox replies - true to enable, false to disable.","args":{"id":{"describe":"fullname of a thing created by the user"},"state":{"describe":"boolean value"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/set_contest_mode","url":{"oauth":"https://oauth.reddit.com/api/set_contest_mode","standard":"https://ssl.reddit.com/api/set_contest_mode"},"oauth":["modposts"],"extensions":[],"method":"POST","describe":"Set or unset \"contest mode\" for a link's comments.\n\nstate is a boolean that indicates whether you are enabling or\ndisabling contest mode - true to enable, false to disable.","args":{"api_type":{"describe":"the string json"},"id":{"describe":"fullname of a thing"},"state":{"describe":"boolean value"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/set_subreddit_sticky","url":{"oauth":"https://oauth.reddit.com/api/set_subreddit_sticky","standard":"https://ssl.reddit.com/api/set_subreddit_sticky"},"oauth":["modposts"],"extensions":[],"method":"POST","describe":"Set or unset a self-post as the sticky post in its subreddit.\n\nstate is a boolean that indicates whether to sticky or unsticky\nthis post - true to sticky, false to unsticky.\n\nNote that if another post was previously stickied, stickying a new\none will replace the previous one.","args":{"api_type":{"describe":"the string json"},"id":{"describe":"fullname of a thing"},"state":{"describe":"boolean value"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/store_visits","url":{"oauth":"https://oauth.reddit.com/api/store_visits","standard":"https://ssl.reddit.com/api/store_visits"},"oauth":["save"],"extensions":[],"method":"POST","describe":"Requires a subscription to reddit gold","args":{"links":{"describe":"A comma-separated list of link fullnames"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/submit","url":{"oauth":"https://oauth.reddit.com/api/submit","standard":"https://ssl.reddit.com/api/submit"},"oauth":["submit"],"extensions":[],"method":"POST","describe":"Submit a link to a subreddit.\n\nSubmit will create a link or self-post in the subreddit sr with the\ntitle title. If kind is \"link\", then url is expected to be a\nvalid URL to link to. Otherwise, text, if present, will be the\nbody of the self-post.\n\nIf a link with the same URL has already been submitted to the specified\nsubreddit an error will be returned unless resubmit is true.\nextension is used for determining which view-type (e.g. json,\ncompact etc.) to use for the redirect that is generated if the\nresubmit error occurs.\n\nIf save is true, the link will be implicitly saved after submission\n(see /api/save for more information).","args":{"api_type":{"describe":"the string json"},"captcha":{"describe":"the user's response to the CAPTCHA challenge"},"extension":{"describe":"extension used for redirects"},"iden":{"describe":"the identifier of the CAPTCHA challenge"},"kind":{"describe":"one of (link, self)"},"resubmit":{"describe":"boolean value"},"save":{"describe":"boolean value"},"sendreplies":{"describe":"boolean value"},"sr":{"describe":"name of a subreddit"},"text":{"describe":"raw markdown text"},"then":{"describe":"one of (tb, comments)"},"title":{"describe":"title of the submission. up to 300 characters long"},"uh":{"describe":"a modhash"},"url":{"describe":"a valid URL"}},"isListing":false},{"path":"/api/unhide","url":{"oauth":"https://oauth.reddit.com/api/unhide","standard":"https://ssl.reddit.com/api/unhide"},"oauth":["report"],"extensions":[],"method":"POST","describe":"Unhide a link.\n\nSee also: /api/hide.","args":{"id":{"describe":"fullname of a thing"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/unmarknsfw","url":{"oauth":"https://oauth.reddit.com/api/unmarknsfw","standard":"https://ssl.reddit.com/api/unmarknsfw"},"oauth":["modposts"],"extensions":[],"method":"POST","describe":"Remove the NSFW marking from a link.\n\nSee also: /api/marknsfw.","args":{"id":{"describe":"fullname of a thing"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/unsave","url":{"oauth":"https://oauth.reddit.com/api/unsave","standard":"https://ssl.reddit.com/api/unsave"},"oauth":["save"],"extensions":[],"method":"POST","describe":"Unsave a link or comment.\n\nThis removes the thing from the user's saved listings as well.\n\nSee also: /api/save.","args":{"id":{"describe":"fullname of a thing"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/vote","url":{"oauth":"https://oauth.reddit.com/api/vote","standard":"https://ssl.reddit.com/api/vote"},"oauth":["vote"],"extensions":[],"method":"POST","describe":"Cast a vote on a thing.\n\nid should be the fullname of the Link or Comment to vote on.\n\ndir indicates the direction of the vote. Voting 1 is an upvote,\n-1 is a downvote, and 0 is equivalent to \"un-voting\" by clicking\nagain on a highlighted arrow.\n\nNote: votes must be cast by humans. That is, API clients proxying a\nhuman's action one-for-one are OK, but bots deciding how to vote on\ncontent or amplifying a human's vote are not. See the reddit\nrules for more details on what constitutes vote cheating.","args":{"dir":{"describe":"vote direction. one of (1, 0, -1)"},"id":{"describe":"fullname of a thing"},"uh":{"describe":"a modhash"},"v":{"describe":"(optional) internal use only"}},"isListing":false},{"path":"/by_id/$names","url":{"oauth":"https://oauth.reddit.com/by_id/$names","standard":"http://www.reddit.com/by_id/$names"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Get a listing of links by fullname.\n\nnames is a list of fullnames for links separated by commas or spaces.","args":{"names":{"describe":"A comma-separated list of link fullnames"}},"isListing":false},{"path":"/comments/$article","url":{"oauth":"https://oauth.reddit.com/comments/$article","standard":"http://www.reddit.com/comments/$article"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"Get the comment tree for a given Link article.\n\nIf supplied, comment is the ID36 of a comment in the comment tree for\narticle. This comment will be the (highlighted) focal point of the\nreturned view and context will be the number of parents shown.\n\ndepth is the maximum depth of subtrees in the thread.\n\nlimit is the maximum number of comments to return.\n\nSee also: /api/morechildren and\n/api/comment.","args":{"article":{"describe":"ID36 of a link"},"comment":{"describe":"(optional) ID36 of a comment"},"context":{"describe":"an integer between 0 and 8"},"depth":{"describe":"(optional) an integer"},"limit":{"describe":"(optional) an integer"},"sort":{"describe":"one of (confidence, top, new, hot, controversial, old, random)"}},"isListing":false},{"path":"/r/$subreddit/comments/$article","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/comments/$article","standard":"http://www.reddit.com/r/$subreddit/comments/$article"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"Get the comment tree for a given Link article.\n\nIf supplied, comment is the ID36 of a comment in the comment tree for\narticle. This comment will be the (highlighted) focal point of the\nreturned view and context will be the number of parents shown.\n\ndepth is the maximum depth of subtrees in the thread.\n\nlimit is the maximum number of comments to return.\n\nSee also: /api/morechildren and\n/api/comment.","args":{"article":{"describe":"ID36 of a link"},"comment":{"describe":"(optional) ID36 of a comment"},"context":{"describe":"an integer between 0 and 8"},"depth":{"describe":"(optional) an integer"},"limit":{"describe":"(optional) an integer"},"sort":{"describe":"one of (confidence, top, new, hot, controversial, old, random)"}},"isListing":false},{"path":"/hot","url":{"oauth":"https://oauth.reddit.com/hot","standard":"http://www.reddit.com/hot"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"This endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"show":{"describe":"(optional) the string all"}},"isListing":true},{"path":"/r/$subreddit/hot","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/hot","standard":"http://www.reddit.com/r/$subreddit/hot"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"This endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"show":{"describe":"(optional) the string all"}},"isListing":true},{"path":"/new","url":{"oauth":"https://oauth.reddit.com/new","standard":"http://www.reddit.com/new"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"This endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"show":{"describe":"(optional) the string all"}},"isListing":true},{"path":"/r/$subreddit/new","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/new","standard":"http://www.reddit.com/r/$subreddit/new"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"This endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"show":{"describe":"(optional) the string all"}},"isListing":true},{"path":"/random","url":{"oauth":"https://oauth.reddit.com/random","standard":"http://www.reddit.com/random"},"oauth":["read"],"extensions":[],"method":"GET","describe":"The Serendipity button","args":{},"isListing":false},{"path":"/r/$subreddit/random","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/random","standard":"http://www.reddit.com/r/$subreddit/random"},"oauth":["read"],"extensions":[],"method":"GET","describe":"The Serendipity button","args":{},"isListing":false},{"path":"/$sort","url":{"oauth":"https://oauth.reddit.com/$sort","standard":"http://www.reddit.com/$sort"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"This endpoint is a listing.","args":{"t":{"describe":"one of (hour, day, week, month, year, all)"},"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"show":{"describe":"(optional) the string all"}},"isListing":true},{"path":"/r/$subreddit/$sort","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/$sort","standard":"http://www.reddit.com/r/$subreddit/$sort"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"This endpoint is a listing.","args":{"t":{"describe":"one of (hour, day, week, month, year, all)"},"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"show":{"describe":"(optional) the string all"}},"isListing":true},{"path":"/api/live/create","url":{"oauth":"https://oauth.reddit.com/api/live/create","standard":"https://ssl.reddit.com/api/live/create"},"oauth":["submit"],"extensions":[],"method":"POST","describe":"Create a new live thread.\n\nOnce created, the initial settings can be modified with\n/api/live/thread/edit and new updates\ncan be posted with\n/api/live/thread/update.","args":{"api_type":{"describe":"the string json"},"description":{"describe":"raw markdown text"},"title":{"describe":"a string no longer than 120 characters"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/live/$thread/accept_contributor_invite","url":{"oauth":"https://oauth.reddit.com/api/live/$thread/accept_contributor_invite","standard":"https://ssl.reddit.com/api/live/$thread/accept_contributor_invite"},"oauth":["livemanage"],"extensions":[],"method":"POST","describe":"Accept a pending invitation to contribute to the thread.\n\nSee also: /api/live/thread/leave_contributor.","args":{"api_type":{"describe":"the string json"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/live/$thread/close_thread","url":{"oauth":"https://oauth.reddit.com/api/live/$thread/close_thread","standard":"https://ssl.reddit.com/api/live/$thread/close_thread"},"oauth":["livemanage"],"extensions":[],"method":"POST","describe":"Permanently close the thread, disallowing future updates.\n\nRequires the close permission for this thread.","args":{"api_type":{"describe":"the string json"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/live/$thread/delete_update","url":{"oauth":"https://oauth.reddit.com/api/live/$thread/delete_update","standard":"https://ssl.reddit.com/api/live/$thread/delete_update"},"oauth":["edit"],"extensions":[],"method":"POST","describe":"Delete an update from the thread.\n\nRequires that specified update must have been authored by the user or\nthat you have the edit permission for this thread.\n\nSee also: /api/live/thread/update.","args":{"api_type":{"describe":"the string json"},"id":{"describe":"the ID of a single update. e.g. LiveUpdate_ff87068e-a126-11e3-9f93-12313b0b3603"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/live/$thread/edit","url":{"oauth":"https://oauth.reddit.com/api/live/$thread/edit","standard":"https://ssl.reddit.com/api/live/$thread/edit"},"oauth":["livemanage"],"extensions":[],"method":"POST","describe":"Configure the thread.\n\nRequires the settings permission for this thread.\n\nSee also: /live/thread/about.json.","args":{"api_type":{"describe":"the string json"},"description":{"describe":"raw markdown text"},"title":{"describe":"a string no longer than 120 characters"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/live/$thread/invite_contributor","url":{"oauth":"https://oauth.reddit.com/api/live/$thread/invite_contributor","standard":"https://ssl.reddit.com/api/live/$thread/invite_contributor"},"oauth":["livemanage"],"extensions":[],"method":"POST","describe":"Invite another user to contribute to the thread.\n\nRequires the manage permission for this thread.  If the recipient\naccepts the invite, they will be granted the permissions specified.\n\nSee also: /api/live/thread/accept_contributor_invite, and\n/api/live/thread/rm_contributor_invite.","args":{"api_type":{"describe":"the string json"},"name":{"describe":"the name of an existing user"},"permissions":{"describe":"permission description e.g. +update,+edit,-manage"},"type":{"describe":"one of (liveupdate_contributor_invite, liveupdate_contributor)"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/live/$thread/leave_contributor","url":{"oauth":"https://oauth.reddit.com/api/live/$thread/leave_contributor","standard":"https://ssl.reddit.com/api/live/$thread/leave_contributor"},"oauth":["livemanage"],"extensions":[],"method":"POST","describe":"Abdicate contributorship of the thread.\n\nSee also: /api/live/thread/accept_contributor_invite, and\n/api/live/thread/invite_contributor.","args":{"api_type":{"describe":"the string json"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/live/$thread/report","url":{"oauth":"https://oauth.reddit.com/api/live/$thread/report","standard":"https://ssl.reddit.com/api/live/$thread/report"},"oauth":["report"],"extensions":[],"method":"POST","describe":"Report the thread for violating the rules of reddit.","args":{"api_type":{"describe":"the string json"},"type":{"describe":"one of (spam, vote-manipulation, personal-information, sexualizing-minors, site-breaking)"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/live/$thread/rm_contributor","url":{"oauth":"https://oauth.reddit.com/api/live/$thread/rm_contributor","standard":"https://ssl.reddit.com/api/live/$thread/rm_contributor"},"oauth":["livemanage"],"extensions":[],"method":"POST","describe":"Revoke another user's contributorship.\n\nRequires the manage permission for this thread.\n\nSee also: /api/live/thread/invite_contributor.","args":{"api_type":{"describe":"the string json"},"id":{"describe":"fullname of a account"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/live/$thread/rm_contributor_invite","url":{"oauth":"https://oauth.reddit.com/api/live/$thread/rm_contributor_invite","standard":"https://ssl.reddit.com/api/live/$thread/rm_contributor_invite"},"oauth":["livemanage"],"extensions":[],"method":"POST","describe":"Revoke an outstanding contributor invite.\n\nRequires the manage permission for this thread.\n\nSee also: /api/live/thread/invite_contributor.","args":{"api_type":{"describe":"the string json"},"id":{"describe":"fullname of a account"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/live/$thread/set_contributor_permissions","url":{"oauth":"https://oauth.reddit.com/api/live/$thread/set_contributor_permissions","standard":"https://ssl.reddit.com/api/live/$thread/set_contributor_permissions"},"oauth":["livemanage"],"extensions":[],"method":"POST","describe":"Change a contributor or contributor invite's permissions.\n\nRequires the manage permission for this thread.\n\nSee also: /api/live/thread/invite_contributor and\n/api/live/thread/rm_contributor.","args":{"api_type":{"describe":"the string json"},"name":{"describe":"the name of an existing user"},"permissions":{"describe":"permission description e.g. +update,+edit,-manage"},"type":{"describe":"one of (liveupdate_contributor_invite, liveupdate_contributor)"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/live/$thread/strike_update","url":{"oauth":"https://oauth.reddit.com/api/live/$thread/strike_update","standard":"https://ssl.reddit.com/api/live/$thread/strike_update"},"oauth":["edit"],"extensions":[],"method":"POST","describe":"Strike (mark incorrect and cross out) the content of an update.\n\nRequires that specified update must have been authored by the user or\nthat you have the edit permission for this thread.\n\nSee also: /api/live/thread/update.","args":{"api_type":{"describe":"the string json"},"id":{"describe":"the ID of a single update. e.g. LiveUpdate_ff87068e-a126-11e3-9f93-12313b0b3603"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/live/$thread/update","url":{"oauth":"https://oauth.reddit.com/api/live/$thread/update","standard":"https://ssl.reddit.com/api/live/$thread/update"},"oauth":["submit"],"extensions":[],"method":"POST","describe":"Post an update to the thread.\n\nRequires the update permission for this thread.\n\nSee also: /api/live/thread/strike_update, and\n/api/live/thread/delete_update.","args":{"api_type":{"describe":"the string json"},"body":{"describe":"raw markdown text"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/live/$thread","url":{"oauth":"https://oauth.reddit.com/live/$thread","standard":"http://www.reddit.com/live/$thread"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"Get a list of updates posted in this thread.\n\nSee also: /api/live/thread/update.\n\nThis endpoint is a listing.","args":{"after":{"describe":"the ID of a single update. e.g. LiveUpdate_ff87068e-a126-11e3-9f93-12313b0b3603"},"before":{"describe":"the ID of a single update. e.g. LiveUpdate_ff87068e-a126-11e3-9f93-12313b0b3603"},"count":{"describe":"a positive integer (default: 0)"},"is_embed":{"describe":"(internal use only)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"stylesr":{"describe":"subreddit name"}},"isListing":false},{"path":"/live/$thread/about.json","url":{"oauth":"https://oauth.reddit.com/live/$thread/about.json","standard":"http://www.reddit.com/live/$thread/about.json"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Get some basic information about the live thread.\n\nSee also: /api/live/thread/edit.","args":{},"isListing":false},{"path":"/live/$thread/contributors.json","url":{"oauth":"https://oauth.reddit.com/live/$thread/contributors.json","standard":"http://www.reddit.com/live/$thread/contributors.json"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Get a list of users that contribute to this thread.\n\nSee also: /api/live/thread/invite_contributor, and\n/api/live/thread/rm_contributor.","args":{},"isListing":false},{"path":"/live/$thread/discussions","url":{"oauth":"https://oauth.reddit.com/live/$thread/discussions","standard":"http://www.reddit.com/live/$thread/discussions"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"Get a list of reddit submissions linking to this thread.\n\nThis endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"show":{"describe":"(optional) the string all"}},"isListing":true},{"path":"/api/block","url":{"oauth":"https://oauth.reddit.com/api/block","standard":"https://ssl.reddit.com/api/block"},"oauth":["privatemessages"],"extensions":[],"method":"POST","describe":"For blocking via inbox.","args":{"id":{"describe":"fullname of a thing"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/compose","url":{"oauth":"https://oauth.reddit.com/api/compose","standard":"https://ssl.reddit.com/api/compose"},"oauth":["privatemessages"],"extensions":[],"method":"POST","describe":"Handles message composition under /message/compose.","args":{"api_type":{"describe":"the string json"},"captcha":{"describe":"the user's response to the CAPTCHA challenge"},"iden":{"describe":"the identifier of the CAPTCHA challenge"},"subject":{"describe":"a string no longer than 100 characters"},"text":{"describe":"raw markdown text"},"to":{"describe":"the name of an existing user"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/read_message","url":{"oauth":"https://oauth.reddit.com/api/read_message","standard":"https://ssl.reddit.com/api/read_message"},"oauth":["privatemessages"],"extensions":[],"method":"POST","describe":"","args":{"id":{"describe":"A comma-separated list of thing fullnames"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/unread_message","url":{"oauth":"https://oauth.reddit.com/api/unread_message","standard":"https://ssl.reddit.com/api/unread_message"},"oauth":["privatemessages"],"extensions":[],"method":"POST","describe":"","args":{"id":{"describe":"A comma-separated list of thing fullnames"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/message/$where","url":{"oauth":"https://oauth.reddit.com/message/$where","standard":"http://www.reddit.com/message/$where"},"oauth":["privatemessages"],"extensions":[".json",".xml"],"method":"GET","describe":"This endpoint is a listing.","args":{"mark":{"describe":"one of (true, false)"},"mid":{"describe":""},"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"show":{"describe":"(optional) the string all"}},"isListing":true},{"path":"/about/log","url":{"oauth":"https://oauth.reddit.com/about/log","standard":"http://www.reddit.com/about/log"},"oauth":["modlog"],"extensions":[".json",".xml"],"method":"GET","describe":"Get a list of recent moderation actions.\n\nModerator actions taken within a subreddit are logged. This listing is\na view of that log with various filters to aid in analyzing the\ninformation.\n\nThe optional mod parameter can be a comma-delimited list of moderator\nnames to restrict the results to, or the string a to restrict the\nresults to admin actions taken within the subreddit.\n\nThe type parameter is optional and if sent limits the log entries\nreturned to only those of the type specified.\n\nThis endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 500)"},"mod":{"describe":"(optional) a moderator filter"},"show":{"describe":"(optional) the string all"},"type":{"describe":"one of (banuser, unbanuser, removelink, approvelink, removecomment, approvecomment, addmoderator, invitemoderator, uninvitemoderator, acceptmoderatorinvite, removemoderator, addcontributor, removecontributor, editsettings, editflair, distinguish, marknsfw, wikibanned, wikicontributor, wikiunbanned, wikipagelisted, removewikicontributor, wikirevise, wikipermlevel, ignorereports, unignorereports, setpermissions, sticky, unsticky)"}},"isListing":true},{"path":"/r/$subreddit/about/log","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/about/log","standard":"http://www.reddit.com/r/$subreddit/about/log"},"oauth":["modlog"],"extensions":[".json",".xml"],"method":"GET","describe":"Get a list of recent moderation actions.\n\nModerator actions taken within a subreddit are logged. This listing is\na view of that log with various filters to aid in analyzing the\ninformation.\n\nThe optional mod parameter can be a comma-delimited list of moderator\nnames to restrict the results to, or the string a to restrict the\nresults to admin actions taken within the subreddit.\n\nThe type parameter is optional and if sent limits the log entries\nreturned to only those of the type specified.\n\nThis endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 500)"},"mod":{"describe":"(optional) a moderator filter"},"show":{"describe":"(optional) the string all"},"type":{"describe":"one of (banuser, unbanuser, removelink, approvelink, removecomment, approvecomment, addmoderator, invitemoderator, uninvitemoderator, acceptmoderatorinvite, removemoderator, addcontributor, removecontributor, editsettings, editflair, distinguish, marknsfw, wikibanned, wikicontributor, wikiunbanned, wikipagelisted, removewikicontributor, wikirevise, wikipermlevel, ignorereports, unignorereports, setpermissions, sticky, unsticky)"}},"isListing":true},{"path":"/about/$location","url":{"oauth":"https://oauth.reddit.com/about/$location","standard":"http://www.reddit.com/about/$location"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Return a listing of posts relevant to moderators.\n\n\nreports: Things that have been reported.\nspam: Things that have been marked as spam or otherwise removed.\nmodqueue: Things requiring moderator review, such as reported things\nand items caught by the spam filter.\nunmoderated: Things that have yet to be approved/removed by a mod.\n\n\nRequires the \"posts\" moderator permission for the subreddit.\n\nThis endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"location":{"describe":""},"only":{"describe":"one of (links, comments)"},"show":{"describe":"(optional) the string all"}},"isListing":true},{"path":"/r/$subreddit/about/$location","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/about/$location","standard":"http://www.reddit.com/r/$subreddit/about/$location"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Return a listing of posts relevant to moderators.\n\n\nreports: Things that have been reported.\nspam: Things that have been marked as spam or otherwise removed.\nmodqueue: Things requiring moderator review, such as reported things\nand items caught by the spam filter.\nunmoderated: Things that have yet to be approved/removed by a mod.\n\n\nRequires the \"posts\" moderator permission for the subreddit.\n\nThis endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"location":{"describe":""},"only":{"describe":"one of (links, comments)"},"show":{"describe":"(optional) the string all"}},"isListing":true},{"path":"/api/accept_moderator_invite","url":{"standard":"https://ssl.reddit.com/api/accept_moderator_invite"},"oauth":[],"extensions":[],"method":"POST","describe":"Accept an invite to moderate the specified subreddit.\n\nThe authenticated user must have been invited to moderate the subreddit\nby one of its current moderators.\n\nSee also: /api/friend and\n/subreddits/mine.","args":{"api_type":{"describe":"the string json"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/r/$subreddit/api/accept_moderator_invite","url":{"standard":"https://ssl.reddit.com/r/$subreddit/api/accept_moderator_invite"},"oauth":[],"extensions":[],"method":"POST","describe":"Accept an invite to moderate the specified subreddit.\n\nThe authenticated user must have been invited to moderate the subreddit\nby one of its current moderators.\n\nSee also: /api/friend and\n/subreddits/mine.","args":{"api_type":{"describe":"the string json"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/approve","url":{"oauth":"https://oauth.reddit.com/api/approve","standard":"https://ssl.reddit.com/api/approve"},"oauth":["modposts"],"extensions":[],"method":"POST","describe":"Approve a link or comment.\n\nIf the thing was removed, it will be re-inserted into appropriate\nlistings. Any reports on the approved thing will be discarded.\n\nSee also: /api/remove.","args":{"id":{"describe":"fullname of a thing"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/distinguish","url":{"oauth":"https://oauth.reddit.com/api/distinguish","standard":"https://ssl.reddit.com/api/distinguish"},"oauth":["modposts"],"extensions":[],"method":"POST","describe":"Distinguish a thing's author with a sigil.\n\nThis can be useful to draw attention to and confirm the identity of the\nuser in the context of a link or comment of theirs. The options for\ndistinguish are as follows:\n\n\nyes - add a moderator distinguish ([M]). only if the user is a\n      moderator of the subreddit the thing is in.\nno - remove any distinguishes.\nadmin - add an admin distinguish ([A]). admin accounts only.\nspecial - add a user-specific distinguish. depends on user.\n\n\nThe first time a top-level comment is moderator distinguished, the\nauthor of the link the comment is in reply to will get a notification\nin their inbox.","args":{"api_type":{"describe":"the string json"},"how":{"describe":"one of (yes, no, admin, special)"},"id":{"describe":"fullname of a thing"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/ignore_reports","url":{"oauth":"https://oauth.reddit.com/api/ignore_reports","standard":"https://ssl.reddit.com/api/ignore_reports"},"oauth":["modposts"],"extensions":[],"method":"POST","describe":"Prevent future reports on a thing from causing notifications.\n\nAny reports made about a thing after this flag is set on it will not\ncause notifications or make the thing show up in the various moderation\nlistings.\n\nSee also: /api/unignore_reports.","args":{"id":{"describe":"fullname of a thing"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/leavecontributor","url":{"standard":"https://ssl.reddit.com/api/leavecontributor"},"oauth":[],"extensions":[],"method":"POST","describe":"Abdicate approved submitter status in a subreddit.\n\nSee also: /api/friend.","args":{"id":{"describe":"fullname of a thing"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/leavemoderator","url":{"standard":"https://ssl.reddit.com/api/leavemoderator"},"oauth":[],"extensions":[],"method":"POST","describe":"Abdicate moderator status in a subreddit.\n\nSee also: /api/friend.","args":{"id":{"describe":"fullname of a thing"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/remove","url":{"oauth":"https://oauth.reddit.com/api/remove","standard":"https://ssl.reddit.com/api/remove"},"oauth":["modposts"],"extensions":[],"method":"POST","describe":"Remove a link or comment.\n\nIf the thing is a link, it will be removed from all subreddit listings.\nIf the thing is a comment, it will be redacted and removed from all\nsubreddit comment listings.\n\nSee also: /api/approve.","args":{"id":{"describe":"fullname of a thing"},"spam":{"describe":"boolean value"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/unignore_reports","url":{"oauth":"https://oauth.reddit.com/api/unignore_reports","standard":"https://ssl.reddit.com/api/unignore_reports"},"oauth":["modposts"],"extensions":[],"method":"POST","describe":"Allow future reports on a thing to cause notifications.\n\nSee also: /api/ignore_reports.","args":{"id":{"describe":"fullname of a thing"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/stylesheet","url":{"oauth":"https://oauth.reddit.com/stylesheet","standard":"http://www.reddit.com/stylesheet"},"oauth":["modconfig"],"extensions":[],"method":"GET","describe":"Get the subreddit's current stylesheet.\n\nThis will return either the content of or a redirect to the subreddit's\ncurrent stylesheet if one exists.\n\nSee also: /api/subreddit_stylesheet.","args":{},"isListing":false},{"path":"/r/$subreddit/stylesheet","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/stylesheet","standard":"http://www.reddit.com/r/$subreddit/stylesheet"},"oauth":["modconfig"],"extensions":[],"method":"GET","describe":"Get the subreddit's current stylesheet.\n\nThis will return either the content of or a redirect to the subreddit's\ncurrent stylesheet if one exists.\n\nSee also: /api/subreddit_stylesheet.","args":{},"isListing":false},{"path":"/api/multi/mine","url":{"oauth":"https://oauth.reddit.com/api/multi/mine","standard":"http://www.reddit.com/api/multi/mine"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Fetch a list of multis belonging to the current user.","args":{},"isListing":false},{"path":"/api/multi/$multipath","url":{"oauth":"https://oauth.reddit.com/api/multi/$multipath","standard":"https://ssl.reddit.com/api/multi/$multipath"},"oauth":["subscribe"],"extensions":[],"method":"DELETE","describe":"Delete a multi.","args":{"multipath":{"describe":"multireddit url path"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/multi/$multipath","url":{"oauth":"https://oauth.reddit.com/api/multi/$multipath","standard":"http://www.reddit.com/api/multi/$multipath"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Fetch a multi's data and subreddit list by name.","args":{"multipath":{"describe":"multireddit url path"}},"isListing":false},{"path":"/api/multi/$multipath","url":{"oauth":"https://oauth.reddit.com/api/multi/$multipath","standard":"https://ssl.reddit.com/api/multi/$multipath"},"oauth":["subscribe"],"extensions":[],"method":"POST","describe":"Create a multi. Responds with 409 Conflict if it already exists.","args":{"model":{"describe":"json data:\n\n{\n  \"subreddits\": [\n    {\n      \"name\": subreddit name,\n    },\n    ...\n  ],\n  \"visibility\": one of (`private`, `public`),\n}\n"},"multipath":{"describe":"multireddit url path"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/multi/$multipath","url":{"oauth":"https://oauth.reddit.com/api/multi/$multipath","standard":"https://ssl.reddit.com/api/multi/$multipath"},"oauth":["subscribe"],"extensions":[],"method":"PUT","describe":"Create or update a multi.","args":{"model":{"describe":"json data:\n\n{\n  \"subreddits\": [\n    {\n      \"name\": subreddit name,\n    },\n    ...\n  ],\n  \"visibility\": one of (`private`, `public`),\n}\n"},"multipath":{"describe":"multireddit url path"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/multi/$multipath/copy","url":{"oauth":"https://oauth.reddit.com/api/multi/$multipath/copy","standard":"https://ssl.reddit.com/api/multi/$multipath/copy"},"oauth":["subscribe"],"extensions":[],"method":"POST","describe":"Copy a multi.\n\nResponds with 409 Conflict if the target already exists.\n\nA \"copied from ...\" line will automatically be appended to the\ndescription.","args":{"from":{"describe":"multireddit url path"},"to":{"describe":"destination multireddit url path"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/multi/$multipath/description","url":{"oauth":"https://oauth.reddit.com/api/multi/$multipath/description","standard":"http://www.reddit.com/api/multi/$multipath/description"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Get a multi's description.","args":{"multipath":{"describe":"multireddit url path"}},"isListing":false},{"path":"/api/multi/$multipath/description","url":{"oauth":"https://oauth.reddit.com/api/multi/$multipath/description","standard":"https://ssl.reddit.com/api/multi/$multipath/description"},"oauth":["read"],"extensions":[],"method":"PUT","describe":"Change a multi's markdown description.","args":{"model":{"describe":"json data:\n\n{\n  \"body_md\": raw markdown text,\n}\n"},"multipath":{"describe":"multireddit url path"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/multi/$multipath/r/$srname","url":{"oauth":"https://oauth.reddit.com/api/multi/$multipath/r/$srname","standard":"https://ssl.reddit.com/api/multi/$multipath/r/$srname"},"oauth":["subscribe"],"extensions":[],"method":"DELETE","describe":"Remove a subreddit from a multi.","args":{"multipath":{"describe":"multireddit url path"},"srname":{"describe":"subreddit name"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/multi/$multipath/r/$srname","url":{"oauth":"https://oauth.reddit.com/api/multi/$multipath/r/$srname","standard":"http://www.reddit.com/api/multi/$multipath/r/$srname"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Get data about a subreddit in a multi.","args":{"multipath":{"describe":"multireddit url path"},"srname":{"describe":"subreddit name"}},"isListing":false},{"path":"/api/multi/$multipath/r/$srname","url":{"oauth":"https://oauth.reddit.com/api/multi/$multipath/r/$srname","standard":"https://ssl.reddit.com/api/multi/$multipath/r/$srname"},"oauth":["subscribe"],"extensions":[],"method":"PUT","describe":"Add a subreddit to a multi.","args":{"model":{"describe":"json data:\n\n{\n  \"name\": subreddit name,\n}\n"},"multipath":{"describe":"multireddit url path"},"srname":{"describe":"subreddit name"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/multi/$multipath/rename","url":{"oauth":"https://oauth.reddit.com/api/multi/$multipath/rename","standard":"https://ssl.reddit.com/api/multi/$multipath/rename"},"oauth":["subscribe"],"extensions":[],"method":"POST","describe":"Rename a multi.","args":{"from":{"describe":"multireddit url path"},"to":{"describe":"destination multireddit url path"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/search","url":{"oauth":"https://oauth.reddit.com/search","standard":"http://www.reddit.com/search"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"Search links page.\n\nThis endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"q":{"describe":"a string no longer than 512 characters"},"restrict_sr":{"describe":"boolean value"},"show":{"describe":"(optional) the string all"},"sort":{"describe":"one of (relevance, new, hot, top, comments)"},"syntax":{"describe":"one of (cloudsearch, lucene, plain)"},"t":{"describe":"one of (hour, day, week, month, year, all)"}},"isListing":true},{"path":"/r/$subreddit/search","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/search","standard":"http://www.reddit.com/r/$subreddit/search"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"Search links page.\n\nThis endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"q":{"describe":"a string no longer than 512 characters"},"restrict_sr":{"describe":"boolean value"},"show":{"describe":"(optional) the string all"},"sort":{"describe":"one of (relevance, new, hot, top, comments)"},"syntax":{"describe":"one of (cloudsearch, lucene, plain)"},"t":{"describe":"one of (hour, day, week, month, year, all)"}},"isListing":true},{"path":"/about/$where","url":{"oauth":"https://oauth.reddit.com/about/$where","standard":"http://www.reddit.com/about/$where"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"This endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"show":{"describe":"(optional) the string all"},"user":{"describe":"A valid, existing reddit username"}},"isListing":true},{"path":"/r/$subreddit/about/$where","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/about/$where","standard":"http://www.reddit.com/r/$subreddit/about/$where"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"This endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"show":{"describe":"(optional) the string all"},"user":{"describe":"A valid, existing reddit username"}},"isListing":true},{"path":"/api/delete_sr_header","url":{"oauth":"https://oauth.reddit.com/api/delete_sr_header","standard":"https://ssl.reddit.com/api/delete_sr_header"},"oauth":["modconfig"],"extensions":[],"method":"POST","describe":"Remove the subreddit's custom header image.\n\nThe sitewide-default header image will be shown again after this call.\n\nSee also: /api/upload_sr_img.","args":{"api_type":{"describe":"the string json"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/r/$subreddit/api/delete_sr_header","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/delete_sr_header","standard":"https://ssl.reddit.com/r/$subreddit/api/delete_sr_header"},"oauth":["modconfig"],"extensions":[],"method":"POST","describe":"Remove the subreddit's custom header image.\n\nThe sitewide-default header image will be shown again after this call.\n\nSee also: /api/upload_sr_img.","args":{"api_type":{"describe":"the string json"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/delete_sr_img","url":{"oauth":"https://oauth.reddit.com/api/delete_sr_img","standard":"https://ssl.reddit.com/api/delete_sr_img"},"oauth":["modconfig"],"extensions":[],"method":"POST","describe":"Remove an image from the subreddit's custom image set.\n\nThe image will no longer count against the subreddit's image limit.\nHowever, the actual image data may still be accessible for an\nunspecified amount of time. If the image is currently referenced by the\nsubreddit's stylesheet, that stylesheet will no longer validate and\nwon't be editable until the image reference is removed.\n\nSee also: /api/upload_sr_img.","args":{"api_type":{"describe":"the string json"},"img_name":{"describe":"a valid subreddit image name"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/r/$subreddit/api/delete_sr_img","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/delete_sr_img","standard":"https://ssl.reddit.com/r/$subreddit/api/delete_sr_img"},"oauth":["modconfig"],"extensions":[],"method":"POST","describe":"Remove an image from the subreddit's custom image set.\n\nThe image will no longer count against the subreddit's image limit.\nHowever, the actual image data may still be accessible for an\nunspecified amount of time. If the image is currently referenced by the\nsubreddit's stylesheet, that stylesheet will no longer validate and\nwon't be editable until the image reference is removed.\n\nSee also: /api/upload_sr_img.","args":{"api_type":{"describe":"the string json"},"img_name":{"describe":"a valid subreddit image name"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/recommend/sr/$srnames","url":{"oauth":"https://oauth.reddit.com/api/recommend/sr/$srnames","standard":"http://www.reddit.com/api/recommend/sr/$srnames"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Return subreddits recommended for the given subreddit(s).\n\nGets a list of subreddits recommended for srnames, filtering out any\nthat appear in the optional omit param.","args":{"omit":{"describe":"comma-delimited list of subreddit names"},"srnames":{"describe":"comma-delimited list of subreddit names"}},"isListing":false},{"path":"/api/search_reddit_names.json","url":{"oauth":"https://oauth.reddit.com/api/search_reddit_names.json","standard":"https://ssl.reddit.com/api/search_reddit_names.json"},"oauth":["read"],"extensions":[],"method":"POST","describe":"List subreddit names that begin with a query string.\n\nSubreddits whose names begin with query will be returned. If\ninclude_over_18 is false, subreddits with over-18 content\nrestrictions will be filtered from the results.","args":{"include_over_18":{"describe":"boolean value"},"query":{"describe":"a string up to 50 characters long, consisting of printable characters."}},"isListing":false},{"path":"/api/site_admin","url":{"oauth":"https://oauth.reddit.com/api/site_admin","standard":"https://ssl.reddit.com/api/site_admin"},"oauth":["modconfig"],"extensions":[],"method":"POST","describe":"Create or configure a subreddit.\n\nIf sr is specified, the request will attempt to modify the specified\nsubreddit. If not, a subreddit with name name will be created.\n\nThis endpoint expects all values to be supplied on every request.  If\nmodifying a subset of options, it may be useful to get the current\nsettings from /about/edit.json\nfirst.\n\nFor backwards compatibility, description is the sidebar text and\npublic_description is the publicly visible subreddit description.\n\nMost of the parameters for this endpoint are identical to options\nvisible in the user interface and their meanings are best explained\nthere.\n\nSee also: /about/edit.json.","args":{"allow_top":{"describe":"boolean value"},"api_type":{"describe":"the string json"},"comment_score_hide_mins":{"describe":"an integer between 0 and 1440 (default: 0)"},"css_on_cname":{"describe":"boolean value"},"description":{"describe":"raw markdown text"},"exclude_banned_modqueue":{"describe":"boolean value"},"header-title":{"describe":"a string no longer than 500 characters"},"lang":{"describe":"a valid IETF language tag (underscore separated)"},"link_type":{"describe":"one of (any, link, self)"},"name":{"describe":"subreddit name"},"over_18":{"describe":"boolean value"},"public_description":{"describe":"raw markdown text"},"public_traffic":{"describe":"boolean value"},"show_cname_sidebar":{"describe":"boolean value"},"show_media":{"describe":"boolean value"},"spam_comments":{"describe":"one of (low, high, all)"},"spam_links":{"describe":"one of (low, high, all)"},"spam_selfposts":{"describe":"one of (low, high, all)"},"sr":{"describe":"fullname of a thing"},"submit_link_label":{"describe":"a string no longer than 60 characters"},"submit_text":{"describe":"raw markdown text"},"submit_text_label":{"describe":"a string no longer than 60 characters"},"title":{"describe":"a string no longer than 100 characters"},"type":{"describe":"one of (public, private, restricted, gold_restricted, archived)"},"uh":{"describe":"a modhash"},"wiki_edit_age":{"describe":"an integer greater than 0 (default: 0)"},"wiki_edit_karma":{"describe":"an integer greater than 0 (default: 0)"},"wikimode":{"describe":"one of (disabled, modonly, anyone)"}},"isListing":false},{"path":"/api/submit_text.json","url":{"oauth":"https://oauth.reddit.com/api/submit_text.json","standard":"http://www.reddit.com/api/submit_text.json"},"oauth":["submit"],"extensions":[],"method":"GET","describe":"Get the submission text for the subreddit.\n\nThis text is set by the subreddit moderators and intended to be\ndisplayed on the submission form.\n\nSee also: /api/site_admin.","args":{},"isListing":false},{"path":"/r/$subreddit/api/submit_text.json","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/submit_text.json","standard":"http://www.reddit.com/r/$subreddit/api/submit_text.json"},"oauth":["submit"],"extensions":[],"method":"GET","describe":"Get the submission text for the subreddit.\n\nThis text is set by the subreddit moderators and intended to be\ndisplayed on the submission form.\n\nSee also: /api/site_admin.","args":{},"isListing":false},{"path":"/api/$subreddit_stylesheet","url":{"oauth":"https://oauth.reddit.com/api/$subreddit_stylesheet","standard":"https://ssl.reddit.com/api/$subreddit_stylesheet"},"oauth":["modconfig"],"extensions":[],"method":"POST","describe":"Update a subreddit's stylesheet.\n\nop should be save to update the contents of the stylesheet.","args":{"api_type":{"describe":"the string json"},"op":{"describe":"one of (save, preview)"},"reason":{"describe":"a string up to 256 characters long, consisting of printable characters."},"stylesheet_contents":{"describe":"the new stylesheet content"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/r/$subreddit/api/subreddit_stylesheet","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/subreddit_stylesheet","standard":"https://ssl.reddit.com/r/$subreddit/api/subreddit_stylesheet"},"oauth":["modconfig"],"extensions":[],"method":"POST","describe":"Update a subreddit's stylesheet.\n\nop should be save to update the contents of the stylesheet.","args":{"api_type":{"describe":"the string json"},"op":{"describe":"one of (save, preview)"},"reason":{"describe":"a string up to 256 characters long, consisting of printable characters."},"stylesheet_contents":{"describe":"the new stylesheet content"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/subreddits_by_topic.json","url":{"oauth":"https://oauth.reddit.com/api/subreddits_by_topic.json","standard":"http://www.reddit.com/api/subreddits_by_topic.json"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Return a list of subreddits that are relevant to a search query.","args":{"query":{"describe":"a string no longer than 50 characters"}},"isListing":false},{"path":"/api/subscribe","url":{"oauth":"https://oauth.reddit.com/api/subscribe","standard":"https://ssl.reddit.com/api/subscribe"},"oauth":["subscribe"],"extensions":[],"method":"POST","describe":"Subscribe to or unsubscribe from a subreddit.\n\nTo subscribe, action should be sub. To unsubscribe, action should\nbe unsub. The user must have access to the subreddit to be able to\nsubscribe to it.\n\nSee also: /subreddits/mine/.","args":{"action":{"describe":"one of (sub, unsub)"},"sr":{"describe":"the fullname of a subreddit"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/upload_sr_img","url":{"oauth":"https://oauth.reddit.com/api/upload_sr_img","standard":"https://ssl.reddit.com/api/upload_sr_img"},"oauth":["modconfig"],"extensions":[],"method":"POST","describe":"Add or replace a subreddit image or custom header logo.\n\nIf the header value is 0, an image for use in the subreddit\nstylesheet is uploaded with the name specified in name. If the value\nof header is 1 then the image uploaded will be the subreddit's new\nlogo and name will be ignored.\n\nThe img_type field specifies whether to store the uploaded image as a\nPNG or JPEG.\n\nSubreddits have a limited number of images that can be in use at any\ngiven time. If no image with the specified name already exists, one of\nthe slots will be consumed.\n\nIf an image with the specified name already exists, it will be\nreplaced.  This does not affect the stylesheet immediately, but will\ntake effect the next time the stylesheet is saved.\n\nSee also: /api/delete_sr_img and\n/api/delete_sr_header.","args":{"file":{"describe":"file upload with maximum size of 500 KiB"},"formid":{"describe":"(optional) can be ignored"},"header":{"describe":"an integer between 0 and 1"},"img_type":{"describe":"one of png or jpg (default: png)"},"name":{"describe":"a valid subreddit image name"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/r/$subreddit/api/upload_sr_img","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/upload_sr_img","standard":"https://ssl.reddit.com/r/$subreddit/api/upload_sr_img"},"oauth":["modconfig"],"extensions":[],"method":"POST","describe":"Add or replace a subreddit image or custom header logo.\n\nIf the header value is 0, an image for use in the subreddit\nstylesheet is uploaded with the name specified in name. If the value\nof header is 1 then the image uploaded will be the subreddit's new\nlogo and name will be ignored.\n\nThe img_type field specifies whether to store the uploaded image as a\nPNG or JPEG.\n\nSubreddits have a limited number of images that can be in use at any\ngiven time. If no image with the specified name already exists, one of\nthe slots will be consumed.\n\nIf an image with the specified name already exists, it will be\nreplaced.  This does not affect the stylesheet immediately, but will\ntake effect the next time the stylesheet is saved.\n\nSee also: /api/delete_sr_img and\n/api/delete_sr_header.","args":{"file":{"describe":"file upload with maximum size of 500 KiB"},"formid":{"describe":"(optional) can be ignored"},"header":{"describe":"an integer between 0 and 1"},"img_type":{"describe":"one of png or jpg (default: png)"},"name":{"describe":"a valid subreddit image name"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/r/$subreddit/about.json","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/about.json","standard":"http://www.reddit.com/r/$subreddit/about.json"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Return information about the subreddit.\n\nData includes the subscriber count, description, and header image.","args":{},"isListing":false},{"path":"/r/$subreddit/about/edit.json","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/about/edit.json","standard":"http://www.reddit.com/r/$subreddit/about/edit.json"},"oauth":["modconfig"],"extensions":[],"method":"GET","describe":"Get the current settings of a subreddit.\n\nIn the API, this returns the current settings of the subreddit as used\nby /api/site_admin.  On the HTML site, it will\ndisplay a form for editing the subreddit.","args":{"created":{"describe":"one of (true, false)"},"location":{"describe":""}},"isListing":false},{"path":"/subreddits/mine/$where","url":{"oauth":"https://oauth.reddit.com/subreddits/mine/$where","standard":"http://www.reddit.com/subreddits/mine/$where"},"oauth":["mysubreddits"],"extensions":[".json",".xml"],"method":"GET","describe":"Get subreddits the user has a relationship with.\n\nThe where parameter chooses which subreddits are returned as follows:\n\n\nsubscriber - subreddits the user is subscribed to\ncontributor - subreddits the user is an approved submitter in\nmoderator - subreddits the user is a moderator of\n\n\nSee also: /api/subscribe,\n/api/friend, and\n/api/accept_moderator_invite.\n\nThis endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"show":{"describe":"(optional) the string all"}},"isListing":true},{"path":"/subreddits/search","url":{"oauth":"https://oauth.reddit.com/subreddits/search","standard":"http://www.reddit.com/subreddits/search"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"Search subreddits by title and description.\n\nThis endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"q":{"describe":"a search query"},"show":{"describe":"(optional) the string all"}},"isListing":true},{"path":"/subreddits/$where","url":{"oauth":"https://oauth.reddit.com/subreddits/$where","standard":"http://www.reddit.com/subreddits/$where"},"oauth":["read"],"extensions":[".json",".xml"],"method":"GET","describe":"Get all subreddits.\n\nThe where parameter chooses the order in which the subreddits are\ndisplayed.  popular sorts on the activity of the subreddit and the\nposition of the subreddits can shift around. new sorts the subreddits\nbased on their creation date, newest first.\n\nThis endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"show":{"describe":"(optional) the string all"}},"isListing":true},{"path":"/api/friend","url":{"standard":"https://ssl.reddit.com/api/friend"},"oauth":[],"extensions":[],"method":"POST","describe":"Complement to POST_unfriend: handles friending as well as\nprivilege changes on subreddits.","args":{"api_type":{"describe":"the string json"},"ban_message":{"describe":"raw markdown text"},"container":{"describe":""},"duration":{"describe":"an integer between 1 and 999"},"name":{"describe":"the name of an existing user"},"note":{"describe":"a string no longer than 300 characters"},"permissions":{"describe":""},"type":{"describe":"one of (friend, moderator, moderator_invite, contributor, banned, wikibanned, wikicontributor)"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/setpermissions","url":{"standard":"https://ssl.reddit.com/api/setpermissions"},"oauth":[],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"name":{"describe":"the name of an existing user"},"permissions":{"describe":""},"type":{"describe":""},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/r/$subreddit/api/setpermissions","url":{"standard":"https://ssl.reddit.com/r/$subreddit/api/setpermissions"},"oauth":[],"extensions":[],"method":"POST","describe":"","args":{"api_type":{"describe":"the string json"},"name":{"describe":"the name of an existing user"},"permissions":{"describe":""},"type":{"describe":""},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/unfriend","url":{"standard":"https://ssl.reddit.com/api/unfriend"},"oauth":[],"extensions":[],"method":"POST","describe":"Handles removal of a friend (a user-user relation) or removal\nof a user's privileges from a subreddit (a user-subreddit\nrelation).  The user can either be passed in by name (nuser)\nor by fullname (iuser).  If type is friend or enemy, 'container'\nwill be the current user, otherwise the subreddit must be set.","args":{"container":{"describe":""},"id":{"describe":"fullname of a thing"},"name":{"describe":"the name of an existing user"},"type":{"describe":"one of (friend, enemy, moderator, moderator_invite, contributor, banned, wikibanned, wikicontributor)"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/username_available.json","url":{"standard":"http://www.reddit.com/api/username_available.json"},"oauth":[],"extensions":[],"method":"GET","describe":"Check whether a username is available for registration.","args":{"user":{"describe":"a valid, unused, username"}},"isListing":false},{"path":"/api/v1/me/friends/$username","url":{"oauth":"https://oauth.reddit.com/api/v1/me/friends/$username","standard":"https://ssl.reddit.com/api/v1/me/friends/$username"},"oauth":["subscribe"],"extensions":[],"method":"DELETE","describe":"Stop being friends with a user.","args":{"username":{"describe":"A valid, existing reddit username"}},"isListing":false},{"path":"/api/v1/me/friends/$username","url":{"oauth":"https://oauth.reddit.com/api/v1/me/friends/$username","standard":"http://www.reddit.com/api/v1/me/friends/$username"},"oauth":["mysubreddits"],"extensions":[],"method":"GET","describe":"Get information about a specific 'friend', such as notes.","args":{"username":{"describe":"A valid, existing reddit username"}},"isListing":false},{"path":"/api/v1/me/friends/$username","url":{"oauth":"https://oauth.reddit.com/api/v1/me/friends/$username","standard":"https://ssl.reddit.com/api/v1/me/friends/$username"},"oauth":["subscribe"],"extensions":[],"method":"PUT","describe":"Create or update a \"friend\" relationship.\n\nThis operation is idempotent. It can be used to add a new\nfriend, or update an existing friend (e.g., add/change the\nnote on that friend)","args":{"This":{"describe":"{\n  \"name\": A valid, existing reddit username,\n  \"note\": a string no longer than 300 characters,\n}\n"}},"isListing":false},{"path":"/api/v1/user/$username/trophies","url":{"oauth":"https://oauth.reddit.com/api/v1/user/$username/trophies","standard":"http://www.reddit.com/api/v1/user/$username/trophies"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Return a list of trophies for the a given user.","args":{"username":{"describe":"A valid, existing reddit username"}},"isListing":false},{"path":"/user/$username/about.json","url":{"oauth":"https://oauth.reddit.com/user/$username/about.json","standard":"http://www.reddit.com/user/$username/about.json"},"oauth":["read"],"extensions":[],"method":"GET","describe":"Return information about the user, including karma and gold status.","args":{"username":{"describe":"the name of an existing user"}},"isListing":false},{"path":"/user/$username/$where","url":{"oauth":"https://oauth.reddit.com/user/$username/$where","standard":"http://www.reddit.com/user/$username/$where"},"oauth":["history"],"extensions":[".json",".xml"],"method":"GET","describe":"This endpoint is a listing.","args":{"show":{"describe":"one of (given)"},"sort":{"describe":"one of (hot, new, top, controversial)"},"t":{"describe":"one of (hour, day, week, month, year, all)"},"username":{"describe":"the name of an existing user"},"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"}},"isListing":true},{"path":"/api/wiki/alloweditor/$act","url":{"oauth":"https://oauth.reddit.com/api/wiki/alloweditor/$act","standard":"https://ssl.reddit.com/api/wiki/alloweditor/$act"},"oauth":["modwiki"],"extensions":[],"method":"POST","describe":"Allow/deny username to edit this wiki page","args":{"act":{"describe":"one of (del, add)"},"page":{"describe":"the name of an existing wiki page"},"uh":{"describe":"a modhash"},"username":{"describe":"the name of an existing user"}},"isListing":false},{"path":"/r/$subreddit/api/wiki/alloweditor/$act","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/wiki/alloweditor/$act","standard":"https://ssl.reddit.com/r/$subreddit/api/wiki/alloweditor/$act"},"oauth":["modwiki"],"extensions":[],"method":"POST","describe":"Allow/deny username to edit this wiki page","args":{"act":{"describe":"one of (del, add)"},"page":{"describe":"the name of an existing wiki page"},"uh":{"describe":"a modhash"},"username":{"describe":"the name of an existing user"}},"isListing":false},{"path":"/api/wiki/edit","url":{"oauth":"https://oauth.reddit.com/api/wiki/edit","standard":"https://ssl.reddit.com/api/wiki/edit"},"oauth":["wikiedit"],"extensions":[],"method":"POST","describe":"Edit a wiki page","args":{"content":{"describe":""},"page":{"describe":"the name of an existing page or a new page to create"},"previous":{"describe":"the starting point revision for this edit"},"reason":{"describe":"a string up to 256 characters long, consisting of printable characters."},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/r/$subreddit/api/wiki/edit","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/wiki/edit","standard":"https://ssl.reddit.com/r/$subreddit/api/wiki/edit"},"oauth":["wikiedit"],"extensions":[],"method":"POST","describe":"Edit a wiki page","args":{"content":{"describe":""},"page":{"describe":"the name of an existing page or a new page to create"},"previous":{"describe":"the starting point revision for this edit"},"reason":{"describe":"a string up to 256 characters long, consisting of printable characters."},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/wiki/hide","url":{"oauth":"https://oauth.reddit.com/api/wiki/hide","standard":"https://ssl.reddit.com/api/wiki/hide"},"oauth":["modwiki"],"extensions":[],"method":"POST","describe":"Toggle the public visibility of a wiki page revision","args":{"page":{"describe":"the name of an existing wiki page"},"revision":{"describe":"a wiki revision ID"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/r/$subreddit/api/wiki/hide","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/wiki/hide","standard":"https://ssl.reddit.com/r/$subreddit/api/wiki/hide"},"oauth":["modwiki"],"extensions":[],"method":"POST","describe":"Toggle the public visibility of a wiki page revision","args":{"page":{"describe":"the name of an existing wiki page"},"revision":{"describe":"a wiki revision ID"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/api/wiki/revert","url":{"oauth":"https://oauth.reddit.com/api/wiki/revert","standard":"https://ssl.reddit.com/api/wiki/revert"},"oauth":["modwiki"],"extensions":[],"method":"POST","describe":"Revert a wiki page to revision","args":{"page":{"describe":"the name of an existing wiki page"},"revision":{"describe":"a wiki revision ID"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/r/$subreddit/api/wiki/revert","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/api/wiki/revert","standard":"https://ssl.reddit.com/r/$subreddit/api/wiki/revert"},"oauth":["modwiki"],"extensions":[],"method":"POST","describe":"Revert a wiki page to revision","args":{"page":{"describe":"the name of an existing wiki page"},"revision":{"describe":"a wiki revision ID"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/wiki/discussions/$page","url":{"oauth":"https://oauth.reddit.com/wiki/discussions/$page","standard":"http://www.reddit.com/wiki/discussions/$page"},"oauth":["wikiread"],"extensions":[],"method":"GET","describe":"Retrieve a list of discussions about this wiki page\n\nThis endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"page":{"describe":"the name of an existing wiki page"},"show":{"describe":"(optional) the string all"}},"isListing":true},{"path":"/r/$subreddit/wiki/discussions/$page","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/wiki/discussions/$page","standard":"http://www.reddit.com/r/$subreddit/wiki/discussions/$page"},"oauth":["wikiread"],"extensions":[],"method":"GET","describe":"Retrieve a list of discussions about this wiki page\n\nThis endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"page":{"describe":"the name of an existing wiki page"},"show":{"describe":"(optional) the string all"}},"isListing":true},{"path":"/wiki/pages","url":{"oauth":"https://oauth.reddit.com/wiki/pages","standard":"http://www.reddit.com/wiki/pages"},"oauth":["wikiread"],"extensions":[],"method":"GET","describe":"Retrieve a list of wiki pages in this subreddit","args":{},"isListing":false},{"path":"/r/$subreddit/wiki/pages","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/wiki/pages","standard":"http://www.reddit.com/r/$subreddit/wiki/pages"},"oauth":["wikiread"],"extensions":[],"method":"GET","describe":"Retrieve a list of wiki pages in this subreddit","args":{},"isListing":false},{"path":"/wiki/revisions","url":{"oauth":"https://oauth.reddit.com/wiki/revisions","standard":"http://www.reddit.com/wiki/revisions"},"oauth":["wikiread"],"extensions":[],"method":"GET","describe":"Retrieve a list of recently changed wiki pages in this subreddit","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"show":{"describe":"(optional) the string all"}},"isListing":true},{"path":"/r/$subreddit/wiki/revisions","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/wiki/revisions","standard":"http://www.reddit.com/r/$subreddit/wiki/revisions"},"oauth":["wikiread"],"extensions":[],"method":"GET","describe":"Retrieve a list of recently changed wiki pages in this subreddit","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"show":{"describe":"(optional) the string all"}},"isListing":true},{"path":"/wiki/revisions/$page","url":{"oauth":"https://oauth.reddit.com/wiki/revisions/$page","standard":"http://www.reddit.com/wiki/revisions/$page"},"oauth":["wikiread"],"extensions":[],"method":"GET","describe":"Retrieve a list of revisions of this wiki page\n\nThis endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"page":{"describe":"the name of an existing wiki page"},"show":{"describe":"(optional) the string all"}},"isListing":true},{"path":"/r/$subreddit/wiki/revisions/$page","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/wiki/revisions/$page","standard":"http://www.reddit.com/r/$subreddit/wiki/revisions/$page"},"oauth":["wikiread"],"extensions":[],"method":"GET","describe":"Retrieve a list of revisions of this wiki page\n\nThis endpoint is a listing.","args":{"after":{"describe":"fullname of a thing"},"before":{"describe":"fullname of a thing"},"count":{"describe":"a positive integer (default: 0)"},"limit":{"describe":"the maximum number of items desired (default: 25, maximum: 100)"},"page":{"describe":"the name of an existing wiki page"},"show":{"describe":"(optional) the string all"}},"isListing":true},{"path":"/wiki/settings/$page","url":{"oauth":"https://oauth.reddit.com/wiki/settings/$page","standard":"http://www.reddit.com/wiki/settings/$page"},"oauth":["modwiki"],"extensions":[],"method":"GET","describe":"Retrieve the current permission settings for page","args":{"page":{"describe":"the name of an existing wiki page"}},"isListing":false},{"path":"/r/$subreddit/wiki/settings/$page","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/wiki/settings/$page","standard":"http://www.reddit.com/r/$subreddit/wiki/settings/$page"},"oauth":["modwiki"],"extensions":[],"method":"GET","describe":"Retrieve the current permission settings for page","args":{"page":{"describe":"the name of an existing wiki page"}},"isListing":false},{"path":"/wiki/settings/$page","url":{"oauth":"https://oauth.reddit.com/wiki/settings/$page","standard":"https://ssl.reddit.com/wiki/settings/$page"},"oauth":["modwiki"],"extensions":[],"method":"POST","describe":"Update the permissions and visibility of wiki page","args":{"listed":{"describe":"boolean value"},"page":{"describe":"the name of an existing wiki page"},"permlevel":{"describe":"an integer"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/r/$subreddit/wiki/settings/$page","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/wiki/settings/$page","standard":"https://ssl.reddit.com/r/$subreddit/wiki/settings/$page"},"oauth":["modwiki"],"extensions":[],"method":"POST","describe":"Update the permissions and visibility of wiki page","args":{"listed":{"describe":"boolean value"},"page":{"describe":"the name of an existing wiki page"},"permlevel":{"describe":"an integer"},"uh":{"describe":"a modhash"}},"isListing":false},{"path":"/wiki/$page","url":{"oauth":"https://oauth.reddit.com/wiki/$page","standard":"http://www.reddit.com/wiki/$page"},"oauth":["wikiread"],"extensions":[],"method":"GET","describe":"Return the content of a wiki page\n\nIf v is given, show the wiki page as it was at that version\nIf both v and v2 are given, show a diff of the two","args":{"page":{"describe":"the name of an existing wiki page"},"v":{"describe":"a wiki revision ID"},"v2":{"describe":"a wiki revision ID"}},"isListing":false},{"path":"/r/$subreddit/wiki/$page","url":{"oauth":"https://oauth.reddit.com/r/$subreddit/wiki/$page","standard":"http://www.reddit.com/r/$subreddit/wiki/$page"},"oauth":["wikiread"],"extensions":[],"method":"GET","describe":"Return the content of a wiki page\n\nIf v is given, show the wiki page as it was at that version\nIf both v and v2 are given, show a diff of the two","args":{"page":{"describe":"the name of an existing wiki page"},"v":{"describe":"a wiki revision ID"},"v2":{"describe":"a wiki revision ID"}},"isListing":false}];
 
 
-},{}],5:[function(_dereq_,module,exports){
+},{}],11:[function(_dereq_,module,exports){
 /**
  * Module dependencies.
  */
@@ -8321,7 +9213,7 @@ request.put = function(url, data, fn){
 
 module.exports = request;
 
-},{"emitter":6,"reduce":7}],6:[function(_dereq_,module,exports){
+},{"emitter":12,"reduce":13}],12:[function(_dereq_,module,exports){
 
 /**
  * Expose `Emitter`.
@@ -8487,7 +9379,7 @@ Emitter.prototype.hasListeners = function(event){
   return !! this.listeners(event).length;
 };
 
-},{}],7:[function(_dereq_,module,exports){
+},{}],13:[function(_dereq_,module,exports){
 
 /**
  * Reduce `arr` with `fn`.
@@ -8512,7 +9404,7 @@ module.exports = function(arr, fn, initial){
   
   return curr;
 };
-},{}],8:[function(_dereq_,module,exports){
+},{}],14:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2011-2013 original author or authors */
 
 /**
@@ -8541,7 +9433,7 @@ define(function(_dereq_) {
 
 
 
-},{"./when":25}],9:[function(_dereq_,module,exports){
+},{"./when":31}],15:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -8560,7 +9452,7 @@ define(function (_dereq_) {
 });
 })(typeof define === 'function' && define.amd ? define : function (factory) { module.exports = factory(_dereq_); });
 
-},{"./Scheduler":11,"./async":13,"./makePromise":23}],10:[function(_dereq_,module,exports){
+},{"./Scheduler":17,"./async":19,"./makePromise":29}],16:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -8632,7 +9524,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],11:[function(_dereq_,module,exports){
+},{}],17:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -8716,7 +9608,7 @@ define(function(_dereq_) {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(_dereq_); }));
 
-},{"./Queue":10}],12:[function(_dereq_,module,exports){
+},{"./Queue":16}],18:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -8744,7 +9636,7 @@ define(function() {
 	return TimeoutError;
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
-},{}],13:[function(_dereq_,module,exports){
+},{}],19:[function(_dereq_,module,exports){
 (function (process){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
@@ -8809,7 +9701,7 @@ define(function(_dereq_) {
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(_dereq_); }));
 
 }).call(this,_dereq_("/home/trev/git/snoocore/node_modules/browserify/node_modules/insert-module-globals/node_modules/process/browser.js"))
-},{"/home/trev/git/snoocore/node_modules/browserify/node_modules/insert-module-globals/node_modules/process/browser.js":2}],14:[function(_dereq_,module,exports){
+},{"/home/trev/git/snoocore/node_modules/browserify/node_modules/insert-module-globals/node_modules/process/browser.js":3}],20:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -9068,7 +9960,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],15:[function(_dereq_,module,exports){
+},{}],21:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -9211,7 +10103,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],16:[function(_dereq_,module,exports){
+},{}],22:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -9240,7 +10132,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],17:[function(_dereq_,module,exports){
+},{}],23:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -9274,7 +10166,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],18:[function(_dereq_,module,exports){
+},{}],24:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -9339,7 +10231,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],19:[function(_dereq_,module,exports){
+},{}],25:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -9364,7 +10256,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],20:[function(_dereq_,module,exports){
+},{}],26:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -9444,7 +10336,7 @@ define(function(_dereq_) {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(_dereq_); }));
 
-},{"../TimeoutError":12,"../timer":24}],21:[function(_dereq_,module,exports){
+},{"../TimeoutError":18,"../timer":30}],27:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -9548,7 +10440,7 @@ define(function(_dereq_) {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(_dereq_); }));
 
-},{"../timer":24}],22:[function(_dereq_,module,exports){
+},{"../timer":30}],28:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -9588,7 +10480,7 @@ define(function() {
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
 
-},{}],23:[function(_dereq_,module,exports){
+},{}],29:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -10361,7 +11253,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],24:[function(_dereq_,module,exports){
+},{}],30:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -10390,7 +11282,7 @@ define(function(_dereq_) {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(_dereq_); }));
 
-},{}],25:[function(_dereq_,module,exports){
+},{}],31:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 
 /**
@@ -10665,10 +11557,12 @@ define(function (_dereq_) {
 });
 })(typeof define === 'function' && define.amd ? define : function (factory) { module.exports = factory(_dereq_); });
 
-},{"./lib/Promise":9,"./lib/TimeoutError":12,"./lib/decorators/array":14,"./lib/decorators/flow":15,"./lib/decorators/fold":16,"./lib/decorators/inspect":17,"./lib/decorators/iterate":18,"./lib/decorators/progress":19,"./lib/decorators/timed":20,"./lib/decorators/unhandledRejection":21,"./lib/decorators/with":22}],26:[function(_dereq_,module,exports){
+},{"./lib/Promise":15,"./lib/TimeoutError":18,"./lib/decorators/array":20,"./lib/decorators/flow":21,"./lib/decorators/fold":22,"./lib/decorators/inspect":23,"./lib/decorators/iterate":24,"./lib/decorators/progress":25,"./lib/decorators/timed":26,"./lib/decorators/unhandledRejection":27,"./lib/decorators/with":28}],32:[function(_dereq_,module,exports){
 "use strict";
 
-var when = _dereq_('when')
+var querystring = _dereq_('querystring')
+, util = _dereq_('util')
+, when = _dereq_('when')
 , request = _dereq_('superagent');
 
 var oauth = {};
@@ -10677,7 +11571,7 @@ function normalizeScope(scope) {
 	// Set options.scope if not set, or convert an array into a string
 	if (typeof scope === 'undefined') {
 		scope = 'identity';
-	} else if (scope instanceof Array) {
+	} else if (util.isArray(scope)) {
 		scope = scope.join(',');
 	}
 	return scope;
@@ -10701,17 +11595,7 @@ oauth.getAuthUrl = function(options) {
 		delete options.mobile;
 	}
 
-	var serialize = function(obj) {
-		var str = [], encode = encodeURIComponent;
-		for (var key in obj) {
-			if (obj.hasOwnProperty(key)) {
-				str.push(encode(key) + "=" + encode(obj[key]));
-			}
-		}
-		return str.join("&");
-	};
-
-	return baseUrl + '?' + serialize(options);
+	return baseUrl + '?' + querystring.stringify(options);
 };
 
 /*
@@ -10758,6 +11642,6 @@ oauth.getAuthData = function(appType, options) {
 
 module.exports = oauth;
 
-},{"superagent":5,"when":25}]},{},[1])
+},{"querystring":6,"superagent":11,"util":8,"when":31}]},{},[1])
 (1)
 });
