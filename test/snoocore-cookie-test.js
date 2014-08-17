@@ -304,7 +304,7 @@ describe('Snoocore Cookie Test', function () {
 
 		});
 
-		it.only('should handle empty listings', function() {
+		it('should handle empty listings', function() {
 			// or reddit('/user/$username/$where').listing
 			return reddit.user.$username.$where.listing({
 				$username: 'emptyListing', // an account with no comments
