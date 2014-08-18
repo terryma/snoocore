@@ -61,6 +61,10 @@ The stickied children in this slice. This will usually only be populated in the 
 
 Gives back a list of the stickied children and the non-stickied children (does not separate them out).
 
+### `slice.empty`
+
+Boolean determining if a slice returned no results. The value is true when `slice.allChildren` is empty and false otherwise. Useful for determining the end of a listing.
+
 ### `slice.count`
 
 The count of the number of children that have loaded for this slice. If the listing limit is 25 (the default), the first slice will have a count of `0`, the next slice will have a count of `25` and so on. `slice.count` does _not_ take into consideration stickied children.
@@ -72,6 +76,10 @@ The `before` fullname.
 ### `slice.after`
 
 The `after` fullname. 
+
+### `slice.get`
+
+Should rarely be needed. This is the raw API response from reddit (as if you called `.get` instead of `.listing`) for this slice.
 
 ## Slice functions
 
