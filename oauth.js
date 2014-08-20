@@ -18,24 +18,22 @@ function normalizeScope(scope) {
 }
 
 oauth.getAuthUrl = function(options) {
-	options = options || {};
+	var query = {};
 
-	options.client_id = options.consumerKey;
-	options.state = options.state;
-	options.redirect_uri = options.redirectUri;
-
-	options.duration = options.duration || 'temporary';
-	options.response_type = options.response_type || 'code';
-	options.scope = normalizeScope(options.scope);
+	query.client_id = options.consumerKey;
+	query.state = options.state;
+	query.redirect_uri = options.redirectUri;
+	query.duration = options.duration || 'temporary';
+	query.response_type = options.response_type || 'code';
+	query.scope = normalizeScope(options.scope);
 
 	var baseUrl = 'https://ssl.reddit.com/api/v1/authorize';
 
 	if (options.mobile) {
 		baseUrl += '.compact';
-		delete options.mobile;
 	}
 
-	return baseUrl + '?' + querystring.stringify(options);
+	return baseUrl + '?' + querystring.stringify(query);
 };
 
 /*
