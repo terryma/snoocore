@@ -9,8 +9,8 @@ var Snoocore = require('../Snoocore')
 , chai = require('chai')
 , chaiAsPromised = require('chai-as-promised');
 
-chai.Should();
 chai.use(chaiAsPromised);
+var expect = chai.expect
 
 /* global describe */
 /* global it */
@@ -60,7 +60,7 @@ describe('Snoocore OAuth Test', function () {
 		});
 
 		it('should get back error 403 when not authenticated', function() {
-			return snoocore.api.v1.me.get().should.be.rejected;
+			return expect(snoocore.api.v1.me.get()).to.eventually.be.rejected;
 		});
 
 	});
@@ -100,8 +100,8 @@ describe('Snoocore OAuth Test', function () {
 					return snoocore.api.v1.me.get();
 				})
 				.then(function(data) {
-					chai.expect(data.error).to.be.undefined;
-					data.name.should.be.a('string');
+					expect(data.error).to.be.undefined;
+					expect(data.name).to.be.a('string');
 				});
 			});
 
@@ -125,8 +125,8 @@ describe('Snoocore OAuth Test', function () {
 				return snoocore.api.v1.me.get();
 			})
 			.then(function(data) {
-				chai.expect(data.error).to.be.undefined;
-				data.name.should.equal(config.reddit.REDDIT_USERNAME);
+				expect(data.error).to.be.undefined;
+				expect(data.name).to.equal(config.reddit.REDDIT_USERNAME);
 			});
 		});
 
@@ -146,8 +146,8 @@ describe('Snoocore OAuth Test', function () {
 				return snoocore.api.v1.me.get();
 			})
 			.then(function(data) {
-				chai.expect(data.error).to.be.undefined;
-				data.name.should.equal(config.reddit.REDDIT_USERNAME);
+				expect(data.error).to.be.undefined;
+				expect(data.name).to.equal(config.reddit.REDDIT_USERNAME);
 			});
 		});
 
@@ -160,19 +160,15 @@ describe('Snoocore OAuth Test', function () {
 		});
 
 		it('should get resources when logged in', function() {
-			return wait()
-			.then(auth)
-			.then(wait)
+			return auth()
 			.then(snoocore.api.v1.me.get)
 			.then(function(data) {
-				data.name.should.equal(config.reddit.REDDIT_USERNAME);
+				expect(data.name).to.equal(config.reddit.REDDIT_USERNAME);
 			});
 		});
 
 		it('should GET resources when logged in (respect parameters)', function() {
-			return wait()
-			.then(auth)
-			.then(wait)
+			return auth()
 			.then(function() {
 				return snoocore.subreddits.mine.$where.get({
 					$where: 'subscriber',
@@ -180,7 +176,7 @@ describe('Snoocore OAuth Test', function () {
 				});
 			})
 			.then(function(result) {
-				result.data.children.length.should.equal(2);
+				expect(result.data.children.length).to.equal(2);
 			});
 		});
 

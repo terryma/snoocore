@@ -18,15 +18,14 @@ module.exports = function(config) {
 		'node_modules/chai-as-promised/lib/chai-as-promised.js',
 		'node_modules/when/build/when.js',
 		'Snoocore-standalone.js',
-		'test/testConfig.js',
-		'test/snoocore-test.js',
-		'test/snoocore-cookie-test.js'
+		'test/*'
 	],
 
 
 	// list of files to exclude
 	exclude: [
-
+		'test/oauth-test.js',
+		'test/snoocore-oauth-test.js'
 	],
 
 

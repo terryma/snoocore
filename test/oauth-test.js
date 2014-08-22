@@ -9,13 +9,13 @@ var oauth = require('../oauth')
 , chai = require('chai')
 , chaiAsPromised = require('chai-as-promised');
 
-chai.Should();
 chai.use(chaiAsPromised);
+var expect = chai.expect;
 
 /* global describe */
 /* global it */
 
-describe('oauth', function (require) {
+describe('OAuth Module Test', function (require) {
 
 	// Comply with Reddit's API terms
 	function wait() {
@@ -23,11 +23,9 @@ describe('oauth', function (require) {
 	}
 
 	function openAndAuth(url) {
-		console.log('##############################################');
 		console.log('Opening the following url in your browser:');
 		console.log('\n' + url + '\n');
-		console.log('You have thirty seconds...');
-		console.log('##############################################');
+		console.log('You have thirty seconds to authenticate...');
 		open(url);
 	}
 
@@ -39,19 +37,13 @@ describe('oauth', function (require) {
 				state: 'foo'
 			});
 
-			url.indexOf('https://ssl.reddit.com/api/v1/authorize?')
-				.should.not.equal(-1);
-			url.indexOf('client_id=' + config.reddit.REDDIT_KEY_WEB)
-				.should.not.equal(-1);
-			url.indexOf('state=foo')
-				.should.not.equal(-1);
-			url.indexOf('redirect_uri=' + encodeURIComponent(config.reddit.redirectUri))
-				.should.not.equal(-1);
-			url.indexOf('duration=temporary')
-				.should.not.equal(-1);
-			url.indexOf('response_type=code')
-				.should.not.equal(-1);
-			url.indexOf('scope=identity');
+			expect(url.indexOf('https://ssl.reddit.com/api/v1/authorize?')).to.not.equal(-1);
+			expect(url.indexOf('client_id=' + config.reddit.REDDIT_KEY_WEB)).to.not.equal(-1);
+			expect(url.indexOf('state=foo')).to.not.equal(-1);
+			expect(url.indexOf('redirect_uri=' + encodeURIComponent(config.reddit.redirectUri))).to.not.equal(-1);
+			expect(url.indexOf('duration=temporary')).to.not.equal(-1);
+			expect(url.indexOf('response_type=code')).to.not.equal(-1);
+			expect(url.indexOf('scope=identity')).to.not.equal(-1);
 		});
 
 		it('should get a proper authorization url (mobile friendly) (WEB/INSTALLED)', function() {
@@ -62,13 +54,13 @@ describe('oauth', function (require) {
 				mobile: true
 			});
 
-			url.indexOf('https://ssl.reddit.com/api/v1/authorize.compact?');
-			url.indexOf('client_id=' + config.reddit.REDDIT_KEY_WEB);
-			url.indexOf('state=foo');
-			url.indexOf('redirect_uri=' + encodeURIComponent(config.reddit.redirectUri));
-			url.indexOf('duration=temporary');
-			url.indexOf('response_type=code');
-			url.indexOf('scope=identity');
+			expect(url.indexOf('https://ssl.reddit.com/api/v1/authorize.compact?')).to.not.equal(-1);
+			expect(url.indexOf('client_id=' + config.reddit.REDDIT_KEY_WEB)).to.not.equal(-1);
+			expect(url.indexOf('state=foo')).to.not.equal(-1);
+			expect(url.indexOf('redirect_uri=' + encodeURIComponent(config.reddit.redirectUri))).to.not.equal(-1);
+			expect(url.indexOf('duration=temporary')).to.not.equal(-1);
+			expect(url.indexOf('response_type=code')).to.not.equal(-1);
+			expect(url.indexOf('scope=identity')).to.not.equal(-1);
 		});
 
 		it('should get back a proper authorization url (multiple scopes) (WEB/INSTALLED)', function() {
@@ -79,28 +71,20 @@ describe('oauth', function (require) {
 				scope: [ 'identity', 'read', 'subscribe' ]
 			});
 
-			url.indexOf('https://ssl.reddit.com/api/v1/authorize?')
-				.should.not.equal(-1);
-			url.indexOf('client_id=' + config.reddit.REDDIT_KEY_WEB)
-				.should.not.equal(-1);
-			url.indexOf('state=foo')
-				.should.not.equal(-1);
-			url.indexOf('redirect_uri=' + encodeURIComponent(config.reddit.redirectUri))
-				.should.not.equal(-1);
-			url.indexOf('duration=temporary')
-				.should.not.equal(-1);
-			url.indexOf('response_type=code')
-				.should.not.equal(-1);
-			url.indexOf('scope=' + encodeURIComponent('identity,read,subscribe'))
-				.should.not.equal(-1);
+			expect(url.indexOf('https://ssl.reddit.com/api/v1/authorize?')).to.not.equal(-1);
+			expect(url.indexOf('client_id=' + config.reddit.REDDIT_KEY_WEB)).to.not.equal(-1);
+			expect(url.indexOf('state=foo')).to.not.equal(-1);
+			expect(url.indexOf('redirect_uri=' + encodeURIComponent(config.reddit.redirectUri))).to.not.equal(-1);
+			expect(url.indexOf('duration=temporary')).to.not.equal(-1);
+			expect(url.indexOf('response_type=code')).to.not.equal(-1);
+			expect(url.indexOf('scope=' + encodeURIComponent('identity,read,subscribe'))).to.not.equal(-1);
 		});
 	});
 
 	describe('#getAuthData()', function() {
 
 		it('should get an access token (WEB)', function() {
-			// because there is user intervention with these tests, give them
-			// two minutes before timing out!
+
 			this.timeout(30000);
 
 			var url = oauth.getAuthUrl({
@@ -115,8 +99,8 @@ describe('oauth', function (require) {
 
 				if (params.error) { throw new Error(params.error); }
 
-				params.state.should.equal('foo');
-				params.code.should.be.a.string;
+				expect(params.state).to.equal('foo');
+				expect(params.code).to.be.a('string');
 
 				var authorizationCode = params.code;
 
@@ -128,19 +112,18 @@ describe('oauth', function (require) {
 				});
 			})
 			.then(function(authData) {
-				authData.should.be.a.object;
+				expect(authData).to.be.an('object');
 				if (authData.error) { throw new Error(authData.error); }
 
-				authData.access_token.should.be.a.string;
-				authData.token_type.should.equal('bearer');
-				authData.expires_in.should.equal(3600);
-				authData.scope.should.equal('identity');
+				expect(authData.access_token).to.be.a('string');
+				expect(authData.token_type).to.equal('bearer');
+				expect(authData.expires_in).to.equal(3600);
+				expect(authData.scope).to.equal('identity');
 			});
 		});
 
 		it('should get an access token (INSTALLED)', function() {
-			// because there is user intervention with these tests, give them
-			// two minutes before timing out!
+
 			this.timeout(30000);
 
 			var url = oauth.getAuthUrl({
@@ -155,8 +138,8 @@ describe('oauth', function (require) {
 
 				if (params.error) { throw new Error(params.error); }
 
-				params.state.should.equal('foo');
-				params.code.should.be.a.string;
+				expect(params.state).to.equal('foo');
+				expect(params.code).to.be.a('string');
 
 				var authorizationCode = params.code;
 
@@ -168,17 +151,19 @@ describe('oauth', function (require) {
 				});
 			})
 			.then(function(authData) {
-				authData.should.be.a.object;
+				expect(authData).to.be.an('object');
+
 				if (authData.error) { throw new Error(authData.error); }
 
-				authData.access_token.should.be.a.string;
-				authData.token_type.should.equal('bearer');
-				authData.expires_in.should.equal(3600);
-				authData.scope.should.equal('identity');
+				expect(authData.access_token).to.be.a('string');
+				expect(authData.token_type).to.equal('bearer');
+				expect(authData.expires_in).to.equal(3600);
+				expect(authData.scope).to.equal('identity');
 			});
 		});
 
 		it('should get an access token (SCRIPT)', function() {
+
 			this.timeout(10000);
 
 			return oauth.getAuthData('script', {
@@ -188,13 +173,14 @@ describe('oauth', function (require) {
 				password: config.reddit.REDDIT_PASSWORD
 			})
 			.then(function(authData) {
-				authData.should.be.a.object;
+				expect(authData).to.be.an('object');
+
 				if (authData.error) { throw new Error(authData.error); }
 
-				authData.access_token.should.be.a.string;
-				authData.token_type.should.equal('bearer');
-				authData.expires_in.should.equal(3600);
-				authData.scope.should.equal('identity');
+				expect(authData.access_token).to.be.a('string');
+				expect(authData.token_type).to.equal('bearer');
+				expect(authData.expires_in).to.equal(3600);
+				expect(authData.scope).to.equal('identity');
 			});
 		});
 
@@ -209,13 +195,14 @@ describe('oauth', function (require) {
 				scope: 'flair'
 			})
 			.then(function(authData) {
-				authData.should.be.a.object;
+				expect(authData).to.be.an('object');
+
 				if (authData.error) { throw new Error(authData.error); }
 
-				authData.access_token.should.be.a.string;
-				authData.token_type.should.equal('bearer');
-				authData.expires_in.should.equal(3600);
-				authData.scope.should.equal('flair');
+				expect(authData.access_token).to.be.a('string');
+				expect(authData.token_type).to.equal('bearer');
+				expect(authData.expires_in).to.equal(3600);
+				expect(authData.scope).to.equal('flair');
 			});
 		});
 
@@ -230,13 +217,14 @@ describe('oauth', function (require) {
 				scope: [ 'flair' ]
 			})
 			.then(function(authData) {
-				authData.should.be.a.object;
+				expect(authData).to.be.an('object');
+
 				if (authData.error) { throw new Error(authData.error); }
 
-				authData.access_token.should.be.a.string;
-				authData.token_type.should.equal('bearer');
-				authData.expires_in.should.equal(3600);
-				authData.scope.should.equal('flair');
+				expect(authData.access_token).to.be.a('string');
+				expect(authData.token_type).to.equal('bearer');
+				expect(authData.expires_in).to.equal(3600);
+				expect(authData.scope).to.equal('flair');
 			});
 		});
 
@@ -251,13 +239,14 @@ describe('oauth', function (require) {
 				scope: [ 'flair', 'identity' ]
 			})
 			.then(function(authData) {
-				authData.should.be.a.object;
+				expect(authData).to.be.an('object');
+
 				if (authData.error) { throw new Error(authData.error); }
 
-				authData.access_token.should.be.a.string;
-				authData.token_type.should.equal('bearer');
-				authData.expires_in.should.equal(3600);
-				authData.scope.should.equal('flair,identity');
+				expect(authData.access_token).to.be.a('string');
+				expect(authData.token_type).to.equal('bearer');
+				expect(authData.expires_in).to.equal(3600);
+				expect(authData.scope).to.equal('flair,identity');
 			});
 		});
 

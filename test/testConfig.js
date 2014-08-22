@@ -11,7 +11,7 @@ config.reddit = {
 	redirectUri: 'http://localhost:3000',
 
 	REDDIT_USERNAME: 'snoocore',
-	REDDIT_PASSWORD: 'mFe$6#&UT0#T7!7IxaSg',
+	REDDIT_PASSWORD: 'H&LUiRj1OgLP%6RqN!Wc',
 
 	REDDIT_KEY_WEB: 'UXPNWlG5W3FWYg',
 	REDDIT_SECRET_WEB: 'y7GsNwB88--MmrnVez_v7jYKO0I',
@@ -26,7 +26,8 @@ config.reddit = {
 
 if (typeof require === "function" &&
 	typeof exports === "object" &&
-	typeof module === "object")
+	typeof module === "object" &&
+    typeof window === "undefined")
 {
 	module.exports = config; // NodeJS
 } else {

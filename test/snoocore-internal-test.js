@@ -2,7 +2,8 @@
 
 var isNode = typeof require === "function" &&
 	typeof exports === "object" &&
-	typeof module === "object";
+	typeof module === "object" &&
+	typeof window === "undefined";
 
 if (isNode)
 {
@@ -20,7 +21,7 @@ var expect = chai.expect;
 /* global afterEach */
 /* global beforeEach */
 
-describe('Snoocore Test', function () {
+describe('Snoocore Internal Tests', function () {
 
 	this.timeout(20000);
 

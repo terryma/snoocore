@@ -40,10 +40,10 @@
   "keywords": [
     "reddit",
     "api",
-    "snoocore"
+    "snoocore",
+    "wrapper"
   ],
   "scripts": {
-    "test": "./node_modules/.bin/mocha",
-    "standalone": "./node_modules/.bin/browserify ./Snoocore.js -s Snoocore -o ./Snoocore-standalone.js"
+    "test": "./run.js all"
   }
 }
