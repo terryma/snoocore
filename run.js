@@ -125,11 +125,11 @@ exports.runTests = function(done) {
 };
 
 exports.all = function(done) {
-	return installModules(function(error) {
+	return exports.installModules(function(error) {
 		if (error) { return done(error); }
-		return buildStandalone(function(error) {
+		return exports.buildStandalone(function(error) {
 			if (error) { return done(error); }
-			return runTests(function(error) {
+			return exports.runTests(function(error) {
 				return error ? done(error) : done();
 			});
 		});

@@ -29,6 +29,9 @@ function Snoocore(config) {
 	self._redditSession = ''; // The current cookie (reddit_session)
 	self._authData = {}; // Set if user has authenticated with OAuth
 
+	self._login = config.login || {};
+	self._oauth = config.oauth || {};
+
 	// The built calls for the Reddit API.
 	var redditApi = buildRedditApi(rawApi);
 
@@ -481,11 +484,50 @@ function Snoocore(config) {
 			});
 		});
 	};
+	
+	self.getAuthUrl = function(state) {
+		return Snoocore.oauth.getAuthUrl({
+			consumerKey: self._oauth.consumerKey,
+			redirectUri: self._oauth.redirectUri,
+			state: state || Math.ceil(Math.random() * 1000),
+			scope: self._oauth.scope
+		});
+	};
 
 	// Sets the auth data from the oauth module to allow OAuth calls.
 	// Can accept a promise for the authentication data as well.
-	self.auth = function(authenticationData) {
-		return when(authenticationData).then(function(authDataResult) {
+	self.auth = function(authenticationCodeOrData) {
+
+		var args = Array.prototype.slice.call(arguments);
+		var authData = authenticationCodeOrData;
+
+		// Use internal config to get authentication data
+		// this will always be a type of script
+		if (args.length === 0) {
+			authData = Snoocore.oauth.getAuthData(self._oauth.type, {
+				consumerKey: self._oauth.consumerKey,
+				consumerSecret: self._oauth.consumerSecret,
+				scope: self._oauth.scope,
+				username: self._login.username,
+				password: self._login.password
+			});
+		}
+		// Use internal config to get authentication data
+		// this will either be a type of web or installed
+		else if (typeof args[0] === 'string') {
+
+			var authorizationCode = args[0];
+
+			authData = Snoocore.oauth.getAuthData(self._oauth.type, {
+				authorizationCode: authorizationCode,
+				consumerKey: self._oauth.consumerKey,
+				consumerSecret: self._oauth.consumerSecret,
+				redirectUri: self._oauth.redirectUri,
+				scope: self._oauth.scope
+			});
+		}
+
+		return when(authData).then(function(authDataResult) {
 			self._authData = authDataResult;
 		});
 	};
@@ -11578,24 +11620,22 @@ function normalizeScope(scope) {
 }
 
 oauth.getAuthUrl = function(options) {
-	options = options || {};
+	var query = {};
 
-	options.client_id = options.consumerKey;
-	options.state = options.state;
-	options.redirect_uri = options.redirectUri;
-
-	options.duration = options.duration || 'temporary';
-	options.response_type = options.response_type || 'code';
-	options.scope = normalizeScope(options.scope);
+	query.client_id = options.consumerKey;
+	query.state = options.state;
+	query.redirect_uri = options.redirectUri;
+	query.duration = options.duration || 'temporary';
+	query.response_type = options.response_type || 'code';
+	query.scope = normalizeScope(options.scope);
 
 	var baseUrl = 'https://ssl.reddit.com/api/v1/authorize';
 
 	if (options.mobile) {
 		baseUrl += '.compact';
-		delete options.mobile;
 	}
 
-	return baseUrl + '?' + querystring.stringify(options);
+	return baseUrl + '?' + querystring.stringify(query);
 };
 
 /*

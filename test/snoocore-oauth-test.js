@@ -10,7 +10,7 @@ var Snoocore = require('../Snoocore')
 , chaiAsPromised = require('chai-as-promised');
 
 chai.use(chaiAsPromised);
-var expect = chai.expect
+var expect = chai.expect;
 
 /* global describe */
 /* global it */
@@ -19,30 +19,6 @@ var expect = chai.expect
 describe('Snoocore OAuth Test', function () {
 
 	this.timeout(20000);
-
-	var snoocore = new Snoocore({
-		userAgent: 'snoocore-test-userAgent',
-		browser: false
-	});
-
-	// Comply with Reddit's API terms
-	function wait() {
-		return delay(2000);
-	}
-
-	// helper to authenticate
-	function auth() {
-		return Snoocore.oauth.getAuthData('script', {
-			consumerKey: config.reddit.REDDIT_KEY_SCRIPT,
-			consumerSecret: config.reddit.REDDIT_SECRET_SCRIPT,
-			username: config.reddit.REDDIT_USERNAME,
-			password: config.reddit.REDDIT_PASSWORD,
-			scope: [ 'identity', 'mysubreddits' ]
-		})
-		.then(function(authData) {
-			return snoocore.auth(authData);
-		});
-	}
 
 	function openAndAuth(url) {
 		console.log('##############################################');
@@ -53,25 +29,29 @@ describe('Snoocore OAuth Test', function () {
 		open(url);
 	}
 
-	describe('# TESTS FOR NON-AUTHENTICATION', function() {
+	describe('Unauthenticated test cases', function() {
+
+		var reddit = new Snoocore({ userAgent: 'snoocore-test-userAgent' });
 
 		beforeEach(function() {
-			return snoocore.deauth();
+			return reddit.deauth();
 		});
 
 		it('should get back error 403 when not authenticated', function() {
-			return expect(snoocore.api.v1.me.get()).to.eventually.be.rejected;
+			return expect(reddit.api.v1.me.get()).to.eventually.be.rejected;
 		});
 
 	});
 
-	describe('# TESTS FOR AUTHENTICATION', function() {
+	describe('Authenticate tests (EXTERNAL Snoocore.oauth)', function() {
+
+		var reddit = new Snoocore({ userAgent: 'snoocore-test-userAgent' });
 
 		beforeEach(function() {
-			return snoocore.deauth();
+			return reddit.deauth();
 		});
 
-		it('should authenticate with OAuth, and call an oauth endpoint (WEB)', function() {
+		it('should authenticate with OAuth, and call an oauth endpoint (EXTERNAL Snoocore.oauth => WEB)', function() {
 			// because there is user intervention with these tests, give them
 			// two minutes before timing out!
 			this.timeout(30000);
@@ -94,10 +74,10 @@ describe('Snoocore OAuth Test', function () {
 					redirectUri: config.reddit.redirectUri
 				})
 				.then(function(authData) {
-					return snoocore.auth(authData);
+					return reddit.auth(authData);
 				})
 				.then(function() {
-					return snoocore.api.v1.me.get();
+					return reddit.api.v1.me.get();
 				})
 				.then(function(data) {
 					expect(data.error).to.be.undefined;
@@ -107,9 +87,7 @@ describe('Snoocore OAuth Test', function () {
 
 		});
 
-		it('should authenticate with OAuth, and call an oauth endpoint (SCRIPT)', function() {
-			// because there is user intervention with these tests, give them
-			// two minutes before timing out!
+		it('should authenticate with OAuth, and call an oauth endpoint (EXTERNAL Snoocore.oauth => SCRIPT)', function() {
 			this.timeout(30000);
 
 			return Snoocore.oauth.getAuthData('script', {
@@ -119,10 +97,10 @@ describe('Snoocore OAuth Test', function () {
 				password: config.reddit.REDDIT_PASSWORD
 			})
 			.then(function(authData) {
-				return snoocore.auth(authData);
+				return reddit.auth(authData);
 			})
 			.then(function() {
-				return snoocore.api.v1.me.get();
+				return reddit.api.v1.me.get();
 			})
 			.then(function(data) {
 				expect(data.error).to.be.undefined;
@@ -131,8 +109,6 @@ describe('Snoocore OAuth Test', function () {
 		});
 
 		it('should take a promise for authData', function() {
-			// because there is user intervention with these tests, give them
-			// two minutes before timing out!
 			this.timeout(30000);
 
 			var authData = Snoocore.oauth.getAuthData('script', {
@@ -142,42 +118,132 @@ describe('Snoocore OAuth Test', function () {
 				password: config.reddit.REDDIT_PASSWORD
 			});
 
-			return snoocore.auth(authData).then(function() {
-				return snoocore.api.v1.me.get();
+			return reddit.auth(authData).then(function() {
+				return reddit.api.v1.me.get();
 			})
 			.then(function(data) {
 				expect(data.error).to.be.undefined;
 				expect(data.name).to.equal(config.reddit.REDDIT_USERNAME);
 			});
 		});
+		
+	});
 
+	describe('Authenticate tests (INTERNAL config based WEB)', function() {
+
+		var reddit = new Snoocore({
+			userAgent: 'snoocore-test-userAgent',
+			oauth: {
+				type: 'web',
+				consumerKey: config.reddit.REDDIT_KEY_WEB,
+				consumerSecret: config.reddit.REDDIT_SECRET_WEB,
+				redirectUri: config.reddit.redirectUri,
+				scope: [ 'identity' ]
+			}
+		});
+
+		it('should authenticate with OAuth, and call an oauth endpoint', function() {
+			this.timeout(30000);
+
+			var url = reddit.getAuthUrl();
+
+			openAndAuth(url);
+
+			return testServer.waitForRequest().then(function(params) {
+				var authorizationCode = params.code;
+				return reddit.auth(authorizationCode).then(reddit.api.v1.me.get).then(function(data) {
+					expect(data.error).to.be.undefined;
+					expect(data.name).to.be.a('string');
+				});
+			});
+		});
+
+		it('should authenticate with OAuth, and call an oauth endpoint (WITH STATE)', function() {
+			this.timeout(30000);
+
+			var state = 'foobar';
+			var url = reddit.getAuthUrl(state);
+
+			openAndAuth(url);
+
+			return testServer.waitForRequest().then(function(params) {
+
+				expect(params.state).to.equal(state);
+
+				var authorizationCode = params.code;
+				return reddit.auth(authorizationCode).then(reddit.api.v1.me.get).then(function(data) {
+					expect(data.error).to.be.undefined;
+					expect(data.name).to.be.a('string');
+				});
+			});
+		});
+
+	});
+
+	describe('Authenticate tests (INTERNAL config based SCRIPT)', function() {
+
+		var reddit = new Snoocore({
+			userAgent: 'snoocore-test-userAgent',
+			login: {
+				username: config.reddit.REDDIT_USERNAME,
+				password: config.reddit.REDDIT_PASSWORD
+			},
+			oauth: {
+				type: 'script',
+				consumerKey: config.reddit.REDDIT_KEY_SCRIPT,
+				consumerSecret: config.reddit.REDDIT_SECRET_SCRIPT
+			}
+		});
+
+		it('should authenticate with OAuth, and call an oauth endpoint', function() {
+			this.timeout(30000);
+
+			return reddit.auth().then(reddit.api.v1.me.get).then(function(data) {
+				expect(data.error).to.be.undefined;
+				expect(data.name).to.be.a('string');
+			});
+		});
 	});
 
 	describe('General Reddit API Tests (OAUTH)', function() {
 
+		var reddit = new Snoocore({
+			userAgent: 'snoocore-test-userAgent',
+			login: {
+				username: config.reddit.REDDIT_USERNAME,
+				password: config.reddit.REDDIT_PASSWORD
+			},
+			oauth: {
+				type: 'script',
+				consumerKey: config.reddit.REDDIT_KEY_SCRIPT,
+				consumerSecret: config.reddit.REDDIT_SECRET_SCRIPT,
+				scope: [ 'identity', 'mysubreddits' ]
+			}
+		});
+
 		beforeEach(function() {
-			return snoocore.deauth();
+			return reddit.deauth();
 		});
 
 		it('should get resources when logged in', function() {
-			return auth()
-			.then(snoocore.api.v1.me.get)
-			.then(function(data) {
-				expect(data.name).to.equal(config.reddit.REDDIT_USERNAME);
-			});
+			return reddit.auth()
+				.then(reddit.api.v1.me.get)
+				.then(function(data) {
+					expect(data.name).to.equal(config.reddit.REDDIT_USERNAME);
+				});
 		});
 
 		it('should GET resources when logged in (respect parameters)', function() {
-			return auth()
-			.then(function() {
-				return snoocore.subreddits.mine.$where.get({
-					$where: 'subscriber',
-					limit: 2
+			return reddit.auth()
+				.then(function() {
+					return reddit.subreddits.mine.$where.get({
+						$where: 'subscriber',
+						limit: 2
+					});
+				})
+				.then(function(result) {
+					expect(result.data.children.length).to.equal(2);
 				});
-			})
-			.then(function(result) {
-				expect(result.data.children.length).to.equal(2);
-			});
 		});
 
 	});
