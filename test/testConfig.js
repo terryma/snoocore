@@ -1,3 +1,4 @@
+
 "use strict";
 
 var config = {};
@@ -11,7 +12,7 @@ config.reddit = {
 	redirectUri: 'http://localhost:3000',
 
 	REDDIT_USERNAME: 'snoocore',
-	REDDIT_PASSWORD: 'H&LUiRj1OgLP%6RqN!Wc',
+	REDDIT_PASSWORD: 'ps%k0lrY@wcOQS54ZN6N',
 
 	REDDIT_KEY_WEB: 'UXPNWlG5W3FWYg',
 	REDDIT_SECRET_WEB: 'y7GsNwB88--MmrnVez_v7jYKO0I',

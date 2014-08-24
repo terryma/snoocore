@@ -25,27 +25,12 @@ var expect = chai.expect;
 describe('Snoocore Cookie Test', function () {
 
 	this.timeout(20000);
-
-	var reddit;
-
-	beforeEach(function() {
-		reddit = new Snoocore({
-			userAgent: 'snoocore-test-userAgent',
-			browser: !isNode
-		});
-	});
-
-	// helper to login
-	function login() {
-		return reddit.login({
-			username: config.reddit.REDDIT_USERNAME,
-			password: config.reddit.REDDIT_PASSWORD
-		});
-	}
-
+	
 	describe('#login()', function() {
 
 		it('should login without the helper', function() {
+			var reddit = new Snoocore({ userAgent: 'snoocore-test-userAgent', browser: !isNode });
+
 			return reddit.logout().then(function() {
 				return reddit.api.login.post({
 					user: config.reddit.REDDIT_USERNAME,
@@ -62,6 +47,7 @@ describe('Snoocore Cookie Test', function () {
 		});
 
 		it('should login with username & password (helper/pretty version)', function() {
+			var reddit = new Snoocore({ userAgent: 'snoocore-test-userAgent', browser: !isNode });
 			return reddit.logout().then(function() {
 				return reddit.login({
 					username: config.reddit.REDDIT_USERNAME,
@@ -74,9 +60,29 @@ describe('Snoocore Cookie Test', function () {
 			});
 		});
 
+		it('should login with username & password set in config', function() {
+			var reddit = new Snoocore({ 
+				userAgent: 'snoocore-test-userAgent', 
+				browser: !isNode,
+				login: {
+					username: config.reddit.REDDIT_USERNAME,
+					password: config.reddit.REDDIT_PASSWORD
+				}
+			});
+
+			return reddit.logout()
+				.then(reddit.login)
+				.then(reddit.api['me.json'].get)
+				.then(function(result) {
+					console.error(result); //!!!debug
+					expect(result.data.name).to.equal(config.reddit.REDDIT_USERNAME);
+				});
+		});
+
 		// We can only use cookie / modhash login in non-browser JS.
 		if (isNode) {
 			it('should login with cookie & modhash', function() {
+				var reddit = new Snoocore({ userAgent: 'snoocore-test-userAgent', browser: !isNode });
 				// first login with a username & password to get a cookie
 				// and modhash. logout, and re-login with them instead of
 				// a username & password.
@@ -119,13 +125,23 @@ describe('Snoocore Cookie Test', function () {
 	describe('#logout()', function() {
 
 		it('should logout properly', function() {
+
+			var reddit = new Snoocore({ 
+				userAgent: 'snoocore-test-userAgent', 
+				browser: !isNode,
+				login: {
+					username: config.reddit.REDDIT_USERNAME,
+					password: config.reddit.REDDIT_PASSWORD
+				}
+			});
+
 			return reddit.logout()
 			// ensure we're logged out
 			.then(reddit.api['me.json'].get)
 			.then(function(result) {
 				expect(result).to.eql({});
 			})
-			.then(login)
+			.then(reddit.login)
 			.then(reddit.api['me.json'].get)
 			.then(function(result) {
 				expect(result.data.name).to.equal(config.reddit.REDDIT_USERNAME);

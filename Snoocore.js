@@ -423,6 +423,11 @@ function Snoocore(config) {
 
 	// Sets the modhash & cookie to allow for cookie-based calls
 	self.login = function(options) {
+
+		// If options is not defined, use the self._login options to use
+		// the options setup in the initial config.
+		options = options || self._login;
+
 		var hasUserPass = options.username && options.password
 		, hasCookieModhash = options.modhash && options.cookie;
 
