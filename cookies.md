@@ -29,6 +29,17 @@ var loginPromise = reddit.login({
 });
 ```
 
+If you specify the login options in the initial config, it can be used without options:
+
+```javascript
+var reddit = new Snoocore({
+    userAgent: 'logonTest',
+    login: { username: 'yourUsername', password: 'yourPassword' }
+});
+
+var loginPromise = reddit.login();
+```
+
 <sub>If needed, rem and api_type can be passed in as well. They default to **true** and **json** respectively.</sub>
 
 ## Logout
