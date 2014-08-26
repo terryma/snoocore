@@ -5,7 +5,7 @@ layout: default
 
 # Authenticating with OAuth
 
-It's not as bad as you think. Take a look at the guide below and have a look at the provided [examples](https://github.com/trevorsenior/snoocore-examples/tree/master) on GitHub.
+It's not as bad as you think. Take a look at the guide below and have a look at the provided [examples](https://github.com/trevorsenior/snoocore-examples/tree/master) on GitHub and the [OAuth2 documentation](https://github.com/reddit/reddit/wiki/OAuth2#manually-revoking-a-token) for reddit.
 
 ## Creating an application
 
@@ -19,7 +19,7 @@ To get started, visit the [Reddit application console](https://ssl.reddit.com/pr
 
 ## Script based Authentication
 
-See an example [here]()
+See an example [here](https://github.com/trevorsenior/snoocore-examples/blob/master/node/oauth-script.js).
 
 Script based authentication is the easiest way to authenticate using OAuth with the Reddit API:
 
@@ -52,7 +52,7 @@ The only caveat is that this method can only authenticate users listed as develo
 
 ## Web based Applications
 
-See an example [here]().
+See an example [here](https://github.com/trevorsenior/snoocore-examples/blob/master/node/oauth-web.js).
 
 Unlike script-based apps, web and installed apps can not authenticate using a username & password. The main difference is that you must wait for a user of your application to authenticate with Reddit (e.g. you must wait for reddit to get back with you with an authorization code before moving on)
 
