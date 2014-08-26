@@ -9,12 +9,16 @@ From the reddit documentation
 
 > Many endpoints on reddit use the same protocol for controlling pagination and filtering. These endpoints are called Listings and share five common parameters: after / before, limit, count, and show.
 
-Along side the basic HTTP verbs that you can use to call reddit endpoints (See [Basic Usage](basicUsage.html)), you can also use a listing helper for endpoints that are listings.
+Along side the basic HTTP verbs that you can use to call reddit endpoints (See [Basic Usage](basicUsage.html)). The listing helper can also be used for endpoints that are listings.
 
 Quick Example ([GET /r/hot](http://www.reddit.com/dev/api#GET_hot)):
 
 ```javascript
-reddit('/r/hot').listing({ limit: 10 }).then(function(slice) {
+reddit('/r/hot').listing({ 
+    // Any parameters for the endpoints can be used here as usual.
+    // In this case, we specify a limit of 10 children per slice
+    limit: 10
+}).then(function(slice) {
 
     console.log(slice.children); // The children that are not stickied
     console.log(slice.stickied); // The children that are stickied
@@ -43,7 +47,7 @@ For full working examples checkout the [examples on GitHub](https://github.com/t
 
 - - -
 
-## Attributes
+## Slice attributes
 
 ### `slice.children`
 
@@ -57,6 +61,10 @@ The stickied children in this slice. This will usually only be populated in the 
 
 Gives back a list of the stickied children and the non-stickied children (does not separate them out).
 
+### `slice.empty`
+
+Boolean determining if a slice returned no results. The value is true when `slice.allChildren` is empty and false otherwise. Useful for determining the end of a listing.
+
 ### `slice.count`
 
 The count of the number of children that have loaded for this slice. If the listing limit is 25 (the default), the first slice will have a count of `0`, the next slice will have a count of `25` and so on. `slice.count` does _not_ take into consideration stickied children.
@@ -69,7 +77,11 @@ The `before` fullname.
 
 The `after` fullname. 
 
-## Functions
+### `slice.get`
+
+Should rarely be needed. This is the raw API response from reddit (as if you called `.get` instead of `.listing`) for this slice.
+
+## Slice functions
 
 ### `slice.next()`
 
