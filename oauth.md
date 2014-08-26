@@ -5,7 +5,7 @@ layout: default
 
 # Authenticating with OAuth
 
-It's not as bad as you think. Take a look at the guide below and have a look at the provided [examples ](https://github.com/trevorsenior/snoocore/tree/master/examples) on GitHub.
+It's not as bad as you think. Take a look at the guide below and have a look at the provided [examples](https://github.com/trevorsenior/snoocore-examples/tree/master) on GitHub.
 
 ## Creating an application
 
@@ -19,23 +19,26 @@ To get started, visit the [Reddit application console](https://ssl.reddit.com/pr
 
 ## Script based Authentication
 
+See an example [here]()
+
 Script based authentication is the easiest way to authenticate using OAuth with the Reddit API:
 
 ```javascript
-var Snoocore = require('snoocore')
-, reddit = new Snoocore(/* config options */)
+var Snoocore = require('snoocore');
 
-// Authenticate with Reddit
-var authData = Snoocore.oauth.getAuthData('script', {
-    consumerKey: 'your client_id from reddit',
-    consumerSecret: 'your client_secret from reddit',
-    username: 'yourUsername',
-    password: 'yourPassword',
-    scope: [ 'flair', 'identity' ] // scopes you want to use!
-});
+var reddit = new Snoocore({
+	userAgent: 'test',
+	login: { username: 'yourUsername', password: 'yourPassword' },
+	oauth: { 
+		type: 'script',
+		consumerKey: 'client_id from reddit', 
+		consumerSecret: 'client_secret from reddit',
+		scope: [ 'flair', 'identity' ] // make sure to set all the scopes you need.
+	}
+});	 
 
-// Give our client the authentication data
-return reddit.auth(authData).then(function() {
+// To authenticate with OAuth, simply call `auth()`
+return reddit.auth().then(function() {
     // Make an OAuth call to show that it is working
     return reddit.api.v1.me.get();
 })
@@ -49,33 +52,50 @@ The only caveat is that this method can only authenticate users listed as develo
 
 ## Web based Applications
 
-Unlike script-based apps, web and installed apps can not authenticate using a username & password. The main difference is that you must wait for a user of your application to authenticate with Reddit before passing in the `authData` into `reddit.auth()`.
+See an example [here]().
+
+Unlike script-based apps, web and installed apps can not authenticate using a username & password. The main difference is that you must wait for a user of your application to authenticate with Reddit (e.g. you must wait for reddit to get back with you with an authorization code before moving on)
 
 
-### Getting the authentication url
+### Initial Config
 
-`Snoocore.oauth.getAuthUrl` will return an URL that a user will need to visit in order to authenticate your application:
+In your initial config, give it the OAuth settings for your application:
 
 ```javascript
-var authUrl = Snoocore.oauth.getAuthUrl({
-    consumerKey: 'your client_id from reddit',
-    redirectUri: 'your redirect_uri set in the reddit console',
-    state: 'ourSecretState', // more on this below
-    scope: [ 'flair', 'identity' ] // scopes you want to use!
-});
+var Snoocore = require('snoocore');
+
+var reddit = new Snoocore({
+	userAgent: 'test',
+	oauth: { 
+		type: 'web',
+		consumerKey: 'client_id from reddit', 
+		consumerSecret: 'client_secret from reddit',
+		redirectUri: 'redirectUri set for your app',
+		scope: [ 'flair', 'identity' ] // make sure to set all the scopes you need.
+	}
+});	 
 ```
+
+### Getting the authentication URL
+
+```javascript
+var state = 'foobar';
+var authUrl = reddit.getAuthUrl(state);
+```
+
+For CSRF prevention, you should set a `state`. This field is optional if you don't want to perform this check. Read more on this below.
 
 ### Handling the response
 
-After the user visits the URL that `Snoocore.oauth.getAuthUrl` generates, they will be presented with an Allow or Deny options. After they allow (or disallow) your application, Reddit will redirect the user back to the given `redirectUri` with the following url parameters:
+After the user visits the URL that `reddit.getAuthUrl` generates, they will be presented with the option to Allow or Deny the app. After they allow (or disallow) your application, Reddit will redirect the user back to the given `redirectUri` (set in the initial config)  with the following url parameters:
 
  - **error** - something went wrong with the request
  - **code** - our `authorizationCode` (used below)
- - **state** - should be the same as above (*ourSecretState*)
+ - **state** - should be the same string that was  set in the `reddit.getAuthUrl` function (if it was set).
 
 To handle this redirect from reddit, there needs to be something up and running (e.g. a server) at the `redirectUri` to intercept the above values and interpret them.
 
-For CSRF prevention, you should check that the `state` in the url parameters is the same as the `state` specified when generating the authentication url.
+For CSRF prevention, you should check that the `state` in the url parameters is the same as the `state` specified when generating the authentication url in `reddit.getAuthUrl`.
 
 ### Authenticating with the returned code
 
@@ -83,19 +103,18 @@ Now that we have our `authorizationCode`, we need to make one more call to Reddi
 
 ```javascript
 var AUTHORIZATION_CODE = '??'; /* url parameter "code", see above */
+var RETURNED_STATE = '??'; /* url parameter "state", see above */
 
-// Authenticate with Reddit
-var authData = Snoocore.oauth.getAuthData('web', {
-    authorizationCode: AUTHORIZATION_CODE,
-    consumerKey: 'your client_id from reddit',
-    consumerSecret: 'your client_secret from reddit',
-    redirectUri: 'your redirect_uri set in the reddit console',
-    scope: [ 'flair', 'identity' ] // scopes you want to use!
-});
+// Exit if the state given is invalid. This is an optional
+// check, but is recommended if you set a state in 
+// `reddit.getAuthUrl`
+if (RETURNED_STATE !== state) {
+	console.error('State is not the same as the one set!');
+    process.exit(1);																  
+}
 
-
-// Give our client the authentication data
-return reddit.auth(authData).then(function() {
+// Authenticate with reddit by passing in the authorization code from the response
+reddit.auth(AUTHORIZATION_CODE).then(function() {
     // Make an OAuth call to show that it is working
     return reddit.api.v1.me.get();
 })
@@ -108,7 +127,7 @@ After this, we are able to use the OAuth API calls that Reddit offers.
 
 ## Installed based Applications
 
-These follow the exact same steps as web based applications. The only difference is that the client secret can be distributed in code that anyone can view.
+These follow the exact same steps as web based applications - just adjust the oauth type to `'installed'` in the initial config. The only difference is that the client secret can be distributed in code that anyone can view.
 
 ## De-Authenticating
 
@@ -117,3 +136,7 @@ A function `deauth` is provided if the functionality is needed.
 ```javascript
 var deauthPromise = reddit.deauth();
 ```
+
+## Handling the OAuth authentication manually.
+
+It is possible to handle the OAuth data manually. This is primarily to keep backwards compatibility but may have other uses. For examples take a look at the `manual-oauth-*.js` examples.
