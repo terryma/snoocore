@@ -37,23 +37,30 @@ oauth.getAuthUrl = function(options) {
 };
 
 /*
-appType can be one of 'web', 'installed', or 'script'
+`type` can be one of 'web', 'installed', 'script', or 'refresh'
+depending on the type of token (and accompanying auth data) is 
+needed.
 */
-oauth.getAuthData = function(appType, options) {
+oauth.getAuthData = function(type, options) {
 
 	var params = {};
 
 	params.scope = normalizeScope(options.scope);
 
-	if (appType === 'script') {
+	if (type === 'script') {
 		params.grant_type = 'password';
 		params.username = options.username;
 		params.password = options.password;
-	} else {
+	} else if (type === 'installed' || type === 'web') {
 		params.grant_type = 'authorization_code';
 		params.client_id = options.consumerKey;
 		params.redirect_uri = options.redirectUri;
 		params.code = options.authorizationCode;
+	} else if (type === 'refresh') {
+		params.grant_type = 'refresh_token';
+		params.refresh_token = options.refreshToken;
+	} else {
+		return when.reject(new Error('invalid type specified'));
 	}
 
 	var defer = when.defer()
@@ -72,6 +79,8 @@ oauth.getAuthData = function(appType, options) {
 		try { data = JSON.parse(response.text); }
 		catch(e) { return defer.reject(e); }
 		if (data.error) { return defer.reject(new Error(data.error)); }
+		console.error('DATA@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@'); //!!!debug
+		console.error(data); //!!!debug
 		return defer.resolve(data);
 	});
 

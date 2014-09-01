@@ -73,16 +73,16 @@ describe('Snoocore OAuth Test', function () {
 					authorizationCode: authorizationCode,
 					redirectUri: config.reddit.redirectUri
 				})
-				.then(function(authData) {
-					return reddit.auth(authData);
-				})
-				.then(function() {
-					return reddit.api.v1.me.get();
-				})
-				.then(function(data) {
-					expect(data.error).to.be.undefined;
-					expect(data.name).to.be.a('string');
-				});
+					.then(function(authData) {
+						return reddit.auth(authData);
+					})
+					.then(function() {
+						return reddit.api.v1.me.get();
+					})
+					.then(function(data) {
+						expect(data.error).to.be.undefined;
+						expect(data.name).to.be.a('string');
+					});
 			});
 
 		});
@@ -96,16 +96,16 @@ describe('Snoocore OAuth Test', function () {
 				username: config.reddit.REDDIT_USERNAME,
 				password: config.reddit.REDDIT_PASSWORD
 			})
-			.then(function(authData) {
-				return reddit.auth(authData);
-			})
-			.then(function() {
-				return reddit.api.v1.me.get();
-			})
-			.then(function(data) {
-				expect(data.error).to.be.undefined;
-				expect(data.name).to.equal(config.reddit.REDDIT_USERNAME);
-			});
+				.then(function(authData) {
+					return reddit.auth(authData);
+				})
+				.then(function() {
+					return reddit.api.v1.me.get();
+				})
+				.then(function(data) {
+					expect(data.error).to.be.undefined;
+					expect(data.name).to.equal(config.reddit.REDDIT_USERNAME);
+				});
 		});
 
 		it('should take a promise for authData', function() {
@@ -121,12 +121,53 @@ describe('Snoocore OAuth Test', function () {
 			return reddit.auth(authData).then(function() {
 				return reddit.api.v1.me.get();
 			})
-			.then(function(data) {
-				expect(data.error).to.be.undefined;
-				expect(data.name).to.equal(config.reddit.REDDIT_USERNAME);
-			});
+				.then(function(data) {
+					expect(data.error).to.be.undefined;
+					expect(data.name).to.equal(config.reddit.REDDIT_USERNAME);
+				});
 		});
 		
+	});
+
+	describe('Authenticate tests (INTERNAL config based WEB PERMANENT)', function() {
+
+		var reddit = new Snoocore({
+			userAgent: 'snoocore-test-userAgent',
+			oauth: {
+				type: 'web',
+				duration: 'permanent',
+				consumerKey: config.reddit.REDDIT_KEY_WEB,
+				consumerSecret: config.reddit.REDDIT_SECRET_WEB,
+				redirectUri: config.reddit.redirectUri,
+				scope: [ 'identity' ]
+			}
+		});
+
+		it('should authenticate with OAuth, get refresh token, deauth, use refresh token to reauth', function() {
+			this.timeout(30000);
+
+			var url = reddit.getAuthUrl();
+
+			openAndAuth(url);
+
+			return testServer.waitForRequest().then(function(params) {
+				var authorizationCode = params.code;
+				return reddit.auth(authorizationCode).then(function(refreshToken) {
+					// deauthenticae with the current access token ("logoff")
+					return reddit.deauth().then(function() {
+						// get a new access token / re-authenticating by refreshing
+						// the given refresh token
+						return reddit.refresh(refreshToken);
+					});
+				}).then(function() {
+					return reddit('/api/v1/me').get();
+				}).then(function(data) {
+					expect(data.error).to.be.undefined;
+					expect(data.name).to.be.a('string');
+				});
+			});
+		});
+
 	});
 
 	describe('Authenticate tests (INTERNAL config based WEB)', function() {
@@ -151,7 +192,9 @@ describe('Snoocore OAuth Test', function () {
 
 			return testServer.waitForRequest().then(function(params) {
 				var authorizationCode = params.code;
-				return reddit.auth(authorizationCode).then(reddit.api.v1.me.get).then(function(data) {
+				return reddit.auth(authorizationCode).then(function() {
+					return reddit('/api/v1/me').get();
+				}).then(function(data) {
 					expect(data.error).to.be.undefined;
 					expect(data.name).to.be.a('string');
 				});
@@ -171,7 +214,9 @@ describe('Snoocore OAuth Test', function () {
 				expect(params.state).to.equal(state);
 
 				var authorizationCode = params.code;
-				return reddit.auth(authorizationCode).then(reddit.api.v1.me.get).then(function(data) {
+				return reddit.auth(authorizationCode).then(function() {
+					return reddit('/api/v1/me').get();
+				}).then(function(data) {
 					expect(data.error).to.be.undefined;
 					expect(data.name).to.be.a('string');
 				});

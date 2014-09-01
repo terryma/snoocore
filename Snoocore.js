@@ -494,11 +494,21 @@ function Snoocore(config) {
 	};
 	
 	self.getAuthUrl = function(state) {
-		return Snoocore.oauth.getAuthUrl({
+		var options = self._oauth;
+		options.state = state || Math.ceil(Math.random() * 1000);
+		return Snoocore.oauth.getAuthUrl(options);
+	};
+
+	self.refresh = function(refreshToken) {
+		return Snoocore.oauth.getAuthData('refresh', {
+			refreshToken: refreshToken,
 			consumerKey: self._oauth.consumerKey,
+			consumerSecret: self._oauth.consumerSecret,
 			redirectUri: self._oauth.redirectUri,
-			state: state || Math.ceil(Math.random() * 1000),
 			scope: self._oauth.scope
+
+		}).then(function(authDataResult) {
+			self._authData = authDataResult;
 		});
 	};
 
@@ -537,6 +547,13 @@ function Snoocore(config) {
 
 		return when(authData).then(function(authDataResult) {
 			self._authData = authDataResult;
+
+			// if the web/installed app used a perminant duration, send
+			// back the refresh token that will be used to re-authenticate
+			// later without user interaction.
+			if (authDataResult.refresh_token) {
+				return authDataResult.refresh_token;
+			}
 		});
 	};
 
