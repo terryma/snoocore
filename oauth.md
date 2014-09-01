@@ -68,6 +68,7 @@ var reddit = new Snoocore({
 	userAgent: 'test',
 	oauth: { 
 		type: 'web',
+		mobile: true, // defaults to false.
 		consumerKey: 'client_id from reddit', 
 		consumerSecret: 'client_secret from reddit',
 		redirectUri: 'redirectUri set for your app',
@@ -75,6 +76,8 @@ var reddit = new Snoocore({
 	}
 });	 
 ```
+
+The `oauth.mobile` is optional and will default to the full website. Set mobile to true if you want to send the user to the mobile reddit website for authentication.
 
 ### Getting the authentication URL
 
