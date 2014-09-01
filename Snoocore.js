@@ -310,6 +310,10 @@ function Snoocore(config) {
 						args.count = count;
 						return getSlice(args);
 					};
+
+					slice.requery = function() {
+						return getSlice(givenArgs);
+					};
 					
 					return slice;
 				});

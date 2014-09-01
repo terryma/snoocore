@@ -72,4 +72,22 @@ describe('Snoocore Listings Test', function () {
 		});
 	});
 
+	it('should requery a listing after changes have been made', function() {
+
+		// @TODO we need a better way to test this (without using captcha's)
+		// as of now it is requerying empty comments of a user which runs the
+		// code in question but it is not the best test
+
+		var getComments = reddit('/user/$username/$where').listing;
+		var options = { $username: 'emptyListing', $where: 'comments' };
+
+		return getComments(options).then(function(thatSlice) {
+			return getComments(slice.requery()).then(function(thisSlice) {
+				expect(thatSlice.empty).to.equal(thisSlice.empty);
+			});
+		});
+
+			
+	});
+
 });
