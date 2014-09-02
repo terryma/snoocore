@@ -41,19 +41,15 @@ describe('Snoocore Internal Tests', function () {
 		});
 	}
 
-	describe('#isAuthenticated()', function() {
-
-		afterEach(function() {
-			return reddit.deauth();
-		});
+	describe.only('#isAuthenticated()', function() {
 
 		it('should be authenticated', function() {
-			return reddit.auth({
+			reddit._authData = {
 				access_token: 'foo',
 				token_type: 'foo'
-			}).then(function() {
-				expect(reddit._test.isAuthenticated()).to.equal(true);
-			});
+			};
+
+			expect(reddit._test.isAuthenticated()).to.equal(true);
 		});
 
 		it('should not be authenticated', function() {

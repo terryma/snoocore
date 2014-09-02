@@ -108,7 +108,9 @@ oauth.revokeToken = function(token, isRefreshToken, options) {
 			return defer.reject(error);
 		}
 		if (response.status !== 204) {
-			return defer.reject(new Error('unable to revoke the given token'));
+			console.error(response); //!!!debug
+
+			return defer.reject(new Error('Unable to revoke the given token'));
 		}
 		return defer.resolve();
 	});

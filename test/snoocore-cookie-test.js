@@ -74,7 +74,6 @@ describe('Snoocore Cookie Test', function () {
 				.then(reddit.login)
 				.then(reddit.api['me.json'].get)
 				.then(function(result) {
-					console.error(result); //!!!debug
 					expect(result.data.name).to.equal(config.reddit.REDDIT_USERNAME);
 				});
 		});

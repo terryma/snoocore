@@ -51,10 +51,6 @@ describe('Snoocore OAuth Test', function () {
 
 		var reddit = new Snoocore({ userAgent: 'snoocore-test-userAgent' });
 
-		beforeEach(function() {
-			return reddit.deauth();
-		});
-
 		it('should authenticate with OAuth, and call an oauth endpoint (EXTERNAL Snoocore.oauth => WEB)', function() {
 			// because there is user intervention with these tests, give them
 			// two minutes before timing out!
@@ -147,7 +143,7 @@ describe('Snoocore OAuth Test', function () {
 			}
 		});
 
-		it.only('should authenticate with OAuth, get refresh token, deauth, use refresh token to reauth, deauth(true) -> refresh should fail', function() {
+		it('should authenticate with OAuth, get refresh token, deauth, use refresh token to reauth, deauth(true) -> refresh should fail', function() {
 			this.timeout(30000);
 
 			var url = reddit.getAuthUrl();
@@ -163,20 +159,50 @@ describe('Snoocore OAuth Test', function () {
 
 						// deauthenticae with the current access token (e.g. "logoff")
 						return reddit.deauth().then(function() {
-							return reddit('/api/v1/me').get().then(function() {
-								throw new Error('should fail, not pass!!');
-							}).catch(function(error) {
-								// get a new access token / re-authenticating by refreshing
-								// the given refresh token
-								return reddit.refresh(refreshToken);
-							});
+							// get a new access token / re-authenticating by refreshing
+							// the given refresh token
+							return reddit.refresh(refreshToken);
 						});
 					}).then(function() {
-						// because we refreshed the access_token, we can now make calls again
+						expect(reddit._authData.access_token).to.be.a('string');						
+						// deauthenticae by removing the refresh token
+						return reddit.deauth(refreshToken).then(function() {
+							// does NOT automatically get a net access token as we have
+							// removed it entirely
+							return expect(reddit('/api/v1/me').get()).to.eventually.be.rejected;
+						});
+					}).then(function() {
+						// try to re-authenticate & get a new access token with the
+						// revoked refresh token and see that it fails
+						return expect(reddit.refresh(refreshToken)).to.eventually.be.rejected;
+					});
+				});
+			});
+		});
+
+		it('Should authenticate with OAuth, deauth (simulate expired access_token), call endpoint which will request a new access_token', function() {
+			this.timeout(30000);
+
+			var url = reddit.getAuthUrl();
+
+			openAndAuth(url);
+
+			return testServer.waitForRequest().then(function(params) {
+				var authorizationCode = params.code;
+				return reddit.auth(authorizationCode).then(function(refreshToken) {
+
+					return reddit('/api/v1/me').get().then(function(data) {
+						expect(data.name).to.be.a('string');
+						// deauthenticae with the current access token (e.g. "logoff")
+						return reddit.deauth();
+					}).then(function() {
+						// by calling this, it will automatically request a new refresh token
+						// if the one we were using has expired. The call will take a bit
+						// longer to complete as it requests a new access_token first
 						return reddit('/api/v1/me').get();
 					}).then(function(data) {
 						expect(data.name).to.be.a('string');
-						
+					}).then(function() {
 						// deauthenticae by removing the refresh token
 						return reddit.deauth(refreshToken).then(function() {
 							return expect(reddit('/api/v1/me').get()).to.eventually.be.rejected;
