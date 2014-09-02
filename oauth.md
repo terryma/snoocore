@@ -50,7 +50,7 @@ return reddit.auth().then(function() {
 
 The only caveat is that this method can only authenticate users listed as developers for the given application. Because of this, it makes it a great choice for bots.
 
-## Web based Applications
+## Web & Installed Applications
 
 See an example [here](https://github.com/trevorsenior/snoocore-examples/blob/master/node/oauth-web.js).
 
@@ -67,7 +67,7 @@ var Snoocore = require('snoocore');
 var reddit = new Snoocore({
 	userAgent: 'test',
 	oauth: { 
-		type: 'web',
+		type: 'web', // set to 'installed' if using an installed app
 		mobile: true, // defaults to false.
 		duration: 'permanent', // defaults to 'temporary'
 		consumerKey: 'client_id from reddit', 
@@ -124,7 +124,11 @@ if (RETURNED_STATE !== state) {
 }
 
 // Authenticate with reddit by passing in the authorization code from the response
-reddit.auth(AUTHORIZATION_CODE).then(function() {
+reddit.auth(AUTHORIZATION_CODE).then(function(refreshToken) {
+    // The refreshToken will be defined if in the initial
+	// config `duration: 'permanent'`
+	// Otherwise if using a 'temporary' duration it can be ignored.
+
     // Make an OAuth call to show that it is working
     return reddit.api.v1.me.get();
 })
@@ -135,18 +139,42 @@ reddit.auth(AUTHORIZATION_CODE).then(function() {
 
 After this, we are able to use the OAuth API calls that Reddit offers.
 
-## Installed based Applications
+### Refresh Tokens & Re-Authenticating
 
-These follow the exact same steps as web based applications - just adjust the oauth type to `'installed'` in the initial config. The only difference is that the client secret can be distributed in code that anyone can view.
+To re-authenticate a user without asking for permission everytime, or have a web/installed app that will run for more than an hour set `duration: 'permanent'` in the oauth section of the initial config.
 
-## De-Authenticating
+This will allow Snoocore to automatically refresh the `access_token` when it expires after an hour of continuious use.
 
-A function `deauth` is provided if the functionality is needed.
+However, it is not persistant. If the script exits
+
+This will grant you a `refreshToken` when you call `reddit.auth` (see previous section) which you must save somewhere (database, etc.)
+
+Whenever you want to authenticate with that user in the future, you just have to call:
+
+```javascript
+reddit.refresh(SAVED_REFRESH_TOKEN).then(function() {
+    // we are authenticated, make a call
+	return reddit('/api/v1/me').get();
+});
+```
+
+*Note*
+
+### De-Authenticating
+
+A function `reddit.deauth` is provided which will revoke the `access_token` for the current authenticated user.
 
 ```javascript
 var deauthPromise = reddit.deauth();
 ```
 
-## Handling the OAuth authentication manually.
+Generally it is a good idea to call this everytime you are finished using the users data. If you need to use their data again re-authenticate by calling `reddit.refresh`.
 
-It is possible to handle the OAuth data manually. This is primarily to keep backwards compatibility but may have other uses. For examples take a look at the `manual-oauth-*.js` examples.
+To revoke the `refresh_token`, pass in the refreshToken in:
+
+```javascript
+var deauthPromise = reddit.deauth(REFRESH_TOKEN);
+```
+
+Note that this will revoke all `access_tokens` associated with this refreshToken. It will not be possible to use the refreshToken to get new access_tokens (e.g. re-authenticate with `reddit.refresh`).
+

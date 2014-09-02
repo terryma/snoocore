@@ -11,10 +11,27 @@ Adjust the following default options as necessary when initializing Snoocore:
 {
     // You should set a custom user agent for your application
     userAgent: 'snoocore-default',
+	
     // The default wait is 1 request per 2 seconds. If you use OAuth
-    // for authentication, you can set this to 1 request per second (1000)
+    // for authentication, you can set this to 1 request per second (1000ms)
     // To disable, set to 0
-    throttle: 2000
+    throttle: 2000,
+
+    // See the cookie login section for more information
+	login: {
+        username: 'yourUsername',
+		password: 'yourPassword'
+    },
+
+	// See the oauth login section for more information
+	oauth: {                                                                                                                         
+        type: 'web', // 'web', 'installed', or 'script'
+        duration: 'permanent', // will allow us to authenticate for longer periods of time
+        consumerKey: 'yourConsumerKey',
+        consumerSecret: 'yourConsumerSecret',
+        redirectUri: 'http://localhost:3000',
+		scope: [ /* ... */ ] // array of scopes you want to use
+	}
 }
 ```
 
