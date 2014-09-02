@@ -557,10 +557,26 @@ function Snoocore(config) {
 		});
 	};
 
-	// Clears any authentication data / removes OAuth call ability
-	self.deauth = function() {
-		self._authData = {};
-		return when.resolve();
+	// Clears any authentication data & removes OAuth authentication
+	// 
+	// By default it will only remove the "access_token". Specify 
+	// the users refresh token to revoke that token instead.
+	self.deauth = function(refreshToken) {
+
+		// no need to deauth if not authenticated
+		if (typeof self._authData.access_token === 'undefined') {
+			return when.resolve();
+		}
+
+		var isRefreshToken = typeof refreshToken === 'string';
+		var token = isRefreshToken ? refreshToken : self._authData.access_token;
+		
+		return Snoocore.oauth.revokeToken(token, isRefreshToken, {
+			consumerKey: self._oauth.consumerKey,
+			consumerSecret: self._oauth.consumerSecret
+		}).then(function() {
+			self._authData = {}; // clear internal auth data
+		});
 	};
 
 	// expose functions for testing

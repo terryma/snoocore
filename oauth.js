@@ -68,20 +68,49 @@ oauth.getAuthData = function(type, options) {
 	, call = request.post(url);
 
 	call.type('form');
-
 	call.auth(options.consumerKey, options.consumerSecret);
-
 	call.send(params);
-
 	call.end(function(error, response) {
 		if (error) { return defer.reject(error); }
+
 		var data;
 		try { data = JSON.parse(response.text); }
-		catch(e) { return defer.reject(e); }
-		if (data.error) { return defer.reject(new Error(data.error)); }
-		console.error('DATA@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@'); //!!!debug
-		console.error(data); //!!!debug
+		catch(e) { 
+			return defer.reject(new Error(
+				'Response Text:\n' + response.text + '\n\n' + e.stack));
+		}
+		
+		if (data.error) {
+			return defer.reject(new Error(data.error)); 
+		}
+		
 		return defer.resolve(data);
+	});
+
+	return defer.promise;
+};
+
+oauth.revokeToken = function(token, isRefreshToken, options) {
+
+	var defer = when.defer();
+
+	var tokenTypeHint = isRefreshToken ? 'refresh_token' : 'access_token';
+	var params = { token: token, token_type_hint: tokenTypeHint };
+	var url = 'https://ssl.reddit.com/api/v1/revoke_token';
+
+	var call = request.post(url);
+
+	call.type('form');
+	call.auth(options.consumerKey, options.consumerSecret);
+	call.send(params);
+	call.end(function(error, response) {
+		if (error) { 
+			return defer.reject(error);
+		}
+		if (response.status !== 204) {
+			return defer.reject(new Error('unable to revoke the given token'));
+		}
+		return defer.resolve();
 	});
 
 	return defer.promise;

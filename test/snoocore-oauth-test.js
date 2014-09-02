@@ -38,7 +38,11 @@ describe('Snoocore OAuth Test', function () {
 		});
 
 		it('should get back error 403 when not authenticated', function() {
-			return expect(reddit.api.v1.me.get()).to.eventually.be.rejected;
+			return reddit('/api/v1/me').get().then(function(data) {
+				throw new Error('should not pass, expect to fail with error');
+			}).catch(function(error) {
+				expect(error.message).to.equal('403');
+			});
 		});
 
 	});
@@ -124,7 +128,7 @@ describe('Snoocore OAuth Test', function () {
 				.then(function(data) {
 					expect(data.error).to.be.undefined;
 					expect(data.name).to.equal(config.reddit.REDDIT_USERNAME);
-				});
+					});
 		});
 		
 	});
@@ -143,7 +147,7 @@ describe('Snoocore OAuth Test', function () {
 			}
 		});
 
-		it('should authenticate with OAuth, get refresh token, deauth, use refresh token to reauth', function() {
+		it.only('should authenticate with OAuth, get refresh token, deauth, use refresh token to reauth, deauth(true) -> refresh should fail', function() {
 			this.timeout(30000);
 
 			var url = reddit.getAuthUrl();
@@ -153,17 +157,35 @@ describe('Snoocore OAuth Test', function () {
 			return testServer.waitForRequest().then(function(params) {
 				var authorizationCode = params.code;
 				return reddit.auth(authorizationCode).then(function(refreshToken) {
-					// deauthenticae with the current access token ("logoff")
-					return reddit.deauth().then(function() {
-						// get a new access token / re-authenticating by refreshing
-						// the given refresh token
-						return reddit.refresh(refreshToken);
+
+					return reddit('/api/v1/me').get().then(function(data) {
+						expect(data.name).to.be.a('string');
+
+						// deauthenticae with the current access token (e.g. "logoff")
+						return reddit.deauth().then(function() {
+							return reddit('/api/v1/me').get().then(function() {
+								throw new Error('should fail, not pass!!');
+							}).catch(function(error) {
+								// get a new access token / re-authenticating by refreshing
+								// the given refresh token
+								return reddit.refresh(refreshToken);
+							});
+						});
+					}).then(function() {
+						// because we refreshed the access_token, we can now make calls again
+						return reddit('/api/v1/me').get();
+					}).then(function(data) {
+						expect(data.name).to.be.a('string');
+						
+						// deauthenticae by removing the refresh token
+						return reddit.deauth(refreshToken).then(function() {
+							return expect(reddit('/api/v1/me').get()).to.eventually.be.rejected;
+						});
+					}).then(function() {
+						// try to re-authenticate & get a new access token with the
+						// revoked refresh token and see that it fails
+						return expect(reddit.refresh(refreshToken)).to.eventually.be.rejected;
 					});
-				}).then(function() {
-					return reddit('/api/v1/me').get();
-				}).then(function(data) {
-					expect(data.error).to.be.undefined;
-					expect(data.name).to.be.a('string');
 				});
 			});
 		});
