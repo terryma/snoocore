@@ -72,7 +72,7 @@ describe('Snoocore Listings Test', function () {
 		});
 	});
 
-	it.only('should requery a listing after changes have been made', function() {
+	it('should requery a listing after changes have been made', function() {
 
 		// @TODO we need a better way to test this (without using captcha's)
 		// as of now it is requerying empty comments of a user which runs the

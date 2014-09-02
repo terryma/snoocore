@@ -12,7 +12,7 @@ config.reddit = {
 	redirectUri: 'http://localhost:3000',
 
 	REDDIT_USERNAME: 'snoocore',
-	REDDIT_PASSWORD: 'ps%k0lrY@wcOQS54ZN6N',
+	REDDIT_PASSWORD: 'RKS5k1Ag3rrWaM&&mob5',
 
 	REDDIT_KEY_WEB: 'UXPNWlG5W3FWYg',
 	REDDIT_SECRET_WEB: 'y7GsNwB88--MmrnVez_v7jYKO0I',

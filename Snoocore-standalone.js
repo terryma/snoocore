@@ -28,6 +28,7 @@ function Snoocore(config) {
 	self._modhash = ''; // The current mod hash of whatever user we have
 	self._redditSession = ''; // The current cookie (reddit_session)
 	self._authData = {}; // Set if user has authenticated with OAuth
+	self._refreshToken = ''; // Set when calling `refresh` and when duration:'permanent'
 
 	self._login = config.login || {};
 	self._oauth = config.oauth || {};
@@ -127,7 +128,11 @@ function Snoocore(config) {
 	// Build a single API call
 	function buildCall(endpoint) {
 
-		return function callRedditApi(givenArgs) {
+		function callRedditApi(givenArgs, options) {
+
+			// Options that will change the way this call behaves
+			// mostly specific to recursion / exiting it if needed
+			options = options || {};
 
 			var startCallTime = Date.now();
 			throttleDelay += throttle;
@@ -135,8 +140,7 @@ function Snoocore(config) {
 			// Wait for the throttle delay amount, then call the Reddit API
 			return delay(throttleDelay - throttle).then(function() {
 
-				var redditCall = when.defer()
-				, method = endpoint.method.toLowerCase()
+				var method = endpoint.method.toLowerCase()
 				, url = buildUrl(givenArgs, endpoint)
 				, args = buildArgs(givenArgs);
 
@@ -152,15 +156,15 @@ function Snoocore(config) {
 					call.set('X-Modhash', self._modhash);
 					if (self._isNode) {
 						call.set('Cookie',
-							'reddit_session=' + self._redditSession + ';');
+								 'reddit_session=' + self._redditSession + ';');
 					}
 				}
 
 				// if we're authenticated, set the authorization header
 				if (isAuthenticated()) {
 					call.set('Authorization',
-						self._authData.token_type + ' ' +
-						self._authData.access_token);
+							 self._authData.token_type + ' ' +
+							 self._authData.access_token);
 				}
 
 				// Handle arguments
@@ -183,24 +187,37 @@ function Snoocore(config) {
 					}
 				}
 
-				// If we encounter any error, follow Reddit's style of
-				// error notification and resolve with an object with an
-				// "error" field.
-				call.end(function(error, response) {
+				
+				// Here is where we actually make the call to Reddit.
+				// Wrap it in a promise to better handle the error logic
+				return when.promise(function(resolve, reject) {
+					call.end(function(error, response) {
+						return error ? reject(error) : resolve(response);
+					});
+				}).then(function(response) {
 
-					if (error) {
-						return redditCall.resolve({
-							error: error
+					// Forbidden. Try to get a new access_token if we have
+					// a refresh token
+					if (response.status === 403 && self._refreshToken !== '') {
+
+						// fail if the refresh fail flag was set.
+						if (options.refreshTokenFail) {
+							throw new Error('unable to fetch a new access_token');
+						}
+
+						// attempt to refresh the access token
+						return self.refresh(self._refreshToken).then(function() {
+							// make the call again and flag to fail if it happens again
+							return callRedditApi(givenArgs, { refreshTokenFail: true });
 						});
 					}
 
 					var data;
-
 					try { data = JSON.parse(response.text); }
 					catch(e) {
-						return redditCall.resolve({
-							error: response.text
-						});
+						throw new Error(
+							'Unable to parse response text from Reddit\n\n' + 
+								response.text);
 					}
 
 					// set the modhash if the data contains it
@@ -212,22 +229,21 @@ function Snoocore(config) {
 						if (typeof data.json.data.modhash !== 'undefined') {
 							self._modhash = data.json.data.modhash;
 						}
-
+						
 						if (typeof data.json.data.cookie !== 'undefined') {
 							self._redditSession = data.json.data.cookie;
 						}
 					}
 
-					return redditCall.resolve(data);
-				});
-
-				// If we have any "errors", convert them into rejections
-				return redditCall.promise.then(function(data) {
+					// Throw any errors that reddit may inform us about
 					if (data.hasOwnProperty('error')) {
 						throw new Error(String(data.error));
 					}
+
 					return data;
 				});
+
+
 			}).finally(function() {
 				// decrement the throttle delay. If the call is quick and snappy, we
 				// only decrement the total time that it took to make the call.
@@ -243,6 +259,7 @@ function Snoocore(config) {
 
 		};
 
+		return callRedditApi;
 	}
 
 	function buildListing(endpoint) {
@@ -310,6 +327,10 @@ function Snoocore(config) {
 						args.after = start;
 						args.count = count;
 						return getSlice(args);
+					};
+
+					slice.requery = function() {
+						return getSlice(givenArgs);
 					};
 					
 					return slice;
@@ -491,11 +512,23 @@ function Snoocore(config) {
 	};
 	
 	self.getAuthUrl = function(state) {
-		return Snoocore.oauth.getAuthUrl({
+		var options = self._oauth;
+		options.state = state || Math.ceil(Math.random() * 1000);
+		return Snoocore.oauth.getAuthUrl(options);
+	};
+
+	self.refresh = function(refreshToken) {
+		return Snoocore.oauth.getAuthData('refresh', {
+			refreshToken: refreshToken,
 			consumerKey: self._oauth.consumerKey,
+			consumerSecret: self._oauth.consumerSecret,
 			redirectUri: self._oauth.redirectUri,
-			state: state || Math.ceil(Math.random() * 1000),
 			scope: self._oauth.scope
+		}).then(function(authDataResult) {
+			// only set the internal refresh token if reddit 
+			// agrees that it was OK and sends back authData
+			self._refreshToken = refreshToken;
+			self._authData = authDataResult;
 		});
 	};
 
@@ -534,13 +567,39 @@ function Snoocore(config) {
 
 		return when(authData).then(function(authDataResult) {
 			self._authData = authDataResult;
+
+			// if the web/installed app used a perminant duration, send
+			// back the refresh token that will be used to re-authenticate
+			// later without user interaction.
+			if (authDataResult.refresh_token) {
+				// set the internal refresh token for automatic expiring 
+				// access_token management
+				self._refreshToken = authDataResult.refresh_token;
+				return authDataResult.refresh_token;
+			}
 		});
 	};
 
-	// Clears any authentication data / removes OAuth call ability
-	self.deauth = function() {
-		self._authData = {};
-		return when.resolve();
+	// Clears any authentication data & removes OAuth authentication
+	// 
+	// By default it will only remove the "access_token". Specify 
+	// the users refresh token to revoke that token instead.
+	self.deauth = function(refreshToken) {
+
+		// no need to deauth if not authenticated
+		if (typeof self._authData.access_token === 'undefined') {
+			return when.resolve();
+		}
+
+		var isRefreshToken = typeof refreshToken === 'string';
+		var token = isRefreshToken ? refreshToken : self._authData.access_token;
+		
+		return Snoocore.oauth.revokeToken(token, isRefreshToken, {
+			consumerKey: self._oauth.consumerKey,
+			consumerSecret: self._oauth.consumerSecret
+		}).then(function() {
+			self._authData = {}; // clear internal auth data
+		});
 	};
 
 	// expose functions for testing
@@ -11644,23 +11703,30 @@ oauth.getAuthUrl = function(options) {
 };
 
 /*
-appType can be one of 'web', 'installed', or 'script'
+`type` can be one of 'web', 'installed', 'script', or 'refresh'
+depending on the type of token (and accompanying auth data) is 
+needed.
 */
-oauth.getAuthData = function(appType, options) {
+oauth.getAuthData = function(type, options) {
 
 	var params = {};
 
 	params.scope = normalizeScope(options.scope);
 
-	if (appType === 'script') {
+	if (type === 'script') {
 		params.grant_type = 'password';
 		params.username = options.username;
 		params.password = options.password;
-	} else {
+	} else if (type === 'installed' || type === 'web') {
 		params.grant_type = 'authorization_code';
 		params.client_id = options.consumerKey;
 		params.redirect_uri = options.redirectUri;
 		params.code = options.authorizationCode;
+	} else if (type === 'refresh') {
+		params.grant_type = 'refresh_token';
+		params.refresh_token = options.refreshToken;
+	} else {
+		return when.reject(new Error('invalid type specified'));
 	}
 
 	var defer = when.defer()
@@ -11668,18 +11734,51 @@ oauth.getAuthData = function(appType, options) {
 	, call = request.post(url);
 
 	call.type('form');
-
 	call.auth(options.consumerKey, options.consumerSecret);
-
 	call.send(params);
-
 	call.end(function(error, response) {
 		if (error) { return defer.reject(error); }
+
 		var data;
 		try { data = JSON.parse(response.text); }
-		catch(e) { return defer.reject(e); }
-		if (data.error) { return defer.reject(new Error(data.error)); }
+		catch(e) { 
+			return defer.reject(new Error(
+				'Response Text:\n' + response.text + '\n\n' + e.stack));
+		}
+		
+		if (data.error) {
+			return defer.reject(new Error(data.error)); 
+		}
+		
 		return defer.resolve(data);
+	});
+
+	return defer.promise;
+};
+
+oauth.revokeToken = function(token, isRefreshToken, options) {
+
+	var defer = when.defer();
+
+	var tokenTypeHint = isRefreshToken ? 'refresh_token' : 'access_token';
+	var params = { token: token, token_type_hint: tokenTypeHint };
+	var url = 'https://ssl.reddit.com/api/v1/revoke_token';
+
+	var call = request.post(url);
+
+	call.type('form');
+	call.auth(options.consumerKey, options.consumerSecret);
+	call.send(params);
+	call.end(function(error, response) {
+		if (error) { 
+			return defer.reject(error);
+		}
+		if (response.status !== 204) {
+			console.error(response); //!!!debug
+
+			return defer.reject(new Error('Unable to revoke the given token'));
+		}
+		return defer.resolve();
 	});
 
 	return defer.promise;

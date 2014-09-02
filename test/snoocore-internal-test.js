@@ -41,7 +41,7 @@ describe('Snoocore Internal Tests', function () {
 		});
 	}
 
-	describe.only('#isAuthenticated()', function() {
+	describe('#isAuthenticated()', function() {
 
 		it('should be authenticated', function() {
 			reddit._authData = {
@@ -68,7 +68,7 @@ describe('Snoocore Internal Tests', function () {
 		};
 
 		afterEach(function() {
-			return reddit.deauth();
+			reddit._authData = {};
 		});
 
 		it('should get a standard url', function() {
@@ -77,13 +77,9 @@ describe('Snoocore Internal Tests', function () {
 		});
 
 		it('should get an authenticated url', function() {
-			return reddit.auth({
-				access_token: 'foo',
-				token_type: 'foo'
-			}).then(function() {
-				var url = reddit._test.getAuthOrStandardUrl(endpoint);
-				expect(url).to.equal('https://oauth.foo.bar');
-			});
+			reddit._authData = { access_token: 'foo', token_type: 'bar' };
+			var url = reddit._test.getAuthOrStandardUrl(endpoint);
+			expect(url).to.equal('https://oauth.foo.bar');
 		});
 
 	});
