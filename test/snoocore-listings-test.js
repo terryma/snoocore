@@ -72,7 +72,7 @@ describe('Snoocore Listings Test', function () {
 		});
 	});
 
-	it('should requery a listing after changes have been made', function() {
+	it.only('should requery a listing after changes have been made', function() {
 
 		// @TODO we need a better way to test this (without using captcha's)
 		// as of now it is requerying empty comments of a user which runs the
@@ -82,7 +82,9 @@ describe('Snoocore Listings Test', function () {
 		var options = { $username: 'emptyListing', $where: 'comments' };
 
 		return getComments(options).then(function(thatSlice) {
-			return getComments(slice.requery()).then(function(thisSlice) {
+			return getComments(options).then(function() {
+				return thatSlice.requery();
+			}).then(function(thisSlice) {
 				expect(thatSlice.empty).to.equal(thisSlice.empty);
 			});
 		});
