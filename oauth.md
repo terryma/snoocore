@@ -141,13 +141,11 @@ After this, we are able to use the OAuth API calls that Reddit offers.
 
 ### Refresh Tokens & Re-Authenticating
 
-To re-authenticate a user without asking for permission everytime, or have a web/installed app that will run for more than an hour set `duration: 'permanent'` in the oauth section of the initial config.
+If the goal is to have a web/installed app that will run for more than an hour set `duration: 'permanent'` in the oauth section of the initial config. This will allow Snoocore to automatically refresh the `access_token` when it expires after an hour of continuious use.
 
-This will allow Snoocore to automatically refresh the `access_token` when it expires after an hour of continuious use.
+However, it is not persistant. When your script exits and restarts again, you will have to notify Snoocore of what refresh token to use. When authenticating for the first time with `reddit.auth` (see previous section) it will provide you a refreshToken. You should save this token somewhere (database, etc.) for re-authentication at a later date.
 
-However, it is not persistant. If the script exits you will have to notify Snoocore of what refresh token to use. When authenticating for the first time with `reddit.auth` (see previous section) it will grant you a refreshToken. You should save this token somewhere (database, etc.)
-
-Whenever you want to authenticate with that user in the future, you just have to call:
+Whenever you want to authenticate with that user in the future call:
 
 ```javascript
 reddit.refresh(SAVED_REFRESH_TOKEN).then(function() {
@@ -155,6 +153,7 @@ reddit.refresh(SAVED_REFRESH_TOKEN).then(function() {
 	return reddit('/api/v1/me').get();
 });
 ```
+There won't be a need to use the `reddit.auth` call to authenticate a user again unless they have revoked access to your application.
 
 For an example with refresh token authentication take a look at these two scripts (run them in order):
 
