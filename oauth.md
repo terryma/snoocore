@@ -145,9 +145,7 @@ To re-authenticate a user without asking for permission everytime, or have a web
 
 This will allow Snoocore to automatically refresh the `access_token` when it expires after an hour of continuious use.
 
-However, it is not persistant. If the script exits
-
-This will grant you a `refreshToken` when you call `reddit.auth` (see previous section) which you must save somewhere (database, etc.)
+However, it is not persistant. If the script exits you will have to notify Snoocore of what refresh token to use. When authenticating for the first time with `reddit.auth` (see previous section) it will grant you a refreshToken. You should save this token somewhere (database, etc.)
 
 Whenever you want to authenticate with that user in the future, you just have to call:
 
@@ -158,7 +156,10 @@ reddit.refresh(SAVED_REFRESH_TOKEN).then(function() {
 });
 ```
 
-*Note*
+For an example with refresh token authentication take a look at these two scripts (run them in order):
+
+ - [oauth-web-permanent-1.js](https://github.com/trevorsenior/snoocore-examples/blob/master/node/oauth-web-permanent-1.js)
+ - [oauth-web-permanent-2.js](https://github.com/trevorsenior/snoocore-examples/blob/master/node/oauth-web-permanent-2.js)
 
 ### De-Authenticating
 
