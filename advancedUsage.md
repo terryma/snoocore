@@ -35,7 +35,7 @@ Both will return the same results.
 
 The free form API does *not* handle the base Reddit URL. It is up to you to determine which base URL to use:
 
- - http://www.reddit.com/
+ - https://www.reddit.com/
  - https://ssl.reddit.com/
  - https://oauth.reddit.com/
 
@@ -43,10 +43,20 @@ Also, extension management is left to the user as well. Some endpoints define mu
 
 ### Notes
 
+- - -
+
 The use of `$variable` will act as a placeholder and is optional for use. The example above could have been re-written as:
 
 ```javascript
 reddit.raw('http://www.reddit.com/r/netsec/hot.json').get({
 	limit: 10
 }).then(/* */);
+```
+
+- - -
+
+The "base" reddit url can be anything, even a route to your own server. This is useful if you are using snoocore from a browser, and need to hit some endpoints through a proxy running on your server. E.g.
+
+```javascript
+reddit.raw('/reddit-proxy/r/netsec/hot.json').get(/* ... */);
 ```
