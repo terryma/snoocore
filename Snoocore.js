@@ -115,12 +115,6 @@ function Snoocore(config) {
 			}
 		}
 
-		// Set the user agent in an extra "app" variable for browsers
-		// that can't set the User-Agent
-		if (!self._isNode && !args.app) {
-			args.app = self._userAgent;
-		}
-
 		return args;
 	}
 

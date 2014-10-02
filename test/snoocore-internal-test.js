@@ -21,7 +21,7 @@ var expect = chai.expect;
 /* global afterEach */
 /* global beforeEach */
 
-describe('Snoocore Internal Tests', function () {
+describe.only('Snoocore Internal Tests', function () {
 
 	this.timeout(20000);
 
@@ -159,14 +159,6 @@ describe('Snoocore Internal Tests', function () {
 		it('should remove `$` arguments', function() {
 			reddit = new Snoocore({ browser: false });
 			expect(reddit._test.buildArgs({ $foo: 'bar' })).to.eql({});
-		});
-
-		it('should add an "app" key (browser specified)', function() {
-			reddit = new Snoocore({ browser: true });
-			expect(reddit._test.buildArgs({ foo: 'bar' })).to.eql({
-				foo: 'bar',
-				app: 'snoocore-default-User-Agent'
-			});
 		});
 
 	});
