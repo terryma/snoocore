@@ -15,28 +15,6 @@ A minimal and complete JavaScript driver for the Reddit API.
  - [Online Demo](http://plnkr.co/edit/7zppWOM9QjSMdVuYQU2s?p=preview)
  - [Code Examples](https://github.com/trevorsenior/snoocore-examples/tree/master)
 
-**Quick Demo**
-
-Get "hot" posts site wide or from a specific subreddit.
-
- - API Endpoint: http://www.reddit.com/dev/api#GET_hot
- - Path: `GET [/r/subreddit]/hot`
-
-```javascript
-var Snoocore = require('snoocore');
-var reddit = new Snoocore({ userAgent: 'myApp v0.0.0' });
-
-var frontpagePromise = reddit('/hot').get();
-
-var netsecPromise = reddit('/r/$subreddit/hot').get({
-	$subreddit: 'netsec',
-	limit: 10
-});
-```
-
- - See [Basic Usage](http://trevorsenior.github.io/snoocore/basicUsage.html) for an explanation on calling endpoints with parameters, URL parameters (as in `$subreddit` above), and more.
- - Check out a [basic overview of promises](http://trevorsenior.github.io/snoocore/promises.html) if you're not familiar with them. Every call to snoocore will return one.
-
 ## Features
 
 **All endpoints are supported**
