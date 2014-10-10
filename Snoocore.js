@@ -380,21 +380,24 @@ function Snoocore(config) {
     // Build support for the raw API calls
     self.raw = function(url) {
 
-	function build(method) {
-	    var endpoint = {
+	function getEndpoint(method, url) {
+	    return {
 		url: { standard: url },
 		method: method
 	    };
-	    return buildCall(endpoint);
 	}
 
 	return {
-	    get: build('get'),
-	    post: build('post'),
-	    put: build('put'),
-	    patch: build('patch'),
-	    delete: build('delete'),
-	    update: build('update')
+	    get: buildCall(getEndpoint('get', url)),
+	    post: buildCall(getEndpoint('post', url)),
+	    put: buildCall(getEndpoint('put', url)),
+	    patch: buildCall(getEndpoint('patch', url)),
+	    delete: buildCall(getEndpoint('delete', url)),
+	    update: buildCall(getEndpoint('update', url)),
+	    listing: buildListing(getEndpoint('get', url))
+	    // Listing assumes 'GET'. If this is an issue later we can
+	    // expand to other verbs as needed, e.g.
+	    // listingPost: buildListing(getEndpoint('post', url))
 	};
     };
 

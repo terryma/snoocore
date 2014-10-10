@@ -87,9 +87,15 @@ describe('Snoocore Listings Test', function () {
 	    }).then(function(thisSlice) {
 		expect(thatSlice.empty).to.equal(thisSlice.empty);
 	    });
-	});
+	});	
+    });
 
-	
+    it.only('should work with reddit.raw', function() {
+	return reddit.raw('https://www.reddit.com/domain/$domain/hot.json').listing({
+	    $domain: 'google.com'
+	}).done(function(slice) {
+	    console.log(slice);
+	});
     });
 
 });
