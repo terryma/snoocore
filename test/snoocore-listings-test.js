@@ -7,11 +7,11 @@ var isNode = typeof require === "function" &&
 
 if (isNode)
 {
-	var path = require('path')
-	, Snoocore = require('../Snoocore')
-	, config = require('./testConfig')
-	, chai = require('chai')
-	, chaiAsPromised = require('chai-as-promised');
+    var path = require('path')
+    , Snoocore = require('../Snoocore')
+    , config = require('./testConfig')
+    , chai = require('chai')
+    , chaiAsPromised = require('chai-as-promised');
 }
 
 chai.use(chaiAsPromised);
@@ -23,73 +23,73 @@ var expect = chai.expect;
 
 describe('Snoocore Listings Test', function () {
 
-	this.timeout(20000);
+    this.timeout(20000);
 
-	var reddit;
+    var reddit;
 
-	beforeEach(function() {
-		reddit = new Snoocore({
-			userAgent: 'snoocore-test-userAgent',
-			browser: !isNode
-		});
+    beforeEach(function() {
+	reddit = new Snoocore({
+	    userAgent: 'snoocore-test-userAgent',
+	    browser: !isNode
+	});
+    });
+
+    it('should get the front page listing and nav through it (basic)', function() {
+
+	// or reddit('/hot').listing
+	return reddit.hot.listing().then(function(slice) {
+	    expect(slice.get).to.be.a('object');
+	    expect(slice.after).to.be.a('string');
+	    expect(slice.before).to.equal(null);
+	    expect(slice.next).to.be.a('function');
+	    expect(slice.previous).to.be.a('function');
+	    expect(slice.start).to.be.a('function');
+	    
+	    expect(slice.count).to.equal(0);
+	    return slice.next();
+	}).then(function(slice) {
+	    expect(slice.count).to.equal(25);
+	    return slice.next();
+	}).then(function(slice) {
+	    expect(slice.count).to.equal(50);
+	    return slice.previous();
+	}).then(function(slice) {
+	    expect(slice.count).to.equal(25);
+	    return slice.start();
+	}).then(function(slice) {
+	    expect(slice.count).to.equal(0);
 	});
 
-	it('should get the front page listing and nav through it (basic)', function() {
+    });
 
-		// or reddit('/hot').listing
-		return reddit.hot.listing().then(function(slice) {
-			expect(slice.get).to.be.a('object');
-			expect(slice.after).to.be.a('string');
-			expect(slice.before).to.equal(null);
-			expect(slice.next).to.be.a('function');
-			expect(slice.previous).to.be.a('function');
-			expect(slice.start).to.be.a('function');
-			
-			expect(slice.count).to.equal(0);
-			return slice.next();
-		}).then(function(slice) {
-			expect(slice.count).to.equal(25);
-			return slice.next();
-		}).then(function(slice) {
-			expect(slice.count).to.equal(50);
-			return slice.previous();
-		}).then(function(slice) {
-			expect(slice.count).to.equal(25);
-			return slice.start();
-		}).then(function(slice) {
-			expect(slice.count).to.equal(0);
-		});
+    it('should handle empty listings', function() {
+	// or reddit('/user/$username/$where').listing
+	return reddit.user.$username.$where.listing({
+	    $username: 'emptyListing', // an account with no comments
+	    $where: 'comments' 
+	}).then(function(slice) {
+	    expect(slice.empty).to.equal(true);
+	});
+    });
 
+    it('should requery a listing after changes have been made', function() {
+
+	// @TODO we need a better way to test this (without using captcha's)
+	// as of now it is requerying empty comments of a user which runs the
+	// code in question but it is not the best test
+
+	var getComments = reddit('/user/$username/$where').listing;
+	var options = { $username: 'emptyListing', $where: 'comments' };
+
+	return getComments(options).then(function(thatSlice) {
+	    return getComments(options).then(function() {
+		return thatSlice.requery();
+	    }).then(function(thisSlice) {
+		expect(thatSlice.empty).to.equal(thisSlice.empty);
+	    });
 	});
 
-	it('should handle empty listings', function() {
-		// or reddit('/user/$username/$where').listing
-		return reddit.user.$username.$where.listing({
-			$username: 'emptyListing', // an account with no comments
-			$where: 'comments' 
-		}).then(function(slice) {
-			expect(slice.empty).to.equal(true);
-		});
-	});
-
-	it('should requery a listing after changes have been made', function() {
-
-		// @TODO we need a better way to test this (without using captcha's)
-		// as of now it is requerying empty comments of a user which runs the
-		// code in question but it is not the best test
-
-		var getComments = reddit('/user/$username/$where').listing;
-		var options = { $username: 'emptyListing', $where: 'comments' };
-
-		return getComments(options).then(function(thatSlice) {
-			return getComments(options).then(function() {
-				return thatSlice.requery();
-			}).then(function(thisSlice) {
-				expect(thatSlice.empty).to.equal(thisSlice.empty);
-			});
-		});
-
-			
-	});
+	
+    });
 
 });
