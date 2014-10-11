@@ -8,6 +8,7 @@ var isNode = typeof require === "function" &&
 if (isNode)
 {
 	var path = require('path')
+    , when = require('when')
 	, Snoocore = require('../Snoocore')
 	, delay = require('when/delay')
 	, config = require('./testConfig')
@@ -128,5 +129,33 @@ describe('Snoocore Behavior Test', function () {
 			});
 
 	});
+
+    it('should bypass authentication for calls when set', function() {
+	return login().then(function() {
+	    return reddit('/r/$subreddit/about.json').get({ $subreddit: 'snoocoreTest' });
+	}).then(function(response) {
+
+	    var subName = response.data.name
+	    , isSubbed = response.data.user_is_subscriber;
+
+	    // make sure the user is subscribed
+	    return isSubbed ? when.resolve() : reddit.api.subscribe.post({
+		action: 'sub',
+		sr: subName
+	    });
+
+	}).then(function() {
+	    return reddit('/r/$subreddit/about.json').get({ $subreddit: 'snoocoreTest' });
+	}).then(function(result) {
+	    // check that they are subscribed!
+	    expect(result.data.user_is_subscriber).to.equal(true);
+	    // run another request, but make it unauthenticated (bypass)
+	    return reddit.r.$subreddit['about.json'].get(
+		{ $subreddit: 'snoocoreTest' },
+		{ bypassAuth: true });
+	}).then(function(result) {
+	    expect(result.data.user_is_subscriber).to.not.equal(true);
+	});
+    });
 
 });

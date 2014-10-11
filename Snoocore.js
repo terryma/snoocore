@@ -126,6 +126,7 @@ function Snoocore(config) {
 	    // Options that will change the way this call behaves
 	    // mostly specific to recursion / exiting it if needed
 	    options = options || {};
+	    var bypassAuth = options.bypassAuth || false;
 
 	    var startCallTime = Date.now();
 	    throttleDelay += throttle;
@@ -145,7 +146,7 @@ function Snoocore(config) {
 		}
 
 		// If we're logged in, set the modhash & cookie
-		if (isLoggedIn()) {
+		if (!bypassAuth && isLoggedIn()) {
 		    call.set('X-Modhash', self._modhash);
 		    if (self._isNode) {
 			call.set('Cookie',
@@ -154,7 +155,8 @@ function Snoocore(config) {
 		}
 
 		// if we're authenticated, set the authorization header
-		if (isAuthenticated()) {
+		// and provide an option to not provide auth if necessary
+		if (!bypassAuth && isAuthenticated()) {
 		    call.set('Authorization',
 			     self._authData.token_type + ' ' +
 			     self._authData.access_token);
@@ -180,7 +182,7 @@ function Snoocore(config) {
 		    }
 		}
 
-		
+
 		// Here is where we actually make the call to Reddit.
 		// Wrap it in a promise to better handle the error logic
 		return when.promise(function(resolve, reject) {
@@ -194,14 +196,14 @@ function Snoocore(config) {
 		    if (response.status === 403 && self._refreshToken !== '') {
 
 			// fail if the refresh fail flag was set.
-			if (options.refreshTokenFail) {
+			if (options._refreshTokenFail) {
 			    throw new Error('unable to fetch a new access_token');
 			}
 
 			// attempt to refresh the access token
 			return self.refresh(self._refreshToken).then(function() {
 			    // make the call again and flag to fail if it happens again
-			    return callRedditApi(givenArgs, { refreshTokenFail: true });
+			    return callRedditApi(givenArgs, { _refreshTokenFail: true });
 			});
 		    }
 
@@ -209,7 +211,7 @@ function Snoocore(config) {
 		    try { data = JSON.parse(response.text); }
 		    catch(e) {
 			throw new Error(
-			    'Unable to parse response text from Reddit\n\n' + 
+			    'Unable to parse response text from Reddit\n\n' +
 				response.text);
 		    }
 
@@ -222,7 +224,7 @@ function Snoocore(config) {
 			if (typeof data.json.data.modhash !== 'undefined') {
 			    self._modhash = data.json.data.modhash;
 			}
-			
+
 			if (typeof data.json.data.cookie !== 'undefined') {
 			    self._redditSession = data.json.data.cookie;
 			}
@@ -258,7 +260,7 @@ function Snoocore(config) {
     function buildListing(endpoint) {
 	var callApi = buildCall(endpoint);
 
-	return function getListing(givenArgs) {
+	return function getListing(givenArgs, options) {
 
 	    givenArgs = givenArgs || {};
 
@@ -270,12 +272,12 @@ function Snoocore(config) {
 	    , start = givenArgs.after || null;
 
 	    function getSlice(givenArgs) {
-		return callApi(givenArgs).then(function(result) {
-		    
+		return callApi(givenArgs, options).then(function(result) {
+
 		    var slice = {};
-		    
+
 		    slice.count = count;
-		    
+
 		    slice.get = result;
 
 		    slice.before = slice.get.data.before || null;
@@ -314,7 +316,7 @@ function Snoocore(config) {
 
 		    slice.start = function() {
 			count = 0;
-			
+
 			var args = givenArgs;
 			args.before = null;
 			args.after = start;
@@ -325,7 +327,7 @@ function Snoocore(config) {
 		    slice.requery = function() {
 			return getSlice(givenArgs);
 		    };
-		    
+
 		    return slice;
 		});
 
@@ -506,7 +508,7 @@ function Snoocore(config) {
 	    });
 	});
     };
-    
+
     self.getAuthUrl = function(state) {
 	var options = self._oauth;
 	options.state = state || Math.ceil(Math.random() * 1000);
@@ -521,7 +523,7 @@ function Snoocore(config) {
 	    redirectUri: self._oauth.redirectUri,
 	    scope: self._oauth.scope
 	}).then(function(authDataResult) {
-	    // only set the internal refresh token if reddit 
+	    // only set the internal refresh token if reddit
 	    // agrees that it was OK and sends back authData
 	    self._refreshToken = refreshToken;
 	    self._authData = authDataResult;
@@ -568,7 +570,7 @@ function Snoocore(config) {
 	    // back the refresh token that will be used to re-authenticate
 	    // later without user interaction.
 	    if (authDataResult.refresh_token) {
-		// set the internal refresh token for automatic expiring 
+		// set the internal refresh token for automatic expiring
 		// access_token management
 		self._refreshToken = authDataResult.refresh_token;
 		return authDataResult.refresh_token;
@@ -577,8 +579,8 @@ function Snoocore(config) {
     };
 
     // Clears any authentication data & removes OAuth authentication
-    // 
-    // By default it will only remove the "access_token". Specify 
+    //
+    // By default it will only remove the "access_token". Specify
     // the users refresh token to revoke that token instead.
     self.deauth = function(refreshToken) {
 
@@ -589,7 +591,7 @@ function Snoocore(config) {
 
 	var isRefreshToken = typeof refreshToken === 'string';
 	var token = isRefreshToken ? refreshToken : self._authData.access_token;
-	
+
 	return Snoocore.oauth.revokeToken(token, isRefreshToken, {
 	    consumerKey: self._oauth.consumerKey,
 	    consumerSecret: self._oauth.consumerSecret

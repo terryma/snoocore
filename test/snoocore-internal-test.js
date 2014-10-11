@@ -21,7 +21,7 @@ var expect = chai.expect;
 /* global afterEach */
 /* global beforeEach */
 
-describe.only('Snoocore Internal Tests', function () {
+describe('Snoocore Internal Tests', function () {
 
 	this.timeout(20000);
 
