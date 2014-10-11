@@ -196,14 +196,14 @@ function Snoocore(config) {
 		    if (response.status === 403 && self._refreshToken !== '') {
 
 			// fail if the refresh fail flag was set.
-			if (options.refreshTokenFail) {
+			if (options._refreshTokenFail) {
 			    throw new Error('unable to fetch a new access_token');
 			}
 
 			// attempt to refresh the access token
 			return self.refresh(self._refreshToken).then(function() {
 			    // make the call again and flag to fail if it happens again
-			    return callRedditApi(givenArgs, { refreshTokenFail: true });
+			    return callRedditApi(givenArgs, { _refreshTokenFail: true });
 			});
 		    }
 
