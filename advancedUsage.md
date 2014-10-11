@@ -3,7 +3,21 @@ title: Snoocore advanced usage
 layout: default
 ---
 
-## Advanced Usage
+# Advanced Usage
+
+## Bypass authentication for a call
+
+It may be useful to bypass authentication for a call to get a resource as it is when not authenticated. To do this, pass in a second object when using an endpoint and pass in `bypassAuth: true`
+
+```javascript
+// Get the front page as an anonymous user when authenticated
+reddit('/hot').get(
+    // normal arguments (for the reddit API call)
+    { limit: 100 }, 
+    // second object (unrelated to reddit's API paramaters)
+    { bypassAuth: true } 
+).then(function(result) { /* ... */ });
+```
 
 ## Making calls to undocumented resources
 
