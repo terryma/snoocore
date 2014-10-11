@@ -1,49 +1,43 @@
 {
-    "name": "snoocore",
-    "version": "1.8.2",
-    "description": "A minimal and complete JavaScript driver for the Reddit API.",
-    "main": "Snoocore.js",
-    "repository": {
-        "type": "git",
-        "url": "git://github.com/trevorsenior/snoocore.git"
-    },
-    "author": "Trevor Senior <trevor@tsenior.com> (http://tsenior.com/)",
-    "license": "MIT",
-    "bugs": {
-        "url": "https://github.com/trevorsenior/snoocore/issues"
-    },
-    "dependencies": {
-        "lodash": "^2.4.1",
-        "reddit-api-generator": "2.0.0",
-        "superagent": "^0.18.0",
-        "when": "^3.4.3"
-    },
-    "devDependencies": {
-        "browserify": "~3.24.1",
-        "chai-as-promised": "^4.1.1",
-        "karma": "^0.10.9",
-        "karma-chrome-launcher": "^0.1.2",
-        "karma-coffee-preprocessor": "^0.1.3",
-        "karma-firefox-launcher": "^0.1.3",
-        "karma-html2js-preprocessor": "^0.1.0",
-        "karma-jasmine": "^0.1.5",
-        "karma-mocha": "^0.1.1",
-        "karma-phantomjs-launcher": "^0.1.2",
-        "karma-requirejs": "^0.2.1",
-        "karma-script-launcher": "^0.1.0",
-        "mocha": "^1.19.0",
-        "open": "0.0.4"
-    },
-    "directories": {
-        "test": "test"
-    },
-    "keywords": [
-        "reddit",
-        "api",
-        "snoocore",
-        "wrapper"
-    ],
-    "scripts": {
-        "test": "./run.js all"
-    }
+  "name": "snoocore",
+  "version": "1.8.2",
+  "description": "A minimal and complete JavaScript driver for the Reddit API.",
+  "main": "Snoocore.js",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/trevorsenior/snoocore.git"
+  },
+  "author": "Trevor Senior <trevor@tsenior.com> (http://tsenior.com/)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/trevorsenior/snoocore/issues"
+  },
+  "dependencies": {
+    "lodash": "^2.4.1",
+    "reddit-api-generator": "2.0.0",
+    "when": "^3.4.3"
+  },
+  "devDependencies": {
+    "browserify": "~3.24.1",
+    "chai-as-promised": "^4.1.1",
+    "karma": "^0.12.24",
+    "karma-chrome-launcher": "^0.1.5",
+    "karma-firefox-launcher": "^0.1.3",
+    "karma-mocha": "^0.1.9",
+    "karma-phantomjs-launcher": "^0.1.4",
+    "mocha": "^1.19.0",
+    "open": "0.0.4"
+  },
+  "directories": {
+    "test": "test"
+  },
+  "keywords": [
+    "reddit",
+    "api",
+    "snoocore",
+    "wrapper"
+  ],
+  "scripts": {
+    "test": "./run.js all"
+  }
 }
