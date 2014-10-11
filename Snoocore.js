@@ -4,7 +4,9 @@ var when = require('when')
 , delay = require('when/delay')
 , request = require('superagent')
 , lodash = require('lodash')
-, rawApi = require('reddit-api-generator');
+, rawApi = require('reddit-api-generator')
+, redditNodeParser = require('./redditNodeParser')
+, utils = require('./utils');
 
 module.exports = Snoocore;
 
@@ -19,11 +21,8 @@ function Snoocore(config) {
 
     self._isNode = typeof config.browser !== 'undefined'
         ? !config.browser
-        : (typeof require === "function" &&
-           typeof exports === "object" &&
-           typeof module === "object" &&
-           typeof window === "undefined");
-
+        : utils.isNode();
+         
     self._modhash = ''; // The current mod hash of whatever user we have
     self._redditSession = ''; // The current cookie (reddit_session)
     self._authData = {}; // Set if user has authenticated with OAuth
@@ -139,6 +138,10 @@ function Snoocore(config) {
                 , args = buildArgs(givenArgs);
 
                 var call = request[method](url);
+		
+		if (self._isNode) {
+		    call.parse(redditNodeParser);
+		}
 
                 // Can't set User-Agent in browser based JavaScript!
                 if (self._isNode) {
@@ -181,8 +184,7 @@ function Snoocore(config) {
                         call.send(args);
                     }
                 }
-
-
+				
                 // Here is where we actually make the call to Reddit.
                 // Wrap it in a promise to better handle the error logic
                 return when.promise(function(resolve, reject) {
@@ -207,13 +209,7 @@ function Snoocore(config) {
                         });
                     }
 
-                    var data;
-                    try { data = JSON.parse(response.text); }
-                    catch(e) {
-                        throw new Error(
-                            'Unable to parse response text from Reddit\n\n' +
-                                response.text);
-                    }
+                    var data = response.body;
 
                     // set the modhash if the data contains it
                     if (typeof data !== 'undefined' &&
@@ -494,7 +490,8 @@ function Snoocore(config) {
 
             var defer = when.defer();
 
-            request.post('http://www.reddit.com/logout')
+            request
+		.post('http://www.reddit.com/logout')
                 .set('X-Modhash', modhash)
                 .type('form')
                 .send({ uh: modhash })

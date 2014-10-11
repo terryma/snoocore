@@ -3,9 +3,12 @@
 var querystring = require('querystring')
 , util = require('util')
 , when = require('when')
-, request = require('superagent');
+, request = require('superagent')
+, redditNodeParser = require('./redditNodeParser')
+, utils = require('./utils');
 
-var oauth = {};
+var oauth = {}
+, isNode = utils.isNode();
 
 function normalizeScope(scope) {
     // Set options.scope if not set, or convert an array into a string
@@ -67,6 +70,13 @@ oauth.getAuthData = function(type, options) {
     , url = 'https://ssl.reddit.com/api/v1/access_token'
     , call = request.post(url);
 
+
+    // Only use the reddit parser if in node, else use default
+    // client side superagent one
+    if (isNode) {
+	call.parse(redditNodeParser);
+    }
+
     call.type('form');
     call.auth(options.consumerKey, options.consumerSecret);
     call.send(params);
@@ -100,6 +110,10 @@ oauth.revokeToken = function(token, isRefreshToken, options) {
 
     var call = request.post(url);
 
+    if (isNode) {
+	call.parse(redditNodeParser);
+    }
+    
     call.type('form');
     call.auth(options.consumerKey, options.consumerSecret);
     call.send(params);
