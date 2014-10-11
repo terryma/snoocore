@@ -126,6 +126,7 @@ function Snoocore(config) {
 	    // Options that will change the way this call behaves
 	    // mostly specific to recursion / exiting it if needed
 	    options = options || {};
+	    var bypassAuth = options.bypassAuth || false;
 
 	    var startCallTime = Date.now();
 	    throttleDelay += throttle;
@@ -145,7 +146,7 @@ function Snoocore(config) {
 		}
 
 		// If we're logged in, set the modhash & cookie
-		if (isLoggedIn()) {
+		if (!bypassAuth && isLoggedIn()) {
 		    call.set('X-Modhash', self._modhash);
 		    if (self._isNode) {
 			call.set('Cookie',
@@ -155,7 +156,7 @@ function Snoocore(config) {
 
 		// if we're authenticated, set the authorization header
 		// and provide an option to not provide auth if necessary
-		if (typeof options.bypassAuth === 'undefined' && isAuthenticated()) {
+		if (!bypassAuth && isAuthenticated()) {
 		    call.set('Authorization',
 			     self._authData.token_type + ' ' +
 			     self._authData.access_token);
