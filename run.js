@@ -8,13 +8,13 @@ var fs = require('fs')
 
 exports.installModules = function(done) {
     fs.exists(path.join(__dirname, 'node_modules'), function(exists) {
-	if (!exists) {
-	    return exec('npm install', { cwd: __dirname }, function(error, stdout, stderr) {
-		return done(error);
-	    });
-	} else {
-	    return done();
-	}
+        if (!exists) {
+            return exec('npm install', { cwd: __dirname }, function(error, stdout, stderr) {
+                return done(error);
+            });
+        } else {
+            return done();
+        }
     });
 };
 
@@ -28,111 +28,111 @@ function buildWhenStandalone(done) {
     var whenFile = path.join(buildDir, 'when.js');
 
     fs.exists(buildDir, function(exists) {
-	if (exists) {
-	    return done();
-	}
+        if (exists) {
+            return done();
+        }
 
-	return fs.mkdir(buildDir, function() {
-	    fs.writeFile(whenBrowserifyFile,
-			 "var when = module.exports = require('../when');" +
-			 "when.callbacks = require('../callbacks');" +
-			 "when.cancelable = require('../cancelable');" +
-			 "when.delay = require('../delay');" +
-			 "when.fn = require('../function');" +
-			 "when.guard = require('../guard');" +
-			 "when.keys = require('../keys');" +
-			 "when.nodefn = when.node = require('../node');" +
-			 "when.parallel = require('../parallel');" +
-			 "when.pipeline = require('../pipeline');" +
-			 "when.poll = require('../poll');" +
-			 "when.sequence = require('../sequence');" +
-			 "when.timeout = require('../timeout');",
-			 function(error) {
-			     return error ? done(error) : build();
-			 });
-	});
+        return fs.mkdir(buildDir, function() {
+            fs.writeFile(whenBrowserifyFile,
+                         "var when = module.exports = require('../when');" +
+                         "when.callbacks = require('../callbacks');" +
+                         "when.cancelable = require('../cancelable');" +
+                         "when.delay = require('../delay');" +
+                         "when.fn = require('../function');" +
+                         "when.guard = require('../guard');" +
+                         "when.keys = require('../keys');" +
+                         "when.nodefn = when.node = require('../node');" +
+                         "when.parallel = require('../parallel');" +
+                         "when.pipeline = require('../pipeline');" +
+                         "when.poll = require('../poll');" +
+                         "when.sequence = require('../sequence');" +
+                         "when.timeout = require('../timeout');",
+                         function(error) {
+                             return error ? done(error) : build();
+                         });
+        });
     });
 
     function build() {
-	exec(path.join(__dirname, 'node_modules', '.bin', 'browserify') +
-	     ' -s when' +
-	     ' -o ' + whenFile +
-	     ' ' + whenBrowserifyFile,
-	     { cwd: buildDir },
-	     function(error, stdout, stderr) {
-		 return done(error);
-	     });
+        exec(path.join(__dirname, 'node_modules', '.bin', 'browserify') +
+             ' -s when' +
+             ' -o ' + whenFile +
+             ' ' + whenBrowserifyFile,
+             { cwd: buildDir },
+             function(error, stdout, stderr) {
+                 return done(error);
+             });
     }
 }
 
 exports.buildStandalone = function(done) {
     buildWhenStandalone(function(error) {
-	if (error) { return done(error); }
+        if (error) { return done(error); }
 
-	return exec(path.join(__dirname, 'node_modules', '.bin', 'browserify') +
-		    ' -s Snoocore' +
-		    ' -o Snoocore-standalone.js' +
-		    ' Snoocore.js',
-		    { cwd: __dirname },
-		    function(error, stdout, stderr) {
-			return done(error);
-		    });
+        return exec(path.join(__dirname, 'node_modules', '.bin', 'browserify') +
+                    ' -s Snoocore' +
+                    ' -o Snoocore-standalone.js' +
+                    ' Snoocore.js',
+                    { cwd: __dirname },
+                    function(error, stdout, stderr) {
+                        return done(error);
+                    });
     });
 };
 
 exports.karmaTests = function(done) {
     var karma = spawn(
-	path.join(__dirname, 'node_modules', '.bin', 'karma'),
-	[ 'start' ],
-	{ cwd: __dirname, stdio: 'inherit' }
+        path.join(__dirname, 'node_modules', '.bin', 'karma'),
+        [ 'start' ],
+        { cwd: __dirname, stdio: 'inherit' }
     );
 
     karma.on('exit', function(code) {
-	return (code !== 0)
-	    ? done(new Error('Karma tests failed to run'))
-	    : done();
+        return (code !== 0)
+            ? done(new Error('Karma tests failed to run'))
+            : done();
     });
 };
 
 
 exports.mochaTests = function(done) {
     var mocha = spawn(
-	path.join(__dirname, 'node_modules', '.bin', 'mocha'),
-	[ '-R', 'spec' ],
-	{ cwd: __dirname, stdio: 'inherit' }
+        path.join(__dirname, 'node_modules', '.bin', 'mocha'),
+        [ '-R', 'spec' ],
+        { cwd: __dirname, stdio: 'inherit' }
     );
 
     mocha.on('exit', function(code) {
-	return (code !== 0)
-	    ? done(new Error('Mocha tests failed to run'))
-	    : done();
+        return (code !== 0)
+            ? done(new Error('Mocha tests failed to run'))
+            : done();
     });
 };
 
 exports.runTests = function(done) {
     exports.karmaTests(function(error) {
-	if (error) {
-	    return done(error);
-	}
-	return exports.mochaTests(function(error) {
-	    if (error) {
-		return done(error);
-	    }
+        if (error) {
+            return done(error);
+        }
+        return exports.mochaTests(function(error) {
+            if (error) {
+                return done(error);
+            }
 
-	    return done();
-	});
+            return done();
+        });
     });
 };
 
 exports.all = function(done) {
     return exports.installModules(function(error) {
-	if (error) { return done(error); }
-	return exports.buildStandalone(function(error) {
-	    if (error) { return done(error); }
-	    return exports.runTests(function(error) {
-		return error ? done(error) : done();
-	    });
-	});
+        if (error) { return done(error); }
+        return exports.buildStandalone(function(error) {
+            if (error) { return done(error); }
+            return exports.runTests(function(error) {
+                return error ? done(error) : done();
+            });
+        });
     });
 };
 
@@ -161,13 +161,13 @@ case 'karma':
     break;
 default:
     fn = function(done) {
-	return done(new Error('invalid subcommand'));
+        return done(new Error('invalid subcommand'));
     };
 }
 
 fn(function(error) {
     if (error) {
-	console.error(error.stack);
-	process.exit(1);
+        console.error(error.stack);
+        process.exit(1);
     }
 });

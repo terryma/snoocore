@@ -9,66 +9,66 @@ exports.waitForRequest = function() {
 
     return when.promise(function(resolve, reject) {
 
-	var server = http.createServer()
-	, connections = []
-	, received = false;
+        var server = http.createServer()
+        , connections = []
+        , received = false;
 
-	function killConnection(connection) {
-	    connection.end();
-	    connection.destroy();
-	}
+        function killConnection(connection) {
+            connection.end();
+            connection.destroy();
+        }
 
-	function killAllConnections() {
-	    connections.forEach(killConnection);
-	}
+        function killAllConnections() {
+            connections.forEach(killConnection);
+        }
 
-	server.on('request', function(req, res) {
+        server.on('request', function(req, res) {
 
-	    connections.push(req.connection);
+            connections.push(req.connection);
 
-	    var parsedUrl = url.parse(req.url, true);
+            var parsedUrl = url.parse(req.url, true);
 
-	    if (req.method !== 'GET') {
-		killConnection(req.connection);
-		return res.end();
-	    }
+            if (req.method !== 'GET') {
+                killConnection(req.connection);
+                return res.end();
+            }
 
-	    // favicon
-	    if (parsedUrl.pathname !== '/') {
-		killConnection(req.connection);
-		return res.end();
-	    }
+            // favicon
+            if (parsedUrl.pathname !== '/') {
+                killConnection(req.connection);
+                return res.end();
+            }
 
-	    // automatically close the window after it loads
-	    var html = [
-		"<html><head></head><body>",
-		"Just a moment...",
-		"<script>",
-		"setTimeout(function() {",
-		"	window.open('','_self').close();",
-		"}, 1000);",
-		"</script>",
-		"</body></html>"
-	    ].join('\n');
+            // automatically close the window after it loads
+            var html = [
+                "<html><head></head><body>",
+                "Just a moment...",
+                "<script>",
+                "setTimeout(function() {",
+                "       window.open('','_self').close();",
+                "}, 1000);",
+                "</script>",
+                "</body></html>"
+            ].join('\n');
 
-	    res.end(html);
+            res.end(html);
 
-	    // Don't accept any other requests for this server
-	    server.close();
+            // Don't accept any other requests for this server
+            server.close();
 
-	    // Once all connections close, return the parameters
-	    server.once('close', function() {
-		return resolve(parsedUrl.query);
-	    });
+            // Once all connections close, return the parameters
+            server.once('close', function() {
+                return resolve(parsedUrl.query);
+            });
 
-	    killAllConnections();
-	});
+            killAllConnections();
+        });
 
-	server.on('clientError', function(exception) {
-	    return reject(exception);
-	});
+        server.on('clientError', function(exception) {
+            return reject(exception);
+        });
 
-	server.listen(3000, '127.0.0.1');
+        server.listen(3000, '127.0.0.1');
     });
 
 };
