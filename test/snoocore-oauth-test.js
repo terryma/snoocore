@@ -154,9 +154,6 @@ describe('Snoocore OAuth Test', function () {
                 var authorizationCode = params.code;
                 return reddit.auth(authorizationCode).then(function(refreshToken) {
 
-                    console.error('refresh token', refreshToken); //!!!debug
-
-
                     return reddit('/api/v1/me').get().then(function(data) {
 
                         expect(data.name).to.be.a('string');

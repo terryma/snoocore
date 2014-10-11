@@ -94,7 +94,7 @@ describe('Snoocore Listings Test', function () {
         return reddit.raw('https://www.reddit.com/domain/$domain/hot.json').listing({
             $domain: 'google.com'
         }).done(function(slice) {
-            console.log(slice);
+            expect(slice.get.kind).to.equal('Listing');
         });
     });
 

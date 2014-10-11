@@ -148,6 +148,7 @@ function Snoocore(config) {
                     call.set('User-Agent', self._userAgent);
                 }
 
+
                 // If we're logged in, set the modhash & cookie
                 if (!bypassAuth && isLoggedIn()) {
                     call.set('X-Modhash', self._modhash);
@@ -209,7 +210,7 @@ function Snoocore(config) {
                         });
                     }
 
-                    var data = response.body;
+                    var data = response.body || {};
 
                     // set the modhash if the data contains it
                     if (typeof data !== 'undefined' &&
@@ -248,7 +249,7 @@ function Snoocore(config) {
                 }
             });
 
-        };
+        }
 
         return callRedditApi;
     }

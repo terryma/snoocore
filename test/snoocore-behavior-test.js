@@ -1,4 +1,5 @@
 "use strict";
+/* global describe, it, before, beforeEach */
 
 var isNode = typeof require === "function" &&
         typeof exports === "object" &&
@@ -18,11 +19,6 @@ if (isNode)
 
 chai.use(chaiAsPromised);
 var expect = chai.expect;
-
-/* global describe */
-/* global it */
-/* golbal before */
-/* global beforeEach */
 
 describe('Snoocore Behavior Test', function () {
 
@@ -130,32 +126,40 @@ describe('Snoocore Behavior Test', function () {
 
     });
 
-    it('should bypass authentication for calls when set', function() {
-        return login().then(function() {
-            return reddit('/r/$subreddit/about.json').get({ $subreddit: 'snoocoreTest' });
-        }).then(function(response) {
+    // Can only test this in node based environments. The browser tests 
+    // are unable to unset the cookies (when using user/pass auth).
+    //
+    // Browsers are unable to authenticate anyway, unless using a chrome
+    // extension. If this is the case, they should use OAuth for authentication
+    // and then bypass will work.
+    if (isNode) {
+	it('should bypass authentication for calls when set', function() {
+            return login().then(function() {
+		return reddit('/r/$subreddit/about.json').get({ $subreddit: 'snoocoreTest' });
+            }).then(function(response) {
 
-            var subName = response.data.name
-            , isSubbed = response.data.user_is_subscriber;
+		var subName = response.data.name
+		, isSubbed = response.data.user_is_subscriber;
 
-            // make sure the user is subscribed
-            return isSubbed ? when.resolve() : reddit.api.subscribe.post({
-                action: 'sub',
-                sr: subName
+		// make sure the user is subscribed
+		return isSubbed ? when.resolve() : reddit.api.subscribe.post({
+                    action: 'sub',
+                    sr: subName
+		});
+
+            }).then(function() {
+		return reddit('/r/$subreddit/about.json').get({ $subreddit: 'snoocoreTest' });
+            }).then(function(result) {
+		// check that they are subscribed!
+		expect(result.data.user_is_subscriber).to.equal(true);
+		// run another request, but make it unauthenticated (bypass)
+		return reddit('/r/$subreddit/about.json').get(
+                    { $subreddit: 'snoocoreTest' },
+                    { bypassAuth: true });
+            }).then(function(result) {
+		expect(result.data.user_is_subscriber).to.not.equal(true);
             });
-
-        }).then(function() {
-            return reddit('/r/$subreddit/about.json').get({ $subreddit: 'snoocoreTest' });
-        }).then(function(result) {
-            // check that they are subscribed!
-            expect(result.data.user_is_subscriber).to.equal(true);
-            // run another request, but make it unauthenticated (bypass)
-            return reddit.r.$subreddit['about.json'].get(
-                { $subreddit: 'snoocoreTest' },
-                { bypassAuth: true });
-        }).then(function(result) {
-            expect(result.data.user_is_subscriber).to.not.equal(true);
-        });
-    });
+	});
+    }
 
 });
