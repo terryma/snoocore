@@ -2,7 +2,7 @@
 // Generated on Mon Feb 24 2014 21:49:20 GMT-0500 (EST)
 
 module.exports = function(config) {
-  config.set({
+    config.set({
 
 	// base path, that will be used to resolve files and exclude
 	basePath: '',
@@ -14,18 +14,18 @@ module.exports = function(config) {
 
 	// list of files / patterns to load in the browser
 	files: [
-		'node_modules/chai/chai.js',
-		'node_modules/chai-as-promised/lib/chai-as-promised.js',
-		'node_modules/when/build/when.js',
-		'Snoocore-standalone.js',
-		'test/*'
+	    'node_modules/chai/chai.js',
+	    'node_modules/chai-as-promised/lib/chai-as-promised.js',
+	    'node_modules/when/build/when.js',
+	    'Snoocore-standalone.js',
+	    'test/*'
 	],
 
 
 	// list of files to exclude
 	exclude: [
-		'test/oauth-test.js',
-		'test/snoocore-oauth-test.js'
+	    'test/oauth-test.js',
+	    'test/snoocore-oauth-test.js'
 	],
 
 
@@ -60,20 +60,20 @@ module.exports = function(config) {
 	// - PhantomJS
 	// - IE (only Windows; has to be installed with `npm install karma-ie-launcher`)
 	browsers: [
-		'PhantomJsNoWebSecurity',
-		'ChromeNoWebSecutity'
+	    'PhantomJsNoWebSecurity',
+	    'ChromeNoWebSecutity'
 	],
 
 
 	customLaunchers: {
-		PhantomJsNoWebSecurity: {
-			base: 'PhantomJS',
-			flags: ['--web-security=false']
-		},
-		ChromeNoWebSecutity: {
-			base: 'Chrome',
-			flags: ['--disable-web-security']
-		}
+	    PhantomJsNoWebSecurity: {
+		base: 'PhantomJS',
+		flags: ['--web-security=false']
+	    },
+	    ChromeNoWebSecutity: {
+		base: 'Chrome',
+		flags: ['--disable-web-security']
+	    }
 	},
 
 	// If browser does not capture in given timeout [ms], kill it
@@ -85,5 +85,5 @@ module.exports = function(config) {
 	singleRun: true
 
 
-  });
+    });
 };

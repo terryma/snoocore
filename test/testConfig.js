@@ -4,33 +4,33 @@
 var config = {};
 
 config.testServer = {
-	port: 3000
+    port: 3000
 };
 
 // sample credentials - they don't actually work!
 config.reddit = {
-	redirectUri: 'http://localhost:3000',
+    redirectUri: 'http://localhost:3000',
 
-	REDDIT_USERNAME: 'snoocore',
-	REDDIT_PASSWORD: 'RKS5k1Ag3rrWaM&&mob5',
+    REDDIT_USERNAME: 'snoocore',
+    REDDIT_PASSWORD: 'RKS5k1Ag3rrWaM&&mob5',
 
-	REDDIT_KEY_WEB: 'UXPNWlG5W3FWYg',
-	REDDIT_SECRET_WEB: 'y7GsNwB88--MmrnVez_v7jYKO0I',
+    REDDIT_KEY_WEB: 'UXPNWlG5W3FWYg',
+    REDDIT_SECRET_WEB: 'y7GsNwB88--MmrnVez_v7jYKO0I',
 
-	REDDIT_KEY_INSTALLED: 'V_nb4nmEVcnAxA',
-	REDDIT_SECRET_INSTALLED: 'r6xY7zQi_tQaTIYLjZewYTYVi_0',
+    REDDIT_KEY_INSTALLED: 'V_nb4nmEVcnAxA',
+    REDDIT_SECRET_INSTALLED: 'r6xY7zQi_tQaTIYLjZewYTYVi_0',
 
-	REDDIT_KEY_SCRIPT: 'wU42GYDQ6PXvLA',
-	REDDIT_SECRET_SCRIPT: 'm-MYktvFelfz_E85GLzBM09DMbU'
+    REDDIT_KEY_SCRIPT: 'wU42GYDQ6PXvLA',
+    REDDIT_SECRET_SCRIPT: 'm-MYktvFelfz_E85GLzBM09DMbU'
 };
 
 
 if (typeof require === "function" &&
-	typeof exports === "object" &&
-	typeof module === "object" &&
+    typeof exports === "object" &&
+    typeof module === "object" &&
     typeof window === "undefined")
 {
-	module.exports = config; // NodeJS
+    module.exports = config; // NodeJS
 } else {
-	window.config = config; // Browser
+    window.config = config; // Browser
 }
