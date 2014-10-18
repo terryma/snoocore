@@ -28,7 +28,7 @@ To make use of these endpoints before they are documented, you can use the raw A
 For example, to make a call to [`[/r/subreddit]/hot`](http://www.reddit.com/dev/api#GET_hot) we can use the normal snoocore API:
 
 ```javascript
-reddit.r.$subreddit.hot.get({
+reddit('/r/$subreddit/hot').get({
 	$subreddit: 'netsec',
 	limit: 10
 }).then(/* */);

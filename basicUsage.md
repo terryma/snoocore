@@ -13,12 +13,6 @@ To use the endpoint [`GET /api/v1/me`](http://www.reddit.com/dev/api#GET_api_v1_
 var promise = reddit('/api/v1/me').get();
 ```
 
-Or if you prefer, use the dot-syntax:
-
-```javascript
-var promise = reddit.api.v1.me.get();
-```
-
 We can determine what to call based on the path (in this case `/api/v1/me`) and the HTTP verb that is uses (in this case `GET`).
 
 <sub>If you are new to promises or want a quick overview on how they work with snoocore take a look [here](promises.html). The rest of this readme assumes basic knowledge on how they work.</sub>
@@ -41,13 +35,11 @@ Calls to endpoints such as [`POST /api/multi/{multipath}/rename`](http://www.red
 URL parameters begin with a `$`, and take their values in the same way as normal parameters would:
 
 ```javascript
-var promise = reddit.api.multi.$multipath.rename.post({
+var promise = reddit('/api/multi/$multipath/rename').post({
     $multipath: 'urlParameterValue',
     from: '9',
     to:  '5'
 });
-
-// or reddit('/api/multi/$multipath/rename').post(...)
 ```
 
 # Advanced Usage

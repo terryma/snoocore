@@ -13,7 +13,7 @@ Sometimes we come across a path like [`GET /api/me.json`](http://www.reddit.com/
 reddit.api['about.json'].get().then(/* ... */)
 ```
 
-Or, use the path to avoid this:
+Or, use the newer path syntax to avoid this all together:
 
 ```javascript
 reddit('/api/about.json').get().then(/* ... */)
