@@ -31,7 +31,7 @@ The downside to this is that all calls to reddit will be made as if the user was
 
 Most browsers allow you to write extensions that can white list domains and allow calls to be made to them. You will need to white list the following domains in your extension:
 
- - http://www.reddit.com
+ - https://www.reddit.com
  - https://ssl.reddit.com
  - https://oauth.reddit.com
 
