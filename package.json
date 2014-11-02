@@ -1,6 +1,6 @@
 {
   "name": "snoocore",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "description": "A minimal and complete JavaScript driver for the Reddit API.",
   "main": "Snoocore.js",
   "repository": {
