@@ -71,7 +71,7 @@ var reddit = new Snoocore({
 		mobile: true, // defaults to false.
 		duration: 'permanent', // defaults to 'temporary'
 		consumerKey: 'client_id from reddit', 
-		consumerSecret: 'client_secret from reddit',
+		consumerSecret: 'client_secret from reddit', // only needed for type: 'web'
 		redirectUri: 'redirectUri set for your app',
 		scope: [ 'flair', 'identity' ] // make sure to set all the scopes you need.
 	}
@@ -85,6 +85,10 @@ Optional. Set mobile to true if you want to send the user to the mobile reddit w
 #### `oauth.duration`
 
 If you are doing temporary things, there isn't a need to set this. If you want to do more long term tasks (more than an hour) you will need to set this to `'permanent'`. Read the section on [authorization](https://github.com/reddit/reddit/wiki/OAuth2#authorization) on the Reddit OAuth documentation for more information.
+
+### `oauth.consumerSecret`
+
+This is only needed for web applications. You can leave it an empty string, or leave it out all together for installed applecations.
 
 ### Getting the authentication URL
 
