@@ -554,11 +554,11 @@ function Snoocore(config) {
             var authorizationCode = args[0];
 
             authData = Snoocore.oauth.getAuthData(self._oauth.type, {
-                authorizationCode: authorizationCode,
-                consumerKey: self._oauth.consumerKey,
-                consumerSecret: self._oauth.consumerSecret,
-                redirectUri: self._oauth.redirectUri,
-                scope: self._oauth.scope
+		authorizationCode: authorizationCode,
+		consumerKey: self._oauth.consumerKey,
+		consumerSecret: self._oauth.consumerSecret || '',
+		redirectUri: self._oauth.redirectUri,
+		scope: self._oauth.scope
             });
         }
 
@@ -616,7 +616,7 @@ function Snoocore(config) {
     return self;
 }
 
-},{"./oauth":32,"./redditNodeParser":33,"./utils":34,"lodash":9,"reddit-api-generator":10,"superagent":11,"when":31,"when/delay":14}],2:[function(_dereq_,module,exports){
+},{"./oauth":30,"./redditNodeParser":31,"./utils":32,"lodash":9,"reddit-api-generator":10,"superagent":11,"when":29,"when/delay":14}],2:[function(_dereq_,module,exports){
 if (typeof Object.create === 'function') {
   // implementation from standard node.js 'util' module
   module.exports = function inherits(ctor, superCtor) {
@@ -1471,8 +1471,8 @@ function hasOwnProperty(obj, prop) {
   return Object.prototype.hasOwnProperty.call(obj, prop);
 }
 
-}).call(this,_dereq_("/home/trev/git/snoocore/node_modules/browserify/node_modules/insert-module-globals/node_modules/process/browser.js"),typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./support/isBuffer":7,"/home/trev/git/snoocore/node_modules/browserify/node_modules/insert-module-globals/node_modules/process/browser.js":3,"inherits":2}],9:[function(_dereq_,module,exports){
+}).call(this,_dereq_("/Users/trev/git/snoocore/node_modules/browserify/node_modules/insert-module-globals/node_modules/process/browser.js"),typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{"./support/isBuffer":7,"/Users/trev/git/snoocore/node_modules/browserify/node_modules/insert-module-globals/node_modules/process/browser.js":3,"inherits":2}],9:[function(_dereq_,module,exports){
 (function (global){
 /**
  * @license
@@ -9564,7 +9564,7 @@ define(function(_dereq_) {
 
 
 
-},{"./when":31}],15:[function(_dereq_,module,exports){
+},{"./when":29}],15:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -9574,7 +9574,7 @@ define(function (_dereq_) {
 
 	var makePromise = _dereq_('./makePromise');
 	var Scheduler = _dereq_('./Scheduler');
-	var async = _dereq_('./async');
+	var async = _dereq_('./env').asap;
 
 	return makePromise({
 		scheduler: new Scheduler(async)
@@ -9583,87 +9583,13 @@ define(function (_dereq_) {
 });
 })(typeof define === 'function' && define.amd ? define : function (factory) { module.exports = factory(_dereq_); });
 
-},{"./Scheduler":17,"./async":19,"./makePromise":29}],16:[function(_dereq_,module,exports){
+},{"./Scheduler":16,"./env":27,"./makePromise":28}],16:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
 
 (function(define) { 'use strict';
 define(function() {
-	/**
-	 * Circular queue
-	 * @param {number} capacityPow2 power of 2 to which this queue's capacity
-	 *  will be set initially. eg when capacityPow2 == 3, queue capacity
-	 *  will be 8.
-	 * @constructor
-	 */
-	function Queue(capacityPow2) {
-		this.head = this.tail = this.length = 0;
-		this.buffer = new Array(1 << capacityPow2);
-	}
-
-	Queue.prototype.push = function(x) {
-		if(this.length === this.buffer.length) {
-			this._ensureCapacity(this.length * 2);
-		}
-
-		this.buffer[this.tail] = x;
-		this.tail = (this.tail + 1) & (this.buffer.length - 1);
-		++this.length;
-		return this.length;
-	};
-
-	Queue.prototype.shift = function() {
-		var x = this.buffer[this.head];
-		this.buffer[this.head] = void 0;
-		this.head = (this.head + 1) & (this.buffer.length - 1);
-		--this.length;
-		return x;
-	};
-
-	Queue.prototype._ensureCapacity = function(capacity) {
-		var head = this.head;
-		var buffer = this.buffer;
-		var newBuffer = new Array(capacity);
-		var i = 0;
-		var len;
-
-		if(head === 0) {
-			len = this.length;
-			for(; i<len; ++i) {
-				newBuffer[i] = buffer[i];
-			}
-		} else {
-			capacity = buffer.length;
-			len = this.tail;
-			for(; head<capacity; ++i, ++head) {
-				newBuffer[i] = buffer[head];
-			}
-
-			for(head=0; head<len; ++i, ++head) {
-				newBuffer[i] = buffer[head];
-			}
-		}
-
-		this.buffer = newBuffer;
-		this.head = 0;
-		this.tail = this.length;
-	};
-
-	return Queue;
-
-});
-}(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
-
-},{}],17:[function(_dereq_,module,exports){
-/** @license MIT License (c) copyright 2010-2014 original author or authors */
-/** @author Brian Cavalier */
-/** @author John Hann */
-
-(function(define) { 'use strict';
-define(function(_dereq_) {
-
-	var Queue = _dereq_('./Queue');
 
 	// Credit to Twisol (https://github.com/Twisol) for suggesting
 	// this type of extensible queue + trampoline approach for next-tick conflation.
@@ -9675,9 +9601,12 @@ define(function(_dereq_) {
 	 */
 	function Scheduler(async) {
 		this._async = async;
-		this._queue = new Queue(15);
-		this._afterQueue = new Queue(5);
 		this._running = false;
+
+		this._queue = new Array(1<<16);
+		this._queueLen = 0;
+		this._afterQueue = new Array(1<<4);
+		this._afterQueueLen = 0;
 
 		var self = this;
 		this.drain = function() {
@@ -9690,7 +9619,8 @@ define(function(_dereq_) {
 	 * @param {{ run:function }} task
 	 */
 	Scheduler.prototype.enqueue = function(task) {
-		this._add(this._queue, task);
+		this._queue[this._queueLen++] = task;
+		this.run();
 	};
 
 	/**
@@ -9698,48 +9628,44 @@ define(function(_dereq_) {
 	 * @param {{ run:function }} task
 	 */
 	Scheduler.prototype.afterQueue = function(task) {
-		this._add(this._afterQueue, task);
+		this._afterQueue[this._afterQueueLen++] = task;
+		this.run();
 	};
 
-	/**
-	 * Drain the handler queue entirely, and then the after queue
-	 */
-	Scheduler.prototype._drain = function() {
-		runQueue(this._queue);
-		this._running = false;
-		runQueue(this._afterQueue);
-	};
-
-	/**
-	 * Add a task to the q, and schedule drain if not already scheduled
-	 * @param {Queue} queue
-	 * @param {{run:function}} task
-	 * @private
-	 */
-	Scheduler.prototype._add = function(queue, task) {
-		queue.push(task);
-		if(!this._running) {
+	Scheduler.prototype.run = function() {
+		if (!this._running) {
 			this._running = true;
 			this._async(this.drain);
 		}
 	};
 
 	/**
-	 * Run all the tasks in the q
-	 * @param queue
+	 * Drain the handler queue entirely, and then the after queue
 	 */
-	function runQueue(queue) {
-		while(queue.length > 0) {
-			queue.shift().run();
+	Scheduler.prototype._drain = function() {
+		var i = 0;
+		for (; i < this._queueLen; ++i) {
+			this._queue[i].run();
+			this._queue[i] = void 0;
 		}
-	}
+
+		this._queueLen = 0;
+		this._running = false;
+
+		for (i = 0; i < this._afterQueueLen; ++i) {
+			this._afterQueue[i].run();
+			this._afterQueue[i] = void 0;
+		}
+
+		this._afterQueueLen = 0;
+	};
 
 	return Scheduler;
 
 });
-}(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(_dereq_); }));
+}(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{"./Queue":16}],18:[function(_dereq_,module,exports){
+},{}],17:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -9767,82 +9693,7 @@ define(function() {
 	return TimeoutError;
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
-},{}],19:[function(_dereq_,module,exports){
-(function (process){
-/** @license MIT License (c) copyright 2010-2014 original author or authors */
-/** @author Brian Cavalier */
-/** @author John Hann */
-
-(function(define) { 'use strict';
-define(function(_dereq_) {
-
-	// Sniff "best" async scheduling option
-	// Prefer process.nextTick or MutationObserver, then check for
-	// vertx and finally fall back to setTimeout
-
-	/*jshint maxcomplexity:6*/
-	/*global process,document,setTimeout,MutationObserver,WebKitMutationObserver*/
-	var nextTick, MutationObs;
-
-	if (typeof process !== 'undefined' && process !== null &&
-		typeof process.nextTick === 'function') {
-		nextTick = function(f) {
-			process.nextTick(f);
-		};
-
-	} else if (MutationObs =
-		(typeof MutationObserver === 'function' && MutationObserver) ||
-		(typeof WebKitMutationObserver === 'function' && WebKitMutationObserver)) {
-		nextTick = (function (document, MutationObserver) {
-			var scheduled;
-			var el = document.createElement('div');
-			var o = new MutationObserver(run);
-			o.observe(el, { attributes: true });
-
-			function run() {
-				var f = scheduled;
-				scheduled = void 0;
-				f();
-			}
-
-			return function (f) {
-				scheduled = f;
-				el.setAttribute('class', 'x');
-			};
-		}(document, MutationObs));
-
-	} else {
-		nextTick = (function(cjsRequire) {
-			var vertx;
-			try {
-				// vert.x 1.x || 2.x
-				vertx = cjsRequire('vertx');
-			} catch (ignore) {}
-
-			if (vertx) {
-				if (typeof vertx.runOnLoop === 'function') {
-					return vertx.runOnLoop;
-				}
-				if (typeof vertx.runOnContext === 'function') {
-					return vertx.runOnContext;
-				}
-			}
-
-			// capture setTimeout to avoid being caught by fake timers
-			// used in time based tests
-			var capturedSetTimeout = setTimeout;
-			return function (t) {
-				capturedSetTimeout(t, 0);
-			};
-		}(_dereq_));
-	}
-
-	return nextTick;
-});
-}(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(_dereq_); }));
-
-}).call(this,_dereq_("/home/trev/git/snoocore/node_modules/browserify/node_modules/insert-module-globals/node_modules/process/browser.js"))
-},{"/home/trev/git/snoocore/node_modules/browserify/node_modules/insert-module-globals/node_modules/process/browser.js":3}],20:[function(_dereq_,module,exports){
+},{}],18:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -10101,7 +9952,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],21:[function(_dereq_,module,exports){
+},{}],19:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -10263,7 +10114,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],22:[function(_dereq_,module,exports){
+},{}],20:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -10292,7 +10143,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],23:[function(_dereq_,module,exports){
+},{}],21:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -10326,7 +10177,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],24:[function(_dereq_,module,exports){
+},{}],22:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -10393,7 +10244,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],25:[function(_dereq_,module,exports){
+},{}],23:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -10419,7 +10270,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],26:[function(_dereq_,module,exports){
+},{}],24:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -10427,11 +10278,11 @@ define(function() {
 (function(define) { 'use strict';
 define(function(_dereq_) {
 
-	var timer = _dereq_('../timer');
+	var env = _dereq_('../env');
 	var TimeoutError = _dereq_('../TimeoutError');
 
 	function setTimeout(f, ms, x, y) {
-		return timer.set(function() {
+		return env.setTimer(function() {
 			f(x, y, ms);
 		}, ms);
 	}
@@ -10474,11 +10325,11 @@ define(function(_dereq_) {
 
 			this._handler.visit(h,
 				function onFulfill(x) {
-					timer.clear(t);
+					env.clearTimer(t);
 					this.resolve(x); // this = h
 				},
 				function onReject(x) {
-					timer.clear(t);
+					env.clearTimer(t);
 					this.reject(x); // this = h
 				},
 				h.notify);
@@ -10499,7 +10350,7 @@ define(function(_dereq_) {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(_dereq_); }));
 
-},{"../TimeoutError":18,"../timer":30}],27:[function(_dereq_,module,exports){
+},{"../TimeoutError":17,"../env":27}],25:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -10507,20 +10358,25 @@ define(function(_dereq_) {
 (function(define) { 'use strict';
 define(function(_dereq_) {
 
-	var timer = _dereq_('../timer');
+	var setTimer = _dereq_('../env').setTimer;
 
 	return function unhandledRejection(Promise) {
 		var logError = noop;
 		var logInfo = noop;
+		var localConsole;
 
 		if(typeof console !== 'undefined') {
-			logError = typeof console.error !== 'undefined'
-				? function (e) { console.error(e); }
-				: function (e) { console.log(e); };
+			// Alias console to prevent things like uglify's drop_console option from
+			// removing console.log/error. Unhandled rejections fall into the same
+			// category as uncaught exceptions, and build tools shouldn't silence them.
+			localConsole = console;
+			logError = typeof localConsole.error !== 'undefined'
+				? function (e) { localConsole.error(e); }
+				: function (e) { localConsole.log(e); };
 
-			logInfo = typeof console.info !== 'undefined'
-				? function (e) { console.info(e); }
-				: function (e) { console.log(e); };
+			logInfo = typeof localConsole.info !== 'undefined'
+				? function (e) { localConsole.info(e); }
+				: function (e) { localConsole.log(e); };
 		}
 
 		Promise.onPotentiallyUnhandledRejection = function(rejection) {
@@ -10558,7 +10414,7 @@ define(function(_dereq_) {
 			tasks.push(f, x);
 			if(!running) {
 				running = true;
-				running = timer.set(flush, 0);
+				running = setTimer(flush, 0);
 			}
 		}
 
@@ -10603,7 +10459,7 @@ define(function(_dereq_) {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(_dereq_); }));
 
-},{"../timer":30}],28:[function(_dereq_,module,exports){
+},{"../env":27}],26:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -10643,7 +10499,84 @@ define(function() {
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
 
-},{}],29:[function(_dereq_,module,exports){
+},{}],27:[function(_dereq_,module,exports){
+(function (process){
+/** @license MIT License (c) copyright 2010-2014 original author or authors */
+/** @author Brian Cavalier */
+/** @author John Hann */
+
+/*global process,document,setTimeout,clearTimeout,MutationObserver,WebKitMutationObserver*/
+(function(define) { 'use strict';
+define(function(_dereq_) {
+	/*jshint maxcomplexity:6*/
+
+	// Sniff "best" async scheduling option
+	// Prefer process.nextTick or MutationObserver, then check for
+	// setTimeout, and finally vertx, since its the only env that doesn't
+	// have setTimeout
+
+	var MutationObs;
+	var capturedSetTimeout = typeof setTimeout !== 'undefined' && setTimeout;
+
+	// Default env
+	var setTimer = function(f, ms) { return setTimeout(f, ms); };
+	var clearTimer = function(t) { return clearTimeout(t); };
+	var asap = function (f) { return capturedSetTimeout(f, 0); };
+
+	// Detect specific env
+	if (isNode()) { // Node
+		asap = function (f) { return process.nextTick(f); };
+
+	} else if (MutationObs = hasMutationObserver()) { // Modern browser
+		asap = initMutationObserver(MutationObs);
+
+	} else if (!capturedSetTimeout) { // vert.x
+		var vertxRequire = _dereq_;
+		var vertx = vertxRequire('vertx');
+		setTimer = function (f, ms) { return vertx.setTimer(ms, f); };
+		clearTimer = vertx.cancelTimer;
+		asap = vertx.runOnLoop || vertx.runOnContext;
+	}
+
+	return {
+		setTimer: setTimer,
+		clearTimer: clearTimer,
+		asap: asap
+	};
+
+	function isNode () {
+		return typeof process !== 'undefined' && process !== null &&
+			typeof process.nextTick === 'function';
+	}
+
+	function hasMutationObserver () {
+		return (typeof MutationObserver === 'function' && MutationObserver) ||
+			(typeof WebKitMutationObserver === 'function' && WebKitMutationObserver);
+	}
+
+	function initMutationObserver(MutationObserver) {
+		var scheduled;
+		var node = document.createTextNode('');
+		var o = new MutationObserver(run);
+		o.observe(node, { characterData: true });
+
+		function run() {
+			var f = scheduled;
+			scheduled = void 0;
+			f();
+		}
+
+		var i = 0;
+		return function (f) {
+			scheduled = f;
+			node.data = (i ^= 1);
+		};
+	}
+});
+}(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(_dereq_); }));
+
+}).call(this,_dereq_("/Users/trev/git/snoocore/node_modules/browserify/node_modules/insert-module-globals/node_modules/process/browser.js"))
+},{"/Users/trev/git/snoocore/node_modules/browserify/node_modules/insert-module-globals/node_modules/process/browser.js":3}],28:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -10905,12 +10838,18 @@ define(function() {
 		 * is empty, returns a promise that will never settle.
 		 */
 		function race(promises) {
-			// Sigh, race([]) is untestable unless we return *something*
-			// that is recognizable without calling .then() on it.
-			if(Object(promises) === promises && promises.length === 0) {
-				return never();
+			if(typeof promises !== 'object' || promises === null) {
+				return reject(new TypeError('non-iterable passed to race()'));
 			}
 
+			// Sigh, race([]) is untestable unless we return *something*
+			// that is recognizable without calling .then() on it.
+			return promises.length === 0 ? never()
+				 : promises.length === 1 ? resolve(promises[0])
+				 : runRace(promises);
+		}
+
+		function runRace(promises) {
 			var resolver = new Pending();
 			var i, x, h;
 			for(i=0; i<promises.length; ++i) {
@@ -11457,46 +11396,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],30:[function(_dereq_,module,exports){
-/** @license MIT License (c) copyright 2010-2014 original author or authors */
-/** @author Brian Cavalier */
-/** @author John Hann */
-
-(function(define) { 'use strict';
-define(function(_dereq_) {
-	/*global setTimeout,clearTimeout*/
-	var cjsRequire, vertx, setTimer, clearTimer;
-
-	// Check for vertx environment by attempting to load vertx module.
-	// Doing the check in two steps ensures compatibility with RaveJS,
-	// which will return an empty module when browser: { vertx: false }
-	// is set in package.json
-	cjsRequire = _dereq_;
-
-	try {
-		vertx = cjsRequire('vertx');
-	} catch (ignored) {}
-
-	// If vertx loaded and has the timer features we expect, try to support it
-	if (vertx && typeof vertx.setTimer === 'function') {
-		setTimer = function (f, ms) { return vertx.setTimer(ms, f); };
-		clearTimer = vertx.cancelTimer;
-	} else {
-		// NOTE: Truncate decimals to workaround node 0.10.30 bug:
-		// https://github.com/joyent/node/issues/8167
-		setTimer = function(f, ms) { return setTimeout(f, ms|0); };
-		clearTimer = function(t) { return clearTimeout(t); };
-	}
-
-	return {
-		set: setTimer,
-		clear: clearTimer
-	};
-
-});
-}(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(_dereq_); }));
-
-},{}],31:[function(_dereq_,module,exports){
+},{}],29:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 
 /**
@@ -11504,7 +11404,7 @@ define(function(_dereq_) {
  * when is part of the cujoJS family of libraries (http://cujojs.com/)
  * @author Brian Cavalier
  * @author John Hann
- * @version 3.5.0
+ * @version 3.5.2
  */
 (function(define) { 'use strict';
 define(function (_dereq_) {
@@ -11771,7 +11671,7 @@ define(function (_dereq_) {
 });
 })(typeof define === 'function' && define.amd ? define : function (factory) { module.exports = factory(_dereq_); });
 
-},{"./lib/Promise":15,"./lib/TimeoutError":18,"./lib/decorators/array":20,"./lib/decorators/flow":21,"./lib/decorators/fold":22,"./lib/decorators/inspect":23,"./lib/decorators/iterate":24,"./lib/decorators/progress":25,"./lib/decorators/timed":26,"./lib/decorators/unhandledRejection":27,"./lib/decorators/with":28}],32:[function(_dereq_,module,exports){
+},{"./lib/Promise":15,"./lib/TimeoutError":17,"./lib/decorators/array":18,"./lib/decorators/flow":19,"./lib/decorators/fold":20,"./lib/decorators/inspect":21,"./lib/decorators/iterate":22,"./lib/decorators/progress":23,"./lib/decorators/timed":24,"./lib/decorators/unhandledRejection":25,"./lib/decorators/with":26}],30:[function(_dereq_,module,exports){
 "use strict";
 
 var querystring = _dereq_('querystring')
@@ -11906,7 +11806,7 @@ oauth.revokeToken = function(token, isRefreshToken, options) {
 
 module.exports = oauth;
 
-},{"./redditNodeParser":33,"./utils":34,"querystring":6,"superagent":11,"util":8,"when":31}],33:[function(_dereq_,module,exports){
+},{"./redditNodeParser":31,"./utils":32,"querystring":6,"superagent":11,"util":8,"when":29}],31:[function(_dereq_,module,exports){
 "use strict";
 
 // Override SuperAgents parser with one of our own that
@@ -11929,7 +11829,7 @@ module.exports = function redditParser(response, done) {
     });
 };
 
-},{}],34:[function(_dereq_,module,exports){
+},{}],32:[function(_dereq_,module,exports){
 "use strict";
 
 // checks basic globals to help determine which environment we are in

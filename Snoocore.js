@@ -553,11 +553,11 @@ function Snoocore(config) {
             var authorizationCode = args[0];
 
             authData = Snoocore.oauth.getAuthData(self._oauth.type, {
-                authorizationCode: authorizationCode,
-                consumerKey: self._oauth.consumerKey,
-                consumerSecret: self._oauth.consumerSecret,
-                redirectUri: self._oauth.redirectUri,
-                scope: self._oauth.scope
+		authorizationCode: authorizationCode,
+		consumerKey: self._oauth.consumerKey,
+		consumerSecret: self._oauth.consumerSecret || '',
+		redirectUri: self._oauth.redirectUri,
+		scope: self._oauth.scope
             });
         }
 
