@@ -3,7 +3,7 @@
 
 var when = _dereq_('when')
 , delay = _dereq_('when/delay')
-, request = _dereq_('superagent')
+, superagent = _dereq_('superagent')
 , lodash = _dereq_('lodash')
 , rawApi = _dereq_('reddit-api-generator')
 , redditNodeParser = _dereq_('./redditNodeParser')
@@ -13,6 +13,7 @@ module.exports = Snoocore;
 
 Snoocore.oauth = _dereq_('./oauth');
 Snoocore.when = when;
+Snoocore.superagent = superagent;
 
 function Snoocore(config) {
 
@@ -138,7 +139,7 @@ function Snoocore(config) {
                 , url = buildUrl(givenArgs, endpoint)
                 , args = buildArgs(givenArgs);
 
-                var call = request[method](url);
+                var call = superagent[method](url);
 		
 		if (self._isNode) {
 		    call.parse(redditNodeParser);
@@ -492,7 +493,7 @@ function Snoocore(config) {
 
             var defer = when.defer();
 
-            request
+            superagent
 		.post('http://www.reddit.com/logout')
                 .set('X-Modhash', modhash)
                 .type('form')
@@ -616,7 +617,7 @@ function Snoocore(config) {
     return self;
 }
 
-},{"./oauth":30,"./redditNodeParser":31,"./utils":32,"lodash":9,"reddit-api-generator":10,"superagent":11,"when":29,"when/delay":14}],2:[function(_dereq_,module,exports){
+},{"./oauth":32,"./redditNodeParser":33,"./utils":34,"lodash":9,"reddit-api-generator":10,"superagent":11,"when":31,"when/delay":14}],2:[function(_dereq_,module,exports){
 if (typeof Object.create === 'function') {
   // implementation from standard node.js 'util' module
   module.exports = function inherits(ctor, superCtor) {
@@ -9564,7 +9565,7 @@ define(function(_dereq_) {
 
 
 
-},{"./when":29}],15:[function(_dereq_,module,exports){
+},{"./when":31}],15:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -9583,7 +9584,7 @@ define(function (_dereq_) {
 });
 })(typeof define === 'function' && define.amd ? define : function (factory) { module.exports = factory(_dereq_); });
 
-},{"./Scheduler":16,"./env":27,"./makePromise":28}],16:[function(_dereq_,module,exports){
+},{"./Scheduler":16,"./env":28,"./makePromise":29}],16:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -9701,13 +9702,74 @@ define(function() {
 (function(define) { 'use strict';
 define(function() {
 
+	makeApply.tryCatchResolve = tryCatchResolve;
+
+	return makeApply;
+
+	function makeApply(Promise, call) {
+		if(arguments.length < 2) {
+			call = tryCatchResolve;
+		}
+
+		return apply;
+
+		function apply(f, thisArg, args) {
+			var p = Promise._defer();
+			var l = args.length;
+			var params = new Array(l);
+			callAndResolve({ f:f, thisArg:thisArg, args:args, params:params, i:l-1, call:call }, p._handler);
+
+			return p;
+		}
+
+		function callAndResolve(c, h) {
+			if(c.i < 0) {
+				return call(c.f, c.thisArg, c.params, h);
+			}
+
+			var handler = Promise._handler(c.args[c.i]);
+			handler.fold(callAndResolveNext, c, void 0, h);
+		}
+
+		function callAndResolveNext(c, x, h) {
+			c.params[c.i] = x;
+			c.i -= 1;
+			callAndResolve(c, h);
+		}
+	}
+
+	function tryCatchResolve(f, thisArg, args, resolver) {
+		try {
+			resolver.resolve(f.apply(thisArg, args));
+		} catch(e) {
+			resolver.reject(e);
+		}
+	}
+
+});
+}(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
+
+
+
+},{}],19:[function(_dereq_,module,exports){
+/** @license MIT License (c) copyright 2010-2014 original author or authors */
+/** @author Brian Cavalier */
+/** @author John Hann */
+
+(function(define) { 'use strict';
+define(function(_dereq_) {
+
+	var state = _dereq_('../state');
+	var applier = _dereq_('../apply');
+
 	return function array(Promise) {
 
-		var arrayReduce = Array.prototype.reduce;
-		var arrayReduceRight = Array.prototype.reduceRight;
-
+		var applyFold = applier(Promise, dispatch);
 		var toPromise = Promise.resolve;
 		var all = Promise.all;
+
+		var ar = Array.prototype.reduce;
+		var arr = Array.prototype.reduceRight;
 
 		// Additional array combinators
 
@@ -9728,7 +9790,7 @@ define(function() {
 		 */
 		Promise.prototype.spread = function(onFulfilled) {
 			return this.then(all).then(function(array) {
-				return onFulfilled.apply(void 0, array);
+				return onFulfilled.apply(this, array);
 			});
 		};
 
@@ -9743,21 +9805,53 @@ define(function() {
 		 * @returns {Promise} promise for the first fulfilled value
 		 */
 		function any(promises) {
-			return new Promise(function(resolve, reject) {
-				var errors = [];
-				var pending = initRace(promises, resolve, handleReject);
+			var p = Promise._defer();
+			var resolver = p._handler;
+			var l = promises.length>>>0;
 
-				if(pending === 0) {
-					reject(new RangeError('any() input must not be empty'));
+			var pending = l;
+			var errors = [];
+
+			for (var h, x, i = 0; i < l; ++i) {
+				x = promises[i];
+				if(x === void 0 && !(i in promises)) {
+					--pending;
+					continue;
 				}
 
-				function handleReject(e) {
-					errors.push(e);
-					if(--pending === 0) {
-						reject(errors);
-					}
+				h = Promise._handler(x);
+				if(h.state() > 0) {
+					resolver.become(h);
+					Promise._visitRemaining(promises, i, h);
+					break;
+				} else {
+					h.visit(resolver, handleFulfill, handleReject);
 				}
-			});
+			}
+
+			if(pending === 0) {
+				resolver.reject(new RangeError('any(): array must not be empty'));
+			}
+
+			return p;
+
+			function handleFulfill(x) {
+				/*jshint validthis:true*/
+				errors = null;
+				this.resolve(x); // this === resolver
+			}
+
+			function handleReject(e) {
+				/*jshint validthis:true*/
+				if(this.resolved) { // this === resolver
+					return;
+				}
+
+				errors.push(e);
+				if(--pending === 0) {
+					this.reject(errors);
+				}
+			}
 		}
 
 		/**
@@ -9773,60 +9867,76 @@ define(function() {
 		 * @deprecated
 		 */
 		function some(promises, n) {
-			return new Promise(function(resolve, reject, notify) {
-				var results = [];
-				var errors = [];
-				var nReject;
-				var nFulfill = initRace(promises, handleResolve, handleReject, notify);
+			/*jshint maxcomplexity:7*/
+			var p = Promise._defer();
+			var resolver = p._handler;
 
-				n = Math.max(n, 0);
-				nReject = (nFulfill - n + 1);
-				nFulfill = Math.min(n, nFulfill);
+			var results = [];
+			var errors = [];
 
-				if(n > nFulfill) {
-					reject(new RangeError('some() input must contain at least '
-						+ n + ' element(s), but had ' + nFulfill));
-				} else if(nFulfill === 0) {
-					resolve(results);
+			var l = promises.length>>>0;
+			var nFulfill = 0;
+			var nReject;
+			var x, i; // reused in both for() loops
+
+			// First pass: count actual array items
+			for(i=0; i<l; ++i) {
+				x = promises[i];
+				if(x === void 0 && !(i in promises)) {
+					continue;
+				}
+				++nFulfill;
+			}
+
+			// Compute actual goals
+			n = Math.max(n, 0);
+			nReject = (nFulfill - n + 1);
+			nFulfill = Math.min(n, nFulfill);
+
+			if(n > nFulfill) {
+				resolver.reject(new RangeError('some(): array must contain at least '
+				+ n + ' item(s), but had ' + nFulfill));
+			} else if(nFulfill === 0) {
+				resolver.resolve(results);
+			}
+
+			// Second pass: observe each array item, make progress toward goals
+			for(i=0; i<l; ++i) {
+				x = promises[i];
+				if(x === void 0 && !(i in promises)) {
+					continue;
 				}
 
-				function handleResolve(x) {
-					if(nFulfill > 0) {
-						--nFulfill;
-						results.push(x);
+				Promise._handler(x).visit(resolver, fulfill, reject, resolver.notify);
+			}
 
-						if(nFulfill === 0) {
-							resolve(results);
-						}
-					}
+			return p;
+
+			function fulfill(x) {
+				/*jshint validthis:true*/
+				if(this.resolved) { // this === resolver
+					return;
 				}
 
-				function handleReject(e) {
-					if(nReject > 0) {
-						--nReject;
-						errors.push(e);
-
-						if(nReject === 0) {
-							reject(errors);
-						}
-					}
+				results.push(x);
+				if(--nFulfill === 0) {
+					errors = null;
+					this.resolve(results);
 				}
-			});
-		}
+			}
 
-		/**
-		 * Initialize a race observing each promise in the input promises
-		 * @param {Array} promises
-		 * @param {function} resolve
-		 * @param {function} reject
-		 * @param {?function=} notify
-		 * @returns {Number} actual count of items being raced
-		 */
-		function initRace(promises, resolve, reject, notify) {
-			return arrayReduce.call(promises, function(pending, p) {
-				toPromise(p).then(resolve, reject, notify);
-				return pending + 1;
-			}, 0);
+			function reject(e) {
+				/*jshint validthis:true*/
+				if(this.resolved) { // this === resolver
+					return;
+				}
+
+				errors.push(e);
+				if(--nReject === 0) {
+					results = null;
+					this.reject(errors);
+				}
+			}
 		}
 
 		/**
@@ -9837,17 +9947,7 @@ define(function() {
 		 * @returns {Promise}
 		 */
 		function map(promises, f) {
-			if(typeof promises !== 'object') {
-				return toPromise([]);
-			}
-
-			return all(mapArray(function(x, i) {
-				return toPromise(x).fold(mapWithIndex, i);
-			}, promises));
-
-			function mapWithIndex(k, x) {
-				return f(x, k);
-			}
+			return Promise._traverse(f, promises);
 		}
 
 		/**
@@ -9860,99 +9960,86 @@ define(function() {
 		 *  for which predicate returned truthy.
 		 */
 		function filter(promises, predicate) {
-			return all(promises).then(function(values) {
-				return all(mapArray(predicate, values)).then(function(results) {
-					var len = results.length;
-					var filtered = new Array(len);
-					for(var i=0, j= 0, x; i<len; ++i) {
-						x = results[i];
-						if(x === void 0 && !(i in results)) {
-							continue;
-						}
-						if(results[i]) {
-							filtered[j++] = values[i];
-						}
-					}
-					filtered.length = j;
-					return filtered;
-				});
+			return Promise._traverse(predicate, promises).then(function(keep) {
+				return filterSync(promises, keep);
 			});
 		}
 
+		function filterSync(promises, keep) {
+			// Safe because we know all promises have fulfilled if we've made it this far
+			var l = keep.length;
+			var filtered = new Array(l);
+			for(var i=0, j=0; i<l; ++i) {
+				if(keep[i]) {
+					filtered[j++] = Promise._handler(promises[i]).value;
+				}
+			}
+			filtered.length = j;
+			return filtered;
+
+		}
 		/**
 		 * Return a promise that will always fulfill with an array containing
 		 * the outcome states of all input promises.  The returned promise
 		 * will never reject.
-		 * @param {array} promises
+		 * @param {Array} promises
 		 * @returns {Promise} promise for array of settled state descriptors
 		 */
 		function settle(promises) {
-			return all(mapArray(function(p) {
-				p = toPromise(p);
-				return p.then(inspect, inspect);
+			return all(promises.map(settleOne));
+		}
 
-				function inspect() {
-					return p.inspect();
-				}
-			}, promises));
+		function settleOne(p) {
+			var h = Promise._handler(p);
+			return h.state() === 0 ? toPromise(p).then(state.fulfilled, state.rejected)
+					: state.inspect(h);
 		}
 
 		/**
-		 * Reduce an array of promises and values
-		 * @param {Array} promises
+		 * Traditional reduce function, similar to `Array.prototype.reduce()`, but
+		 * input may contain promises and/or values, and reduceFunc
+		 * may return either a value or a promise, *and* initialValue may
+		 * be a promise for the starting value.
+		 * @param {Array|Promise} promises array or promise for an array of anything,
+		 *      may contain a mix of promises and values.
 		 * @param {function(accumulated:*, x:*, index:Number):*} f reduce function
-		 * @returns {Promise} promise for reduced value
+		 * @returns {Promise} that will resolve to the final reduced value
 		 */
-		function reduce(promises, f) {
-			var reducer = makeReducer(f);
-			return arguments.length > 2
-				? arrayReduce.call(promises, reducer, arguments[2])
-				: arrayReduce.call(promises, reducer);
+		function reduce(promises, f /*, initialValue */) {
+			return arguments.length > 2 ? ar.call(promises, liftCombine(f), arguments[2])
+					: ar.call(promises, liftCombine(f));
 		}
 
 		/**
-		 * Reduce an array of promises and values from the right
-		 * @param {Array} promises
+		 * Traditional reduce function, similar to `Array.prototype.reduceRight()`, but
+		 * input may contain promises and/or values, and reduceFunc
+		 * may return either a value or a promise, *and* initialValue may
+		 * be a promise for the starting value.
+		 * @param {Array|Promise} promises array or promise for an array of anything,
+		 *      may contain a mix of promises and values.
 		 * @param {function(accumulated:*, x:*, index:Number):*} f reduce function
-		 * @returns {Promise} promise for reduced value
+		 * @returns {Promise} that will resolve to the final reduced value
 		 */
-		function reduceRight(promises, f) {
-			var reducer = makeReducer(f);
-			return arguments.length > 2
-				? arrayReduceRight.call(promises, reducer, arguments[2])
-				: arrayReduceRight.call(promises, reducer);
+		function reduceRight(promises, f /*, initialValue */) {
+			return arguments.length > 2 ? arr.call(promises, liftCombine(f), arguments[2])
+					: arr.call(promises, liftCombine(f));
 		}
 
-		function makeReducer(f) {
-			return function reducer(result, x, i) {
-				return toPromise(result).then(function(r) {
-					return toPromise(x).then(function(x) {
-						return f(r, x, i);
-					});
-				});
+		function liftCombine(f) {
+			return function(z, x, i) {
+				return applyFold(f, void 0, [z,x,i]);
 			};
 		}
 
-		function mapArray(f, a) {
-			var l = a.length;
-			var b = new Array(l);
-			for(var i=0, x; i<l; ++i) {
-				x = a[i];
-				if(x === void 0 && !(i in a)) {
-					continue;
-				}
-				b[i] = f(a[i], i);
-			}
-			return b;
+		function dispatch(f, _, args, resolver) {
+			resolver.resolve(f(args[0], args[1], args[2]));
 		}
 	};
 
-
-
 });
-}(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
+}(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(_dereq_); }));
 
-},{}],19:[function(_dereq_,module,exports){
+},{"../apply":18,"../state":30}],20:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -9990,13 +10077,13 @@ define(function() {
 		Promise.prototype['catch'] = Promise.prototype.otherwise = function(onRejected) {
 			if (arguments.length < 2) {
 				return origCatch.call(this, onRejected);
-			} else {
-				if(typeof onRejected !== 'function') {
-					return this.ensure(rejectInvalidPredicate);
-				}
-
-				return origCatch.call(this, createCatchFilter(arguments[1], onRejected));
 			}
+
+			if(typeof onRejected !== 'function') {
+				return this.ensure(rejectInvalidPredicate);
+			}
+
+			return origCatch.call(this, createCatchFilter(arguments[1], onRejected));
 		};
 
 		/**
@@ -10114,7 +10201,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],20:[function(_dereq_,module,exports){
+},{}],21:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -10143,13 +10230,15 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],21:[function(_dereq_,module,exports){
+},{}],22:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
 
 (function(define) { 'use strict';
-define(function() {
+define(function(_dereq_) {
+
+	var inspect = _dereq_('../state').inspect;
 
 	return function inspection(Promise) {
 
@@ -10157,27 +10246,13 @@ define(function() {
 			return inspect(Promise._handler(this));
 		};
 
-		function inspect(handler) {
-			var state = handler.state();
-
-			if(state === 0) {
-				return { state: 'pending' };
-			}
-
-			if(state > 0) {
-				return { state: 'fulfilled', value: handler.value };
-			}
-
-			return { state: 'rejected', reason: handler.value };
-		}
-
 		return Promise;
 	};
 
 });
-}(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
+}(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(_dereq_); }));
 
-},{}],22:[function(_dereq_,module,exports){
+},{"../state":30}],23:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -10244,7 +10319,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],23:[function(_dereq_,module,exports){
+},{}],24:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -10270,7 +10345,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],24:[function(_dereq_,module,exports){
+},{}],25:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -10350,7 +10425,7 @@ define(function(_dereq_) {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(_dereq_); }));
 
-},{"../TimeoutError":17,"../env":27}],25:[function(_dereq_,module,exports){
+},{"../TimeoutError":17,"../env":28}],26:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -10393,7 +10468,7 @@ define(function(_dereq_) {
 
 		var tasks = [];
 		var reported = [];
-		var running = false;
+		var running = null;
 
 		function report(r) {
 			if(!r.handled) {
@@ -10412,14 +10487,13 @@ define(function(_dereq_) {
 
 		function enqueue(f, x) {
 			tasks.push(f, x);
-			if(!running) {
-				running = true;
+			if(running === null) {
 				running = setTimer(flush, 0);
 			}
 		}
 
 		function flush() {
-			running = false;
+			running = null;
 			while(tasks.length > 0) {
 				tasks.shift()(tasks.shift());
 			}
@@ -10459,7 +10533,7 @@ define(function(_dereq_) {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(_dereq_); }));
 
-},{"../env":27}],26:[function(_dereq_,module,exports){
+},{"../env":28}],27:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -10499,7 +10573,7 @@ define(function() {
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
 
-},{}],27:[function(_dereq_,module,exports){
+},{}],28:[function(_dereq_,module,exports){
 (function (process){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
@@ -10576,7 +10650,7 @@ define(function(_dereq_) {
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(_dereq_); }));
 
 }).call(this,_dereq_("/Users/trev/git/snoocore/node_modules/browserify/node_modules/insert-module-globals/node_modules/process/browser.js"))
-},{"/Users/trev/git/snoocore/node_modules/browserify/node_modules/insert-module-globals/node_modules/process/browser.js":3}],28:[function(_dereq_,module,exports){
+},{"/Users/trev/git/snoocore/node_modules/browserify/node_modules/insert-module-globals/node_modules/process/browser.js":3}],29:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -10750,6 +10824,7 @@ define(function() {
 
 		Promise.all = all;
 		Promise.race = race;
+		Promise._traverse = traverse;
 
 		/**
 		 * Return a promise that will fulfill when all promises in the
@@ -10759,13 +10834,28 @@ define(function() {
 		 * @returns {Promise} promise for array of fulfillment values
 		 */
 		function all(promises) {
-			/*jshint maxcomplexity:8*/
+			return traverseWith(snd, null, promises);
+		}
+
+		/**
+		 * Array<Promise<X>> -> Promise<Array<f(X)>>
+		 * @private
+		 * @param {function} f function to apply to each promise's value
+		 * @param {Array} promises array of promises
+		 * @returns {Promise} promise for transformed values
+		 */
+		function traverse(f, promises) {
+			return traverseWith(tryCatch2, f, promises);
+		}
+
+		function traverseWith(tryMap, f, promises) {
+			var handler = typeof f === 'function' ? mapAt : settleAt;
+
 			var resolver = new Pending();
 			var pending = promises.length >>> 0;
 			var results = new Array(pending);
 
-			var i, h, x, s;
-			for (i = 0; i < promises.length; ++i) {
+			for (var i = 0, x; i < promises.length && !resolver.resolved; ++i) {
 				x = promises[i];
 
 				if (x === void 0 && !(i in promises)) {
@@ -10773,24 +10863,7 @@ define(function() {
 					continue;
 				}
 
-				if (maybeThenable(x)) {
-					h = getHandlerMaybeThenable(x);
-
-					s = h.state();
-					if (s === 0) {
-						h.fold(settleAt, i, results, resolver);
-					} else if (s > 0) {
-						results[i] = h.value;
-						--pending;
-					} else {
-						resolveAndObserveRemaining(promises, i+1, h, resolver);
-						break;
-					}
-
-				} else {
-					results[i] = x;
-					--pending;
-				}
+				traverseAt(promises, handler, i, x, resolver);
 			}
 
 			if(pending === 0) {
@@ -10799,27 +10872,55 @@ define(function() {
 
 			return new Promise(Handler, resolver);
 
+			function mapAt(i, x, resolver) {
+				if(!resolver.resolved) {
+					traverseAt(promises, settleAt, i, tryMap(f, x, i), resolver);
+				}
+			}
+
 			function settleAt(i, x, resolver) {
-				/*jshint validthis:true*/
-				this[i] = x;
+				results[i] = x;
 				if(--pending === 0) {
-					resolver.become(new Fulfilled(this));
+					resolver.become(new Fulfilled(results));
 				}
 			}
 		}
 
-		function resolveAndObserveRemaining(promises, start, handler, resolver) {
-			resolver.become(handler);
+		function traverseAt(promises, handler, i, x, resolver) {
+			if (maybeThenable(x)) {
+				var h = getHandlerMaybeThenable(x);
+				var s = h.state();
 
-			var i, h, x;
-			for(i=start; i<promises.length; ++i) {
-				x = promises[i];
-				if(maybeThenable(x)) {
-					h = getHandlerMaybeThenable(x);
-					if(h !== handler) {
-						h.visit(h, void 0, h._unreport);
-					}
+				if (s === 0) {
+					h.fold(handler, i, void 0, resolver);
+				} else if (s > 0) {
+					handler(i, h.value, resolver);
+				} else {
+					resolver.become(h);
+					visitRemaining(promises, i+1, h);
 				}
+			} else {
+				handler(i, x, resolver);
+			}
+		}
+
+		Promise._visitRemaining = visitRemaining;
+		function visitRemaining(promises, start, handler) {
+			for(var i=start; i<promises.length; ++i) {
+				markAsHandled(getHandler(promises[i]), handler);
+			}
+		}
+
+		function markAsHandled(h, handler) {
+			if(h === handler) {
+				return;
+			}
+
+			var s = h.state();
+			if(s === 0) {
+				h.visit(h, void 0, h._unreport);
+			} else if(s < 0) {
+				h._unreport();
 			}
 		}
 
@@ -10860,11 +10961,12 @@ define(function() {
 
 				h = getHandler(x);
 				if(h.state() !== 0) {
-					resolveAndObserveRemaining(promises, i+1, h, resolver);
+					resolver.become(h);
+					visitRemaining(promises, i+1, h);
 					break;
+				} else {
+					h.visit(resolver, resolver.resolve, resolver.reject);
 				}
-
-				h.visit(resolver, resolver.resolve, resolver.reject);
 			}
 			return new Promise(Handler, resolver);
 		}
@@ -10958,9 +11060,7 @@ define(function() {
 		};
 
 		Handler.prototype.fold = function(f, z, c, to) {
-			this.visit(to, function(x) {
-				f.call(c, z, x, this);
-			}, to.reject, to.notify);
+			this.when(new Fold(f, z, c, to));
 		};
 
 		/**
@@ -11179,6 +11279,9 @@ define(function() {
 		};
 
 		Rejected.prototype._unreport = function() {
+			if(this.handled) {
+				return;
+			}
 			this.handled = true;
 			tasks.afterQueue(new UnreportTask(this));
 		};
@@ -11296,6 +11399,28 @@ define(function() {
 			}
 		}
 
+		/**
+		 * Fold a handler value with z
+		 * @constructor
+		 */
+		function Fold(f, z, c, to) {
+			this.f = f; this.z = z; this.c = c; this.to = to;
+			this.resolver = failIfRejected;
+			this.receiver = this;
+		}
+
+		Fold.prototype.fulfilled = function(x) {
+			this.f.call(this.c, this.z, x, this.to);
+		};
+
+		Fold.prototype.rejected = function(x) {
+			this.to.reject(x);
+		};
+
+		Fold.prototype.progress = function(x) {
+			this.to.notify(x);
+		};
+
 		// Other helpers
 
 		/**
@@ -11349,6 +11474,14 @@ define(function() {
 			Promise.exitContext();
 		}
 
+		function tryCatch2(f, a, b) {
+			try {
+				return f(a, b);
+			} catch(e) {
+				return reject(e);
+			}
+		}
+
 		/**
 		 * Return f.call(thisArg, x), or if it throws return a rejected promise for
 		 * the thrown exception
@@ -11389,6 +11522,10 @@ define(function() {
 			Child.prototype.constructor = Child;
 		}
 
+		function snd(x, y) {
+			return y;
+		}
+
 		function noop() {}
 
 		return Promise;
@@ -11396,7 +11533,44 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],29:[function(_dereq_,module,exports){
+},{}],30:[function(_dereq_,module,exports){
+/** @license MIT License (c) copyright 2010-2014 original author or authors */
+/** @author Brian Cavalier */
+/** @author John Hann */
+
+(function(define) { 'use strict';
+define(function() {
+
+	return {
+		pending: toPendingState,
+		fulfilled: toFulfilledState,
+		rejected: toRejectedState,
+		inspect: inspect
+	};
+
+	function toPendingState() {
+		return { state: 'pending' };
+	}
+
+	function toRejectedState(e) {
+		return { state: 'rejected', reason: e };
+	}
+
+	function toFulfilledState(x) {
+		return { state: 'fulfilled', value: x };
+	}
+
+	function inspect(handler) {
+		var state = handler.state();
+		return state === 0 ? toPendingState()
+			 : state > 0   ? toFulfilledState(handler.value)
+			               : toRejectedState(handler.value);
+	}
+
+});
+}(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
+
+},{}],31:[function(_dereq_,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 
 /**
@@ -11404,7 +11578,7 @@ define(function() {
  * when is part of the cujoJS family of libraries (http://cujojs.com/)
  * @author Brian Cavalier
  * @author John Hann
- * @version 3.5.2
+ * @version 3.6.1
  */
 (function(define) { 'use strict';
 define(function (_dereq_) {
@@ -11426,7 +11600,7 @@ define(function (_dereq_) {
 			return feature(Promise);
 		}, _dereq_('./lib/Promise'));
 
-	var slice = Array.prototype.slice;
+	var apply = _dereq_('./lib/apply')(Promise);
 
 	// Public API
 
@@ -11452,8 +11626,8 @@ define(function (_dereq_) {
 
 	when.map         = map;                  // Array.map() for promises
 	when.filter      = filter;               // Array.filter() for promises
-	when.reduce      = reduce;               // Array.reduce() for promises
-	when.reduceRight = reduceRight;          // Array.reduceRight() for promises
+	when.reduce      = lift(Promise.reduce);       // Array.reduce() for promises
+	when.reduceRight = lift(Promise.reduceRight);  // Array.reduceRight() for promises
 
 	when.isPromiseLike = isPromiseLike;      // Is something promise-like, aka thenable
 
@@ -11507,7 +11681,10 @@ define(function (_dereq_) {
 	 */
 	function lift(f) {
 		return function() {
-			return _apply(f, this, slice.call(arguments));
+			for(var i=0, l=arguments.length, a=new Array(l); i<l; ++i) {
+				a[i] = arguments[i];
+			}
+			return apply(f, this, a);
 		};
 	}
 
@@ -11519,17 +11696,10 @@ define(function (_dereq_) {
 	 */
 	function attempt(f /*, args... */) {
 		/*jshint validthis:true */
-		return _apply(f, this, slice.call(arguments, 1));
-	}
-
-	/**
-	 * try/lift helper that allows specifying thisArg
-	 * @private
-	 */
-	function _apply(f, thisArg, args) {
-		return Promise.all(args).then(function(args) {
-			return f.apply(thisArg, args);
-		});
+		for(var i=0, l=arguments.length-1, a=new Array(l); i<l; ++i) {
+			a[i] = arguments[i+1];
+		}
+		return apply(f, this, a);
 	}
 
 	/**
@@ -11629,49 +11799,11 @@ define(function (_dereq_) {
 		});
 	}
 
-	/**
-	 * Traditional reduce function, similar to `Array.prototype.reduce()`, but
-	 * input may contain promises and/or values, and reduceFunc
-	 * may return either a value or a promise, *and* initialValue may
-	 * be a promise for the starting value.
-	 * @param {Array|Promise} promises array or promise for an array of anything,
-	 *      may contain a mix of promises and values.
-	 * @param {function(accumulated:*, x:*, index:Number):*} f reduce function
-	 * @returns {Promise} that will resolve to the final reduced value
-	 */
-	function reduce(promises, f /*, initialValue */) {
-		/*jshint unused:false*/
-		var args = slice.call(arguments, 1);
-		return when(promises, function(array) {
-			args.unshift(array);
-			return Promise.reduce.apply(Promise, args);
-		});
-	}
-
-	/**
-	 * Traditional reduce function, similar to `Array.prototype.reduceRight()`, but
-	 * input may contain promises and/or values, and reduceFunc
-	 * may return either a value or a promise, *and* initialValue may
-	 * be a promise for the starting value.
-	 * @param {Array|Promise} promises array or promise for an array of anything,
-	 *      may contain a mix of promises and values.
-	 * @param {function(accumulated:*, x:*, index:Number):*} f reduce function
-	 * @returns {Promise} that will resolve to the final reduced value
-	 */
-	function reduceRight(promises, f /*, initialValue */) {
-		/*jshint unused:false*/
-		var args = slice.call(arguments, 1);
-		return when(promises, function(array) {
-			args.unshift(array);
-			return Promise.reduceRight.apply(Promise, args);
-		});
-	}
-
 	return when;
 });
 })(typeof define === 'function' && define.amd ? define : function (factory) { module.exports = factory(_dereq_); });
 
-},{"./lib/Promise":15,"./lib/TimeoutError":17,"./lib/decorators/array":18,"./lib/decorators/flow":19,"./lib/decorators/fold":20,"./lib/decorators/inspect":21,"./lib/decorators/iterate":22,"./lib/decorators/progress":23,"./lib/decorators/timed":24,"./lib/decorators/unhandledRejection":25,"./lib/decorators/with":26}],30:[function(_dereq_,module,exports){
+},{"./lib/Promise":15,"./lib/TimeoutError":17,"./lib/apply":18,"./lib/decorators/array":19,"./lib/decorators/flow":20,"./lib/decorators/fold":21,"./lib/decorators/inspect":22,"./lib/decorators/iterate":23,"./lib/decorators/progress":24,"./lib/decorators/timed":25,"./lib/decorators/unhandledRejection":26,"./lib/decorators/with":27}],32:[function(_dereq_,module,exports){
 "use strict";
 
 var querystring = _dereq_('querystring')
@@ -11806,7 +11938,7 @@ oauth.revokeToken = function(token, isRefreshToken, options) {
 
 module.exports = oauth;
 
-},{"./redditNodeParser":31,"./utils":32,"querystring":6,"superagent":11,"util":8,"when":29}],31:[function(_dereq_,module,exports){
+},{"./redditNodeParser":33,"./utils":34,"querystring":6,"superagent":11,"util":8,"when":31}],33:[function(_dereq_,module,exports){
 "use strict";
 
 // Override SuperAgents parser with one of our own that
@@ -11829,7 +11961,7 @@ module.exports = function redditParser(response, done) {
     });
 };
 
-},{}],32:[function(_dereq_,module,exports){
+},{}],34:[function(_dereq_,module,exports){
 "use strict";
 
 // checks basic globals to help determine which environment we are in

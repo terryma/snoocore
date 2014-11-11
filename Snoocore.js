@@ -2,7 +2,7 @@
 
 var when = require('when')
 , delay = require('when/delay')
-, request = require('superagent')
+, superagent = require('superagent')
 , lodash = require('lodash')
 , rawApi = require('reddit-api-generator')
 , redditNodeParser = require('./redditNodeParser')
@@ -12,6 +12,7 @@ module.exports = Snoocore;
 
 Snoocore.oauth = require('./oauth');
 Snoocore.when = when;
+Snoocore.superagent = superagent;
 
 function Snoocore(config) {
 
@@ -137,7 +138,7 @@ function Snoocore(config) {
                 , url = buildUrl(givenArgs, endpoint)
                 , args = buildArgs(givenArgs);
 
-                var call = request[method](url);
+                var call = superagent[method](url);
 		
 		if (self._isNode) {
 		    call.parse(redditNodeParser);
@@ -491,7 +492,7 @@ function Snoocore(config) {
 
             var defer = when.defer();
 
-            request
+            superagent
 		.post('http://www.reddit.com/logout')
                 .set('X-Modhash', modhash)
                 .type('form')
