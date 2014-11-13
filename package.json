@@ -1,6 +1,6 @@
 {
   "name": "snoocore",
-  "version": "1.9.2",
+  "version": "1.9.3",
   "description": "A minimal and complete JavaScript driver for the Reddit API.",
   "main": "Snoocore.js",
   "repository": {
@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "lodash": "^2.4.1",
-    "reddit-api-generator": "2.0.0",
+    "reddit-api-generator": "2.1.0",
     "superagent": "^0.20.0",
     "when": "^3.4.3"
   },
