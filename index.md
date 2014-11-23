@@ -8,4 +8,4 @@ layout: default
 A minimal and complete JavaScript driver for the [Reddit API](http://www.reddit.com/dev/api).
 
  - [View on GitHub](https://github.com/trevorsenior/snoocore)
- - [Ask questions on /r/snoocore](http://www.reddit.com/r/snoocore)
+ - Have questions? [Open a new issue with the question label on GitHub.](https://github.com/trevorsenior/snoocore/issues/new)
