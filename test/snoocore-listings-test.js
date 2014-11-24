@@ -21,7 +21,7 @@ var expect = chai.expect;
 /* global it */
 /* global beforeEach */
 
-describe('Snoocore Listings Test', function () {
+describe.only('Snoocore Listings Test', function () {
 
     this.timeout(20000);
 
@@ -37,7 +37,7 @@ describe('Snoocore Listings Test', function () {
     it('should get the front page listing and nav through it (basic)', function() {
 
         // or reddit('/hot').listing
-        return reddit.hot.listing().then(function(slice) {
+        return reddit('/hot').listing().then(function(slice) {
             expect(slice.get).to.be.a('object');
             expect(slice.after).to.be.a('string');
             expect(slice.before).to.equal(null);

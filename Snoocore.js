@@ -163,6 +163,14 @@ function Snoocore(config) {
         // if we're authenticated, set the authorization header
         // and provide an option to not provide auth if necessary
         if (!bypassAuth && isAuthenticated()) {
+
+	  // Check that the correct scopes have been requested
+	  endpoint.oauth.forEach(function(requiredScope) {
+	    if ((self._oauth.scope || []).indexOf(requiredScope) === -1) {
+	      throw new Error('missing required scope(s): ' + endpoint.oauth.join(', '));
+	    }
+	  });
+
           call.set('Authorization',
                    self._authData.token_type + ' ' +
                    self._authData.access_token);
@@ -231,7 +239,10 @@ function Snoocore(config) {
 
           // Throw any errors that reddit may inform us about
           if (data.hasOwnProperty('error')) {
-            throw new Error(String(data.error));
+            throw new Error('\n>>> Reddit Response:\n\n' + String(data.error)
+			      + '\n\n>>> Endpoint URL: '+ url
+			    + '\n\n>>> Endpoint method: ' + endpoint.method
+			    + '\n\n>>> Arguments: ' + JSON.stringify(args, null, 2));
           }
 
           return data;

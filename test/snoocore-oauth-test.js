@@ -41,7 +41,7 @@ describe('Snoocore OAuth Test', function () {
             return reddit('/api/v1/me').get().then(function(data) {
                 throw new Error('should not pass, expect to fail with error');
             }).catch(function(error) {
-                expect(error.message).to.equal('403');
+                return expect(error.message.indexOf('403')).to.not.equal(-1);
             });
         });
 
