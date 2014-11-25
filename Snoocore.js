@@ -30,6 +30,7 @@ function Snoocore(config) {
 
   self._login = config.login || {};
   self._oauth = config.oauth || {};
+  self._oauth.scope = self._oauth.scope || [ 'identity' ]; // Default scope for reddit
 
   // The built calls for the Reddit API.
   var redditApi = buildRedditApi(rawApi);
