@@ -15,7 +15,7 @@ Snoocore.superagent = superagent;
 
 function Snoocore(config) {
 
-  var self = this;
+  var self = {};
 
   self._userAgent = config.userAgent || 'snoocore-default-User-Agent';
 
@@ -621,10 +621,16 @@ function Snoocore(config) {
   };
 
   // Make self.path the primary function that we return, but 
-  // still allow access to 
+  // still allow access to the objects defined on self
   Object.keys(self).forEach(function(key) {
     self.path[key] = self[key];
   });
 
-  return self.path;
+  // Allow for "dot syntax"
+  Object.keys(redditApi).forEach(function(key) {
+    self.path[key] = redditApi[key];
+  });
+
+  self = self.path;
+  return self;
 }
