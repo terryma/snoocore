@@ -3,7 +3,6 @@
 var when = require('when');
 var delay = require('when/delay');
 var superagent = require('superagent');
-var lodash = require('lodash');
 var rawApi = require('reddit-api-generator');
 var redditNodeParser = require('./redditNodeParser');
 var utils = require('./utils');
@@ -621,7 +620,11 @@ function Snoocore(config) {
     buildCall: buildCall
   };
 
-  self = lodash.assign(self.path, self);
-  self = lodash.assign(self, redditApi);
-  return self;
+  // Make self.path the primary function that we return, but 
+  // still allow access to 
+  Object.keys(self).forEach(function(key) {
+    self.path[key] = self[key];
+  });
+
+  return self.path;
 }
