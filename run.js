@@ -18,71 +18,20 @@ exports.installModules = function(done) {
     });
 };
 
-// for some reason this isn't included in the npm install
-// so we yank it out here
-//
-// https://github.com/cujojs/when/blob/3.4.3/build/when.browserify.js
-function buildWhenStandalone(done) {
-    var buildDir = path.join(__dirname, 'node_modules', 'when', 'build');
-    var whenBrowserifyFile = path.join(buildDir, 'when.browserify.js');
-    var whenFile = path.join(buildDir, 'when.js');
-
-    fs.exists(buildDir, function(exists) {
-        if (exists) {
-            return done();
-        }
-
-        return fs.mkdir(buildDir, function() {
-            fs.writeFile(whenBrowserifyFile,
-                         "var when = module.exports = require('../when');" +
-                         "when.callbacks = require('../callbacks');" +
-                         "when.cancelable = require('../cancelable');" +
-                         "when.delay = require('../delay');" +
-                         "when.fn = require('../function');" +
-                         "when.guard = require('../guard');" +
-                         "when.keys = require('../keys');" +
-                         "when.nodefn = when.node = require('../node');" +
-                         "when.parallel = require('../parallel');" +
-                         "when.pipeline = require('../pipeline');" +
-                         "when.poll = require('../poll');" +
-                         "when.sequence = require('../sequence');" +
-                         "when.timeout = require('../timeout');",
-                         function(error) {
-                             return error ? done(error) : build();
-                         });
-        });
-    });
-
-    function build() {
-        exec(path.join(__dirname, 'node_modules', '.bin', 'browserify') +
-             ' -s when' +
-             ' -o ' + whenFile +
-             ' ' + whenBrowserifyFile,
-             { cwd: buildDir },
-             function(error, stdout, stderr) {
-                 return done(error);
-             });
-    }
-}
-
 exports.buildStandalone = function(done) {
-    buildWhenStandalone(function(error) {
-        if (error) { return done(error); }
-
-        return exec(path.join(__dirname, 'node_modules', '.bin', 'browserify') +
-                    ' -s Snoocore' +
-                    ' -o Snoocore-standalone.js' +
-                    ' Snoocore.js',
-                    { cwd: __dirname },
-                    function(error, stdout, stderr) {
-                        return done(error);
-                    });
-    });
+  return exec(path.join(__dirname, 'node_modules', '.bin', 'browserify') +
+			' --standalone Snoocore' +
+			' --outfile Snoocore-standalone.js' +
+			' Snoocore.js',
+              { cwd: __dirname },
+              function(error, stdout, stderr) {
+                return done(error);
+              });
 };
 
 exports.karmaTests = function(done) {
     var karma = spawn(
-        path.join(__dirname, 'node_modules', '.bin', 'karma'),
+        path.join(__dirname, 'node_modules', 'karma', 'bin', 'karma'),
         [ 'start' ],
         { cwd: __dirname, stdio: 'inherit' }
     );

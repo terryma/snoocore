@@ -21,13 +21,13 @@ var expect = chai.expect;
 /* global it */
 /* global beforeEach */
 
-describe.only('Snoocore Listings Test', function () {
+describe('Snoocore Listings Test', function () {
 
     this.timeout(20000);
 
     var reddit;
 
-    beforeEach(function() {
+    before(function() {
         reddit = new Snoocore({
             userAgent: 'snoocore-test-userAgent',
             browser: !isNode
