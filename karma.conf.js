@@ -17,7 +17,7 @@ module.exports = function(config) {
       'node_modules/chai/chai.js',
       'node_modules/chai-as-promised/lib/chai-as-promised.js',
       // 'node_modules/when/build/when.js',
-      'Snoocore-standalone.js',
+      'dist/Snoocore-standalone.js',
       'test/*'
     ],
 
