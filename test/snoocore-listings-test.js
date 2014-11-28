@@ -7,11 +7,11 @@ typeof window === "undefined";
 
 if (isNode)
 {
-  var path = require('path')
-    , Snoocore = require('../Snoocore')
-    , config = require('./testConfig')
-    , chai = require('chai')
-    , chaiAsPromised = require('chai-as-promised');
+  var path = require('path');
+  var Snoocore = require('../Snoocore');
+  var config = require('./testConfig');
+  var chai = require('chai');
+  var chaiAsPromised = require('chai-as-promised');
 }
 
 chai.use(chaiAsPromised);
@@ -63,8 +63,7 @@ describe('Snoocore Listings Test', function () {
   });
 
   it('should handle empty listings', function() {
-    // or reddit('/user/$username/$where').listing
-    return reddit.user.$username.$where.listing({
+    return reddit('/user/$username/$where').listing({
       $username: 'emptyListing', // an account with no comments
       $where: 'comments'
     }).then(function(slice) {
