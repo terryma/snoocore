@@ -3,7 +3,7 @@
 var when = require('when');
 var delay = require('when/delay');
 var superagent = require('superagent');
-var rawApi = require('reddit-api-generator');
+var rawApi = require('./build/api');
 var redditNodeParser = require('./redditNodeParser');
 var utils = require('./utils');
 

@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 "use strict";
 
-var fs = require('fs')
-, path = require('path')
-, exec = require('child_process').exec
-, spawn = require('child_process').spawn;
+var fs = require('fs');
+var path = require('path');
+var exec = require('child_process').exec;
+var spawn = require('child_process').spawn;
+
+var build = require('snooform');
 
 exports.installModules = function(done) {
     fs.exists(path.join(__dirname, 'node_modules'), function(exists) {
@@ -16,6 +18,19 @@ exports.installModules = function(done) {
             return done();
         }
     });
+};
+
+exports.buildRedditApi = function(done) {
+  // build the reddit api without the endpoint descriptions or the
+  // argument descriptions to cut down on the final library size
+  build.nodeApi({
+    skipDescription: true,
+    skipArgsDescription: true
+  }).done(function(output) {
+    // overwrite the reddit-api-generator dist with this new one
+    var filePath = path.join(__dirname, 'build', 'api.js');
+    fs.writeFile(filePath, output, done);
+  }, done);
 };
 
 exports.buildStandalone = function(done) {
@@ -107,6 +122,9 @@ case 'mocha':
     break;
 case 'karma':
     fn = exports.karmaTests;
+    break;
+case 'api':
+    fn = exports.buildRedditApi;
     break;
 default:
     fn = function(done) {

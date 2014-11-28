@@ -13,7 +13,7 @@
     "url": "https://github.com/trevorsenior/snoocore/issues"
   },
   "dependencies": {
-    "reddit-api-generator": "2.1.0",
+    "snooform": "0.0.2",
     "superagent": "^0.21.0",
     "when": "^3.6.3"
   },
@@ -27,7 +27,8 @@
     "karma-mocha": "^0.1.9",
     "karma-phantomjs-launcher": "^0.1.4",
     "mocha": "^2.0.1",
-    "open": "0.0.5"
+    "open": "0.0.5",
+    "snooform": "0.0.0"
   },
   "directories": {
     "test": "test"
