@@ -25,7 +25,8 @@ exports.buildRedditApi = function(done) {
   // argument descriptions to cut down on the final library size
   build.nodeApi({
     skipDescription: true,
-    skipArgsDescription: true
+    skipArgsDescription: true,
+    skipUrls: true
   }).done(function(output) {
     // overwrite the reddit-api-generator dist with this new one
     var filePath = path.join(__dirname, 'build', 'api.js');

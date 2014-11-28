@@ -61,10 +61,9 @@ describe('Snoocore Internal Tests', function () {
   describe('#getAuthOrStandardUrl()', function() {
 
     var endpoint = {
-      url: {
-        standard: 'http://foo.bar',
-        oauth: 'https://oauth.foo.bar'
-      }
+      path: '/foo/bar',
+      method: 'GET',
+      oauth: [ 'identity' ]
     };
 
     afterEach(function() {
@@ -73,13 +72,13 @@ describe('Snoocore Internal Tests', function () {
 
     it('should get a standard url', function() {
       var url = reddit._test.getAuthOrStandardUrl(endpoint);
-      expect(url).to.equal('http://foo.bar');
+      expect(url).to.equal('https://www.reddit.com/foo/bar');
     });
 
     it('should get an authenticated url', function() {
       reddit._authData = { access_token: 'foo', token_type: 'bar' };
       var url = reddit._test.getAuthOrStandardUrl(endpoint);
-      expect(url).to.equal('https://oauth.foo.bar');
+      expect(url).to.equal('https://oauth.reddit.com/foo/bar');
     });
 
   });
@@ -135,10 +134,9 @@ describe('Snoocore Internal Tests', function () {
   describe('#buildUrl()', function() {
 
     var endpoint = {
-      url: {
-        standard: 'http://foo/$urlparam/bar',
-        oauth: 'https://oauth.foo.bar'
-      }
+      path: '/$urlparam/bar',
+      method: 'GET',
+      oauth: [ 'identity' ]
     };
 
     it('should build an url', function() {
@@ -149,7 +147,7 @@ describe('Snoocore Internal Tests', function () {
         $urlparam: 'something'
       }, endpoint);
 
-      expect(url).to.equal('http://foo/something/bar');
+      expect(url).to.equal('https://www.reddit.com/something/bar');
     });
 
   });
@@ -166,21 +164,19 @@ describe('Snoocore Internal Tests', function () {
   describe('#raw()', function() {
 
     it('should call a raw route', function() {
-      return reddit
-							.raw('http://www.reddit.com/r/netsec/hot.json')
-						 .get()
-						 .then(function(result) {
-						   expect(result).to.haveOwnProperty('kind', 'Listing');
-						 });
+      return reddit.raw('https://www.reddit.com/r/netsec/hot.json')
+		   .get()
+		   .then(function(result) {
+		     expect(result).to.haveOwnProperty('kind', 'Listing');
+		   });
     });
 
     it('should call a raw route (with parameters)', function() {
-      return reddit
-						 .raw('http://www.reddit.com/r/$subreddit/hot.json')
-						 .get({ $subreddit: 'netsec' })
-						 .then(function(result) {
-						   expect(result).to.haveOwnProperty('kind', 'Listing');
-						 });
+      return reddit.raw('https://www.reddit.com/r/$subreddit/hot.json')
+		   .get({ $subreddit: 'netsec' })
+		   .then(function(result) {
+		     expect(result).to.haveOwnProperty('kind', 'Listing');
+		   });
     });
 
   });
@@ -189,20 +185,20 @@ describe('Snoocore Internal Tests', function () {
 
     it('should allow a "path" syntax', function() {
       return reddit
-						 .path('/r/$subreddit/hot')
-						 .get({ $subreddit: 'aww' })
-						 .then(function(result) {
-						   expect(result).to.haveOwnProperty('kind', 'Listing');
-						 });
+		   .path('/r/$subreddit/hot')
+		   .get({ $subreddit: 'aww' })
+		   .then(function(result) {
+		     expect(result).to.haveOwnProperty('kind', 'Listing');
+		   });
     });
 
     it('should tolerate a missing beginning slash', function() {
       return reddit
-						 .path('r/$subreddit/hot')
-						 .get({ $subreddit: 'aww' })
-						 .then(function(result) {
-						   expect(result).to.haveOwnProperty('kind', 'Listing');
-						 });
+		   .path('r/$subreddit/hot')
+		   .get({ $subreddit: 'aww' })
+		   .then(function(result) {
+		     expect(result).to.haveOwnProperty('kind', 'Listing');
+		   });
     });
 
     it('should crash if an invalid endpoint is provided', function() {

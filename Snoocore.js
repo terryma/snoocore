@@ -1,5 +1,6 @@
 "use strict";
 
+var urlLib = require('url');
 var when = require('when');
 var delay = require('when/delay');
 var superagent = require('superagent');
@@ -23,6 +24,12 @@ function Snoocore(config) {
                ? !config.browser
                : utils.isNode();
 
+  self._server = {
+    oauth: 'https://oauth.reddit.com',
+    www: 'https://www.reddit.com',
+    ssl: 'https://ssl.reddit.com'
+  };
+  
   self._modhash = ''; // The current mod hash of whatever user we have
   self._redditSession = ''; // The current cookie (reddit_session)
   self._authData = {}; // Set if user has authenticated with OAuth
@@ -88,12 +95,16 @@ function Snoocore(config) {
   }
 
   function getAuthOrStandardUrl(endpoint) {
-    if (isAuthenticated() && endpoint.url.oauth) {
-      return endpoint.url.oauth;
-    }
-    return endpoint.url.standard;
-  }
 
+    // if we are authenticated and we have oauth scopes for this endpoint...
+    if (isAuthenticated() && endpoint.oauth.length > 0) {
+      return self._server.oauth + endpoint.path;
+    }
+    // else, decide if we want to use www vs. ssl
+    return endpoint.method === 'GET' 
+			   ? self._server.www + endpoint.path
+			   : self._server.ssl + endpoint.path;
+  }
 
   // Builds the URL that we will query taking into account any
   // variables in the url containing `$`
@@ -103,7 +114,6 @@ function Snoocore(config) {
     url = addUrlExtension(url, endpoint.extensions);
     return url;
   }
-
 
   function buildArgs(endpointArgs) {
     var args = {};
@@ -392,10 +402,13 @@ function Snoocore(config) {
   // Build support for the raw API calls
   self.raw = function(url) {
 
+    var parsed = urlLib.parse(url);
+
     function getEndpoint(method, url) {
       return {
-        url: { standard: url },
-        method: method
+	path: parsed.path,
+        method: method,
+	oauth: []
       };
     }
 
