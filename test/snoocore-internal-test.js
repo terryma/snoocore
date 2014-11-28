@@ -211,7 +211,6 @@ describe('Snoocore Internal Tests', function () {
       return reddit('/r/$subreddit/hot')
            .get({ $subreddit: 'aww' })
            .then(function(result) {
-	     console.log(result);
              expect(result).to.haveOwnProperty('kind', 'Listing');
            });
     });

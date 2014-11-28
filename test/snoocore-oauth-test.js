@@ -16,9 +16,9 @@ var expect = chai.expect;
 /* global it */
 /* global beforeEach */
 
-describe.only('Snoocore OAuth Test', function () {
+describe('Snoocore OAuth Test', function () {
 
-  this.timeout(20000);
+  this.timeout(30000);
 
   function openAndAuth(url) {
     console.log('##############################################');
@@ -77,7 +77,7 @@ describe.only('Snoocore OAuth Test', function () {
                                return reddit.auth(authData);
 			     })
 			     .then(function() {
-                               return reddit.api.v1.me.get();
+                               return reddit('/api/v1/me').get();
 			     })
 			     .then(function(data) {
                                expect(data.error).to.be.undefined;
@@ -95,17 +95,14 @@ describe.only('Snoocore OAuth Test', function () {
         consumerSecret: config.reddit.REDDIT_SECRET_SCRIPT,
         username: config.reddit.REDDIT_USERNAME,
         password: config.reddit.REDDIT_PASSWORD
-      })
-			   .then(function(authData) {
-			     return reddit.auth(authData);
-			   })
-			   .then(function() {
-			     return reddit.api.v1.me.get();
-			   })
-			   .then(function(data) {
-			     expect(data.error).to.be.undefined;
-			     expect(data.name).to.equal(config.reddit.REDDIT_USERNAME);
-			   });
+      }).then(function(authData) {
+	return reddit.auth(authData);
+      }).then(function() {
+	return reddit('/api/v1/me').get();
+      }).then(function(data) {
+	expect(data.error).to.be.undefined;
+	expect(data.name).to.equal(config.reddit.REDDIT_USERNAME);
+      });
     });
 
     it('should take a promise for authData', function() {
@@ -119,7 +116,7 @@ describe.only('Snoocore OAuth Test', function () {
       });
 
       return reddit.auth(authData).then(function() {
-        return reddit.api.v1.me.get();
+        return reddit('/api/v1/me').get();
       })
                    .then(function(data) {
                      expect(data.error).to.be.undefined;
@@ -292,7 +289,7 @@ describe.only('Snoocore OAuth Test', function () {
     it('should authenticate with OAuth, and call an oauth endpoint', function() {
       this.timeout(30000);
 
-      return reddit.auth().then(reddit.api.v1.me.get).then(function(data) {
+      return reddit.auth().then(reddit('/api/v1/me').get).then(function(data) {
         expect(data.error).to.be.undefined;
         expect(data.name).to.be.a('string');
       });
@@ -321,23 +318,21 @@ describe.only('Snoocore OAuth Test', function () {
 
     it('should get resources when logged in', function() {
       return reddit.auth()
-                   .then(reddit.api.v1.me.get)
+                   .then(reddit('/api/v1/me').get)
                    .then(function(data) {
                      expect(data.name).to.equal(config.reddit.REDDIT_USERNAME);
                    });
     });
 
     it('should GET resources when logged in (respect parameters)', function() {
-      return reddit.auth()
-                   .then(function() {
-                     return reddit.subreddits.mine.$where.get({
-                       $where: 'subscriber',
-                       limit: 2
-                     });
-                   })
-                   .then(function(result) {
-                     expect(result.data.children.length).to.equal(2);
-                   });
+      return reddit.auth().then(function() {
+        return reddit('/subreddits/mine/$where').get({
+          $where: 'subscriber',
+          limit: 2
+        });
+      }).then(function(result) {
+        expect(result.data.children.length).to.equal(2);
+      });
     });
 
   });

@@ -22,7 +22,7 @@ var expect = chai.expect;
 /* global it */
 /* global beforeEach */
 
-describe.only('Snoocore Cookie Test', function () {
+describe('Snoocore Cookie Test', function () {
 
   this.timeout(30000);
 
