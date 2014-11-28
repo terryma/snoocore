@@ -30,7 +30,7 @@ function Snoocore(config) {
     www: 'https://www.reddit.com',
     ssl: 'https://ssl.reddit.com'
   };
-  
+
   self._modhash = ''; // The current mod hash of whatever user we have
   self._redditSession = ''; // The current cookie (reddit_session)
   self._authData = {}; // Set if user has authenticated with OAuth
@@ -40,8 +40,10 @@ function Snoocore(config) {
   self._oauth = config.oauth || {};
   self._oauth.scope = self._oauth.scope || [ 'identity' ]; // Default scope for reddit
 
-  // The built calls for the Reddit API.
-  var redditApi = buildRedditApi(rawApi);
+  // Structure the raw reddit api into a tree format
+  // @TODO move this into a build step in ./run.js, no need to build
+  // this every time we load the library
+  self._endpointTree = buildEndpointTree(rawApi);
 
   // The current throttle delay before a request will go through
   // increments every time a call is made, and is reduced when a
@@ -102,7 +104,7 @@ function Snoocore(config) {
       return self._server.oauth + endpoint.path;
     }
     // else, decide if we want to use www vs. ssl
-    return endpoint.method === 'GET' 
+    return endpoint.method === 'GET'
 			   ? self._server.www + endpoint.path
 			   : self._server.ssl + endpoint.path;
   }
@@ -129,275 +131,322 @@ function Snoocore(config) {
     return args;
   }
 
-  // Build a single API call
-  function buildCall(endpoint) {
+  // Returns an object containing the restful verb that is needed to 
+  // call the reddit API. That verb is a function call to `callRedditApi`
+  // with the necessary normalization modifications setup in options.
+  function buildCall(endpoints, options) {
 
-    function callRedditApi(givenArgs, options) {
+    options = options || {};
+    var methods = {};
 
+    // normalize the arguments given by the user to conform to the
+    // endpoint tree
+    function fixGivenArgs(givenArgs) {
+      givenArgs = givenArgs || {};
 
-      // Options that will change the way this call behaves
-      // mostly specific to recursion / exiting it if needed
-      options = options || {};
-      var bypassAuth = options.bypassAuth || false;
+      // replace any of the user alias place holders with the actual ones
+      Object.keys(options.urlParamAlias || []).forEach(function(providedAlias) {
+	// e.g. '$subreddit' vs '$sub'
+	var actualAlias = options.urlParamAlias[providedAlias];
+	// set the givenArgs to matche the actual alias value with the value that
+	// the user gave
+	givenArgs[actualAlias] = givenArgs[providedAlias];
+	// remove the provided alias
+	delete givenArgs[providedAlias];
+      });
 
-      var startCallTime = Date.now();
-      throttleDelay += throttle;
+      // replace any of the url parameters with values embedded into the
+      // path into the givenArguments
+      Object.keys(options.urlParamValue || []).forEach(function(providedValue) {
+	// e.g. '$subreddit' vs 'aww'
+	var actualAlias = options.urlParamValue[providedValue];
+	// add the correct argument to givenArgs with the value provided
+	givenArgs[actualAlias] = providedValue;
+      });
 
-      // Wait for the throttle delay amount, then call the Reddit API
-      return delay(throttleDelay - throttle).then(function() {
+      return givenArgs;
+    }
 
-        var method = endpoint.method.toLowerCase();
-        var url = buildUrl(givenArgs, endpoint);
-        var args = buildArgs(givenArgs);
+    endpoints.forEach(function(endpoint) {
+      methods[endpoint.method.toLowerCase()] = function(givenArgs, callOptions) {
+	givenArgs = fixGivenArgs(givenArgs);
+	return callRedditApi(endpoint, givenArgs, callOptions);
+      };
 
-        var call = superagent[method](url);
+      if (endpoint.isListing) {
+	methods.listing = function(givenArgs, callOptions) {
+	  return getListing(endpoint, givenArgs, callOptions);
+	};
+      }
+    });
 
+    return methods;
+  }
+
+  // Call the reddit api
+  function callRedditApi(endpoint, givenArgs, options) {
+
+    // Options that will change the way this call behaves
+    options = options || {};
+    var bypassAuth = options.bypassAuth || false;
+
+    var startCallTime = Date.now();
+    throttleDelay += throttle;
+
+    // Wait for the throttle delay amount, then call the Reddit API
+    return delay(throttleDelay - throttle).then(function() {
+
+      var method = endpoint.method.toLowerCase();
+      var url = buildUrl(givenArgs, endpoint);
+      var args = buildArgs(givenArgs);
+
+      var call = superagent[method](url);
+
+      if (self._isNode) {
+	call.parse(redditNodeParser);
+      }
+
+      // Can't set User-Agent in browser based JavaScript!
+      if (self._isNode) {
+	call.set('User-Agent', self._userAgent);
+      }
+
+      // If we're logged in, set the modhash & cookie
+      if (!bypassAuth && isLoggedIn()) {
+	call.set('X-Modhash', self._modhash);
 	if (self._isNode) {
-	  call.parse(redditNodeParser);
+	  call.set('Cookie',
+		   'reddit_session=' + self._redditSession + ';');
+	}
+      }
+
+      // if we're authenticated, set the authorization header
+      // and provide an option to not provide auth if necessary
+      if (!bypassAuth && isAuthenticated()) {
+
+	// Check that the correct scopes have been requested
+	endpoint.oauth.forEach(function(requiredScope) {
+	  if ((self._oauth.scope || []).indexOf(requiredScope) === -1) {
+	    throw new Error('missing required scope(s): ' + endpoint.oauth.join(', '));
+	  }
+	});
+
+	call.set('Authorization',
+		 self._authData.token_type + ' ' +
+		 self._authData.access_token);
+      }
+
+      // Handle arguments
+      if (method === 'get') {
+	call.query(args);
+      } else {
+	call.type('form');
+	// Handle file uploads
+	if (typeof args.file !== 'undefined') {
+	  var file = args.file;
+	  delete args.file;
+	  for (var field in args) {
+	    call.field(field, args[field]);
+	  }
+	  call.attach('file', file);
+	}
+	// standard request without file uploads
+	else {
+	  call.send(args);
+	}
+      }
+
+      // Here is where we actually make the call to Reddit.
+      // Wrap it in a promise to better handle the error logic
+      return when.promise(function(resolve, reject) {
+	call.end(function(error, response) {
+	  return error ? reject(error) : resolve(response);
+	});
+      }).then(function(response) {
+
+	// Forbidden. Try to get a new access_token if we have
+	// a refresh token
+	if (response.status === 403 && self._refreshToken !== '') {
+
+	  if (options._refreshTokenFail) { // fail if the refresh fail flag was set.
+	    throw new Error('unable to fetch a new access_token');
+	  }
+
+	  // attempt to refresh the access token
+	  return self.refresh(self._refreshToken).then(function() {
+	    // make the call again and flag to fail if it happens again
+	    return callRedditApi(endpoint, givenArgs, { _refreshTokenFail: true });
+	  });
 	}
 
-        // Can't set User-Agent in browser based JavaScript!
-        if (self._isNode) {
-          call.set('User-Agent', self._userAgent);
-        }
+	var data = response.body || {};
+
+	// set the modhash if the data contains it
+	if (typeof data !== 'undefined' &&
+	    typeof data.json !== 'undefined' &&
+	    typeof data.json.data !== 'undefined')
+	{
+
+	  if (typeof data.json.data.modhash !== 'undefined') {
+	    self._modhash = data.json.data.modhash;
+	  }
+
+	  if (typeof data.json.data.cookie !== 'undefined') {
+	    self._redditSession = data.json.data.cookie;
+	  }
+	}
+
+	// Throw any errors that reddit may inform us about
+	if (data.hasOwnProperty('error')) {
+	  throw new Error('\n>>> Reddit Response:\n\n' + String(data.error)
+			    + '\n\n>>> Endpoint URL: '+ url
+			  + '\n\n>>> Endpoint method: ' + endpoint.method
+			  + '\n\n>>> Arguments: ' + JSON.stringify(args, null, 2));
+	}
+
+	return data;
+      });
 
 
-        // If we're logged in, set the modhash & cookie
-        if (!bypassAuth && isLoggedIn()) {
-          call.set('X-Modhash', self._modhash);
-          if (self._isNode) {
-            call.set('Cookie',
-                     'reddit_session=' + self._redditSession + ';');
-          }
-        }
+    }).finally(function() {
+      // decrement the throttle delay. If the call is quick and snappy, we
+      // only decrement the total time that it took to make the call.
+      var endCallTime = Date.now();
+      var callDuration = endCallTime - startCallTime;
 
-        // if we're authenticated, set the authorization header
-        // and provide an option to not provide auth if necessary
-        if (!bypassAuth && isAuthenticated()) {
+      if (callDuration < throttle) {
+	throttleDelay -= callDuration;
+      } else {
+	throttleDelay -= throttle;
+      }
+    });
 
-	  // Check that the correct scopes have been requested
-	  endpoint.oauth.forEach(function(requiredScope) {
-	    if ((self._oauth.scope || []).indexOf(requiredScope) === -1) {
-	      throw new Error('missing required scope(s): ' + endpoint.oauth.join(', '));
-	    }
-	  });
+  }
 
-          call.set('Authorization',
-                   self._authData.token_type + ' ' +
-                   self._authData.access_token);
-        }
+  function getListing(endpoint, givenArgs, options) {
 
-        // Handle arguments
-        if (method === 'get') {
-          call.query(args);
-        } else {
-          call.type('form');
-          // Handle file uploads
-          if (typeof args.file !== 'undefined') {
-            var file = args.file;
-            delete args.file;
-            for (var field in args) {
-              call.field(field, args[field]);
-            }
-            call.attach('file', file);
-          }
-          // standard request without file uploads
-          else {
-            call.send(args);
-          }
-        }
+    givenArgs = givenArgs || {};
 
-        // Here is where we actually make the call to Reddit.
-        // Wrap it in a promise to better handle the error logic
-        return when.promise(function(resolve, reject) {
-          call.end(function(error, response) {
-            return error ? reject(error) : resolve(response);
-          });
-        }).then(function(response) {
+    // number of results that we have loaded so far. It will
+    // increase / decrease when calling next / previous.
+    var count = 0;
+    var limit = givenArgs.limit || 25;
+    // keep a reference to the start of this listing
+    var start = givenArgs.after || null;
 
-          // Forbidden. Try to get a new access_token if we have
-          // a refresh token
-          if (response.status === 403 && self._refreshToken !== '') {
+    function getSlice(givenArgs) {
+      return callRedditApi(endpoint, givenArgs, options).then(function(result) {
 
-            // fail if the refresh fail flag was set.
-            if (options._refreshTokenFail) {
-              throw new Error('unable to fetch a new access_token');
-            }
+	var slice = {};
 
-            // attempt to refresh the access token
-            return self.refresh(self._refreshToken).then(function() {
-              // make the call again and flag to fail if it happens again
-              return callRedditApi(givenArgs, { _refreshTokenFail: true });
-            });
-          }
+	slice.count = count;
 
-          var data = response.body || {};
+	slice.get = result;
 
-          // set the modhash if the data contains it
-          if (typeof data !== 'undefined' &&
-              typeof data.json !== 'undefined' &&
-              typeof data.json.data !== 'undefined')
-          {
+	slice.before = slice.get.data.before || null;
+	slice.after = slice.get.data.after || null;
+	slice.allChildren = slice.get.data.children || [];
 
-            if (typeof data.json.data.modhash !== 'undefined') {
-              self._modhash = data.json.data.modhash;
-            }
+	slice.empty = slice.allChildren.length === 0;
 
-            if (typeof data.json.data.cookie !== 'undefined') {
-              self._redditSession = data.json.data.cookie;
-            }
-          }
+	slice.children = slice.allChildren.filter(function(child) {
+	  return !child.data.stickied;
+	});
 
-          // Throw any errors that reddit may inform us about
-          if (data.hasOwnProperty('error')) {
-            throw new Error('\n>>> Reddit Response:\n\n' + String(data.error)
-			      + '\n\n>>> Endpoint URL: '+ url
-			    + '\n\n>>> Endpoint method: ' + endpoint.method
-			    + '\n\n>>> Arguments: ' + JSON.stringify(args, null, 2));
-          }
+	slice.stickied = slice.allChildren.filter(function(child) {
+	  return child.data.stickied;
+	});
 
-          return data;
-        });
+	slice.next = function() {
+	  count += limit;
 
+	  var args = givenArgs;
+	  args.before = null;
+	  args.after = slice.children[slice.children.length - 1].data.name;
+	  args.count = count;
+	  return getSlice(args);
+	};
 
-      }).finally(function() {
-        // decrement the throttle delay. If the call is quick and snappy, we
-        // only decrement the total time that it took to make the call.
-        var endCallTime = Date.now();
-        var callDuration = endCallTime - startCallTime;
+	slice.previous = function() {
+	  count -= limit;
 
-        if (callDuration < throttle) {
-          throttleDelay -= callDuration;
-        } else {
-          throttleDelay -= throttle;
-        }
+	  var args = givenArgs;
+	  args.before = slice.children[0].data.name;
+	  args.after = null;
+	  args.count = count;
+	  return getSlice(args);
+	};
+
+	slice.start = function() {
+	  count = 0;
+
+	  var args = givenArgs;
+	  args.before = null;
+	  args.after = start;
+	  args.count = count;
+	  return getSlice(args);
+	};
+
+	slice.requery = function() {
+	  return getSlice(givenArgs);
+	};
+
+	return slice;
       });
 
     }
 
-    return callRedditApi;
+    return getSlice(givenArgs);
   }
 
-  function buildListing(endpoint) {
-    var callApi = buildCall(endpoint);
+  /*
+     Structures the reddit api endpoints into a tree
+     that we can use later for traversing
+     The layout:
 
-    return function getListing(givenArgs, options) {
+     {
+     api: { v1: { me: { _endpoints: [ {GET} ], prefs: { _endpoints: [ {GET}, {PATCH}  ] }}}},
+     live: { $thread: { "about.json": { _endpoints: [ {GET} ] }}},
+     ...
+     }
 
-      givenArgs = givenArgs || {};
+     The endpoints live in arrays to support instances where
+     there are multiple verbs defined for an endpoint such as
+     /api/v1/me/prefs
 
-      // number of results that we have loaded so far. It will
-      // increase / decrease when calling next / previous.
-      var count = 0;
-      var limit = givenArgs.limit || 25;
-      // keep a reference to the start of this listing
-      var start = givenArgs.after || null;
+     It also handles the ase where /api/v1/me is a parent endpoint to
+     /app/v1/me/prefs by defining endpoints in a `_endpoints` field.
+   */
 
-      function getSlice(givenArgs) {
-        return callApi(givenArgs, options).then(function(result) {
-
-          var slice = {};
-
-          slice.count = count;
-
-          slice.get = result;
-
-          slice.before = slice.get.data.before || null;
-          slice.after = slice.get.data.after || null;
-          slice.allChildren = slice.get.data.children || [];
-
-          slice.empty = slice.allChildren.length === 0;
-
-          slice.children = slice.allChildren.filter(function(child) {
-            return !child.data.stickied;
-          });
-
-          slice.stickied = slice.allChildren.filter(function(child) {
-            return child.data.stickied;
-          });
-
-          slice.next = function() {
-            count += limit;
-
-            var args = givenArgs;
-            args.before = null;
-            args.after = slice.children[slice.children.length - 1].data.name;
-            args.count = count;
-            return getSlice(args);
-          };
-
-          slice.previous = function() {
-            count -= limit;
-
-            var args = givenArgs;
-            args.before = slice.children[0].data.name;
-            args.after = null;
-            args.count = count;
-            return getSlice(args);
-          };
-
-          slice.start = function() {
-            count = 0;
-
-            var args = givenArgs;
-            args.before = null;
-            args.after = start;
-            args.count = count;
-            return getSlice(args);
-          };
-
-          slice.requery = function() {
-            return getSlice(givenArgs);
-          };
-
-          return slice;
-        });
-
-      }
-
-      return getSlice(givenArgs);
-    };
-
-  }
-
-  // Build the API calls
-  function buildRedditApi(rawApi) {
-    var redditApi = {};
+  function buildEndpointTree(rawApi) {
+    var endpointTree = {};
 
     rawApi.forEach(function(endpoint) {
+      // get the sections to traverse down for this endpoint
       var pathSections = endpoint.path.substring(1).split('/');
-      var leaf = redditApi; // start at the root
+      var leaf = endpointTree; // start at the root
 
       // move down to where we need to be in the chain for this endpoint
-      pathSections.forEach(function(section) {
-        if (typeof leaf[section] === 'undefined') {
-          leaf[section] = {};
-        }
-        leaf = leaf[section];
-      });
+      var i = 0;
+      var len = pathSections.length;
 
-      // set the appropriate method call in the chain
-      switch (endpoint.method.toLowerCase()) {
-        case 'get':
-          leaf.get = buildCall(endpoint); break;
-        case 'post':
-          leaf.post = buildCall(endpoint); break;
-        case 'put':
-          leaf.put = buildCall(endpoint); break;
-        case 'patch':
-          leaf.patch = buildCall(endpoint); break;
-        case 'delete':
-          leaf.delete = buildCall(endpoint); break;
-        case 'update':
-          leaf.update = buildCall(endpoint); break;
+      for (; i < len - 1; ++i) {
+	if (typeof leaf[pathSections[i]] === 'undefined') {
+	  leaf[pathSections[i]] = {};
+	}
+	leaf = leaf[pathSections[i]];
       }
 
-      // add on a listing call if endpoint is a listing
-      if (endpoint.isListing) {
-        leaf.listing = buildListing(endpoint);
+      // push the endpoint to this section of the tree
+      if (typeof leaf[pathSections[i]] === 'undefined') {
+	leaf[pathSections[i]] = { _endpoints: [] };
       }
+
+      leaf[pathSections[i]]._endpoints.push(endpoint);
+
     });
 
-    return redditApi;
+    return endpointTree;
   }
 
   // Build support for the raw API calls
@@ -405,64 +454,82 @@ function Snoocore(config) {
 
     var parsed = urlLib.parse(url);
 
-    function getEndpoint(method, url) {
+    function getEndpoint(method) {
       return {
 	path: parsed.path,
-        method: method,
-	oauth: []
+	method: method,
+	oauth: [],
+	isListing: true
       };
     }
 
-    return {
-      get: buildCall(getEndpoint('get', url)),
-      post: buildCall(getEndpoint('post', url)),
-      put: buildCall(getEndpoint('put', url)),
-      patch: buildCall(getEndpoint('patch', url)),
-      delete: buildCall(getEndpoint('delete', url)),
-      update: buildCall(getEndpoint('update', url)),
-      listing: buildListing(getEndpoint('get', url))
-        // Listing assumes 'GET'. If this is an issue later we can
-        // expand to other verbs as needed, e.g.
-        // listingPost: buildListing(getEndpoint('post', url))
-    };
+    var endpoints = ['get', 'post', 'put', 'patch', 'delete', 'update']
+		       .map(getEndpoint);
+    return buildCall(endpoints);
   };
 
-  // Path syntax support. Gets back the object that has the restful verbs
-  // attached to them to call
+  // Path syntax support.
   self.path = function(path) {
-
-    var errorMessage =
-    'Invalid path provided! This endpoint does not exist. Make ' +
-                      'sure that your call matches the routes that are defined ' +
-                      'in Reddit\'s API documentation';
 
     path = path.replace(/^\//, ''); // remove leading slash if any
     var sections = path.split('/'); // sections to traverse down
-    var endpoint = self;
+    var leaf = self._endpointTree; // the top level of the endpoint tree that we will traverse down
 
-    // Travel down the dot-syntax until we get to the call we want
+    // Adjust how this call is built if necessary
+    var buildCallOptions = {
+      urlParamAlias: {}, // aliases for url parameters
+      urlParamValue: {} // values for url parameters (included in the url vs. using $placeholder)
+    };
+
+    // Travel down the endpoint tree until we get to the endpoint that we want
     for (var i = 0, len = sections.length; i < len; ++i) {
-      endpoint = endpoint[sections[i]];
-      if (typeof endpoint === 'undefined') {
-        throw new Error(errorMessage);
+
+      // The next section of the url path provided
+      var providedSection = sections[i];
+      // The *real* section should the provided section not exist
+      var actualSection = providedSection;
+
+      // If the user provided section does not exist in our endpoint tree
+      // this means that they are using their own placeholder, or an actual
+      // value of the url parameter
+      if (typeof leaf[providedSection] === 'undefined') {
+
+	var leafKeys = Object.keys(leaf);
+
+	for (var j = 0, jlen = leafKeys.length; j < jlen; ++j) {
+	  // Return the section that represents a placeholder
+	  if (leafKeys[j].substring(0, 1) === '$') {
+	    actualSection = leafKeys[j]; // The actual value, e.g. '$subreddit'
+	    break;
+	  }
+	}
+
+	// The user is using their own alias
+	if (providedSection.substring(0, 1) === '$') {
+	  buildCallOptions.urlParamAlias[providedSection] = actualSection;
+	}
+	// looks like they used a value instead of the placeholder
+	else {
+	  buildCallOptions.urlParamValue[providedSection] = actualSection;
+	}
+
       }
+
+      // Check that the actual section is a valid one
+      if (typeof leaf[actualSection] === 'undefined') {
+	throw new Error('Invalid path provided. Check that this is a valid path.\n' + path);
+      }
+
+      // move down the endpoint tree
+      leaf = leaf[actualSection];
     }
 
-    // check that at least one rest method is defined
-    var isValid = (
-      typeof endpoint.get === 'function' ||
-      typeof endpoint.post === 'function' ||
-      typeof endpoint.put === 'function' ||
-      typeof endpoint.patch === 'function' ||
-      typeof endpoint.delete === 'function' ||
-      typeof endpoint.update === 'function'
-    );
-
-    if (!isValid) {
-      throw new Error(errorMessage);
+    // Check that our leaf is an endpoint before building the call
+    if (typeof leaf._endpoints === 'undefined') {
+      throw new Error('Invalid path provided. Check that this is a valid path.\n' + path);
     }
 
-    return endpoint;
+    return buildCall(leaf._endpoints, buildCallOptions);
   };
 
   // Sets the modhash & cookie to allow for cookie-based calls
@@ -477,7 +544,7 @@ function Snoocore(config) {
 
     if (!hasUserPass && !hasCookieModhash) {
       return when.reject(new Error(
-        'login expects either a username/password, or a ' +
+	'login expects either a username/password, or a ' +
 				   'cookie/modhash'));
     }
 
@@ -488,14 +555,14 @@ function Snoocore(config) {
     }
 
     var rem = typeof options.rem !== 'undefined'
-            ? options.rem
-            : true;
+	    ? options.rem
+	    : true;
 
     var api_type = typeof options.api_type !== 'undefined'
-                 ? options.api_type
-                 : 'json';
+		 ? options.api_type
+		 : 'json';
 
-    return redditApi.api.login.post({
+    return self.path('/api/login').post({
       user: options.username,
       passwd: options.password,
       rem: rem,
@@ -507,8 +574,8 @@ function Snoocore(config) {
   // on Reddit for good measure.
   self.logout = function() {
     var getModhash = self._modhash
-                   ? when.resolve(self._modhash)
-				 : redditApi.api['me.json'].get().then(function(result) {
+		   ? when.resolve(self._modhash)
+				 : self.path('/api/me.json').get().then(function(result) {
 				   return result.data ? result.data.modhash : void 0;
 				 });
 
@@ -639,11 +706,6 @@ function Snoocore(config) {
   // still allow access to the objects defined on self
   Object.keys(self).forEach(function(key) {
     self.path[key] = self[key];
-  });
-
-  // Allow for "dot syntax"
-  Object.keys(redditApi).forEach(function(key) {
-    self.path[key] = redditApi[key];
   });
 
   self = self.path;
