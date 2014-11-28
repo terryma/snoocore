@@ -42,6 +42,15 @@ var promise = reddit('/api/multi/$multipath/rename').post({
 });
 ```
 
+It is possible (since version 2.0.0) to embed the url parameters value into the path as well:
+
+```javascript
+var promise = reddit('/api/multi/urlParameterValue/rename').post({
+    from: '9',
+    to:  '5'
+});
+```
+
 # Advanced Usage
 
 There are some undocumented resources on Reddit that can be used. See the advanced usage section for more information on how to access these.
