@@ -36,7 +36,7 @@ exports.buildRedditApi = function(done) {
 exports.buildStandalone = function(done) {
   return exec(path.join(__dirname, 'node_modules', '.bin', 'browserify') +
 			' --standalone Snoocore' +
-			' --outfile Snoocore-standalone.js' +
+			' --outfile dist/Snoocore-standalone.js' +
 			' Snoocore.js',
               { cwd: __dirname },
               function(error, stdout, stderr) {
