@@ -211,8 +211,21 @@ describe('Snoocore Internal Tests', function () {
       return reddit('/r/$subreddit/hot')
            .get({ $subreddit: 'aww' })
            .then(function(result) {
+	     console.log(result);
              expect(result).to.haveOwnProperty('kind', 'Listing');
            });
+    });
+
+    it('should allow for alternate placeholder names', function() {
+      return reddit('/r/$sub/hot').get({ $sub: 'aww' }).then(function(result) {
+	expect(result).to.haveOwnProperty('kind', 'Listing');
+      });
+    });
+
+    it('should allow for embedding of url parameters', function() {
+      return reddit('/r/aww/hot').get().then(function(result) {
+	expect(result).to.haveOwnProperty('kind', 'Listing');
+      });
     });
 
   });
