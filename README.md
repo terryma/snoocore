@@ -19,7 +19,7 @@ A minimal and complete JavaScript driver for the Reddit API.
 
 **All endpoints are supported**
 
-Calls [are generated](https://github.com/trevorsenior/reddit-api-generator) from the [Reddit API documentation](http://www.reddit.com/dev/api). Undocumented endpoints are supported as well.
+Calls are [generated](https://github.com/trevorsenior/snooform) from the [Reddit API documentation](http://www.reddit.com/dev/api). Undocumented endpoints are supported as well.
 
 **No special syntax or fluff**
 
