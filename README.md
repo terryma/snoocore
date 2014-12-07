@@ -4,32 +4,23 @@ A minimal and complete JavaScript driver for the Reddit API.
 
 ### [View the documentation](http://trevorsenior.github.io/snoocore)
 
-## Quick Start
-
-**Install**
-
-`npm install snoocore` || `bower install snoocore`
-
-**Examples**
-
- - [Online Demo](http://plnkr.co/edit/7zppWOM9QjSMdVuYQU2s?p=preview)
- - [Code Examples](https://github.com/trevorsenior/snoocore-examples/tree/master)
-
 ## Features
 
 **All endpoints are supported**
 
-Calls [are generated](https://github.com/trevorsenior/reddit-api-generator) from the [Reddit API documentation](http://www.reddit.com/dev/api). Undocumented endpoints are supported as well.
+Calls are [generated](https://github.com/trevorsenior/snooform) from the [Reddit API documentation](http://www.reddit.com/dev/api). Undocumented endpoints are supported as well.
 
 **No special syntax or fluff**
 
 All calls follow the reddit API directly. To use the endpoint [`GET /api/v1/me`](http://www.reddit.com/dev/api#GET_api_v1_me), call:
 
 ```javascript
-reddit('/api/v1/me').get()
+var promise = reddit('/api/v1/me').get();
 ```
 
-For routes that take parameters and url parameters, see the [basic usage](http://trevorsenior.github.io/snoocore/basicUsage.html) section of the documentation.
+See the [basic usage](http://trevorsenior.github.io/snoocore/basicUsage.html) section of the documentation for more information on how to call endpoints with parameters and url paramters.
+
+<sub>Snoocore [uses promises](http://tsenior.com/snoocore/promises.html)!</sub>
 
 **Node.js and Browser support**
 
@@ -44,3 +35,16 @@ Both [OAuth and Cookie based logins](http://trevorsenior.github.io/snoocore/logi
 **Throttling**
 
 Rate limiting is built into snoocore but can be adjusted or removed all together in [the configuration settings](http://trevorsenior.github.io/snoocore/config.html).
+
+## Have questions?
+
+ - [View example code snippets](https://github.com/trevorsenior/snoocore-examples/tree/master)
+ - Open a new issue with the `question` label on GitHub.
+
+## Contributing
+
+Documentation fixes and additions are always helpful should there be a mistake or something is unclear. Switch to the [`gh-pages`](https://github.com/trevorsenior/snoocore/tree/gh-pages) branch and make any changes needed there.
+
+Found out a nifty way to do something that everyone should know? Feel free to add it to the [examples](https://github.com/trevorsenior/snoocore-examples/tree/master) repository.
+
+Changes or new features? That's great too! If it's a major change or a new feature open an issue that we can discuss else feel free to just make a pull request for minor changes. Keep in mind that the goal is to keep the interface as close to the Reddit API as possible.
