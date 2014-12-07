@@ -227,6 +227,14 @@ describe('Snoocore Internal Tests', function () {
       });
     });
 
+    it('should allow for embedding of url parameters (listings)', function() {
+      return reddit('/user/kemitche/comments').listing({
+	sort: 'new'
+      }).then(function(result) {
+	expect(result).to.haveOwnProperty('empty', false);
+      });
+    });
+
   });
 
 });

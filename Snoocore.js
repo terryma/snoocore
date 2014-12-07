@@ -174,6 +174,7 @@ function Snoocore(config) {
 
       if (endpoint.isListing) {
 	methods.listing = function(givenArgs, callOptions) {
+	  givenArgs = fixGivenArgs(givenArgs);
 	  return getListing(endpoint, givenArgs, callOptions);
 	};
       }
