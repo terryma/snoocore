@@ -16,7 +16,7 @@ The paths need to match the endpoint paths directly. Some examples:
 
 ### [GET /subreddits/search](https://www.reddit.com/dev/api#GET_subreddits_search)
 
-![Gotcha Invalid Path - GET /subreddits/search](/snoocore/i/gotcha_invalid_path_1.png)
+![Gotcha Invalid Path - GET /subreddits/search](/snoocore/i/gotcha_invalid_path_2.png)
 
 The call looks like:
 
@@ -28,7 +28,7 @@ reddit('/subreddits/search').get(/* query parameters */);
 
 Some endpoints *require* that the `.json` extension to be included in the call.
 
-![Gotcha Invalid Path - GET /r/subreddit/about.json](/snoocore/i/gotcha_invalid_path_2.png)
+![Gotcha Invalid Path - GET /r/{subreddit}/about.json](/snoocore/i/gotcha_invalid_path_1.png)
 
 The call looks like:
 
