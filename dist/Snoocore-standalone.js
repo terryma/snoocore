@@ -2,9 +2,11 @@
 "use strict";
 
 var urlLib = require('url');
+var querystring = require('querystring');
+
 var when = require('when');
 var delay = require('when/delay');
-var superagent = require('superagent');
+
 var rawApi = require('./build/api');
 var redditNodeParser = require('./redditNodeParser');
 var utils = require('./utils');
@@ -12,8 +14,8 @@ var utils = require('./utils');
 module.exports = Snoocore;
 
 Snoocore.oauth = require('./oauth');
+Snoocore.request = require('./request');
 Snoocore.when = when;
-Snoocore.superagent = superagent;
 
 function Snoocore(config) {
 
@@ -197,77 +199,54 @@ function Snoocore(config) {
     // Wait for the throttle delay amount, then call the Reddit API
     return delay(throttleDelay - throttle).then(function() {
 
-      var method = endpoint.method.toLowerCase();
+      var method = endpoint.method.toUpperCase();
       var url = buildUrl(givenArgs, endpoint);
+      var parsedUrl = urlLib.parse(url);
+
       var args = buildArgs(givenArgs);
 
-      var call = superagent[method](url);
+      var headers = {};
 
       if (self._isNode) {
-	call.parse(redditNodeParser);
-      }
+	// Can't set User-Agent in browser based JavaScript!
+	headers['User-Agent'] = self._userAgent;
 
-      // Can't set User-Agent in browser based JavaScript!
-      if (self._isNode) {
-	call.set('User-Agent', self._userAgent);
+	// Can't set custom headers in Firefox CORS requests
+	headers['X-Modhash'] = self._modhash;
       }
+      
+      // If we are nod bypassing authentication, authenticate the user
+      if (!bypassAuth) {
 
-      // If we're logged in, set the modhash & cookie
-      if (!bypassAuth && isLoggedIn()) {
-	call.set('X-Modhash', self._modhash);
-	if (self._isNode) {
-	  call.set('Cookie',
-		   'reddit_session=' + self._redditSession + ';');
+	if (isAuthenticated()) {
+	  // OAuth based authentication
+
+	  // Check that the correct scopes have been requested
+	  endpoint.oauth.forEach(function(requiredScope) {
+	    if ((self._oauth.scope || []).indexOf(requiredScope) === -1) {
+	      throw new Error('missing required scope(s): ' + endpoint.oauth.join(', '));
+	    }
+	  });
+
+	  headers['Authorization'] = self._authData.token_type + ' ' +
+				     self._authData.access_token;
 	}
-      }
-
-      // if we're authenticated, set the authorization header
-      // and provide an option to not provide auth if necessary
-      if (!bypassAuth && isAuthenticated()) {
-
-	// Check that the correct scopes have been requested
-	endpoint.oauth.forEach(function(requiredScope) {
-	  if ((self._oauth.scope || []).indexOf(requiredScope) === -1) {
-	    throw new Error('missing required scope(s): ' + endpoint.oauth.join(', '));
-	  }
-	});
-
-	call.set('Authorization',
-		 self._authData.token_type + ' ' +
-		 self._authData.access_token);
-      }
-
-      // Handle arguments
-      if (method === 'get') {
-	call.query(args);
-      } else {
-	call.type('form');
-	// Handle file uploads
-	if (typeof args.file !== 'undefined') {
-	  var file = args.file;
-	  delete args.file;
-	  for (var field in args) {
-	    call.field(field, args[field]);
-	  }
-	  call.attach('file', file);
+	else if (isLoggedIn() && self._isNode()) {
+	  // Cookie based authentication (only supported in Node.js)
+	  headers['Cookie'] = 'reddit_session=' + self._redditSession + ';';
 	}
-	// standard request without file uploads
-	else {
-	  call.send(args);
-	}
+
       }
 
-      // Here is where we actually make the call to Reddit.
-      // Wrap it in a promise to better handle the error logic
-      return when.promise(function(resolve, reject) {
-	call.end(function(error, response) {
-	  return error ? reject(error) : resolve(response);
-	});
-      }).then(function(response) {
+      return Snoocore.request.https({
+	method: method,
+	hostname: parsedUrl.hostname,
+	path: parsedUrl.path
+      }, querystring.stringify(args)).then(function(response) {
 
 	// Forbidden. Try to get a new access_token if we have
 	// a refresh token
-	if (response.status === 403 && self._refreshToken !== '') {
+	if (response._status === 403 && self._refreshToken !== '') {
 
 	  if (options._refreshTokenFail) { // fail if the refresh fail flag was set.
 	    throw new Error('unable to fetch a new access_token');
@@ -280,7 +259,12 @@ function Snoocore(config) {
 	  });
 	}
 
-	var data = response.body || {};
+	var data = response._body || {};
+
+	// Attempt to parse some JSON, otherwise continue on (may be empty, or text)
+	try {
+	  data = JSON.parse(data);
+	} catch(e) {}
 
 	// set the modhash if the data contains it
 	if (typeof data !== 'undefined' &&
@@ -307,7 +291,6 @@ function Snoocore(config) {
 
 	return data;
       });
-
 
     }).finally(function() {
       // decrement the throttle delay. If the call is quick and snappy, we
@@ -713,11 +696,1307 @@ function Snoocore(config) {
   return self;
 }
 
-},{"./build/api":2,"./oauth":33,"./redditNodeParser":34,"./utils":35,"superagent":12,"url":9,"when":32,"when/delay":15}],2:[function(require,module,exports){
+},{"./build/api":2,"./oauth":34,"./redditNodeParser":35,"./request":36,"./utils":38,"querystring":12,"url":13,"when":33,"when/delay":16}],2:[function(require,module,exports){
 
 module.exports = [{"path":"/api/clear_sessions","oauth":[],"extensions":[],"method":"POST","args":{"api_type":{},"curpass":{},"dest":{},"uh":{}},"isListing":false},{"path":"/api/delete_user","oauth":[],"extensions":[],"method":"POST","args":{"api_type":{},"confirm":{},"delete_message":{},"passwd":{},"uh":{},"user":{}},"isListing":false},{"path":"/api/login","oauth":[],"extensions":[],"method":"POST","args":{"api_type":{},"passwd":{},"rem":{},"user":{}},"isListing":false},{"path":"/api/me.json","oauth":[],"extensions":[],"method":"GET","args":{},"isListing":false},{"path":"/api/register","oauth":[],"extensions":[],"method":"POST","args":{"api_type":{},"captcha":{},"email":{},"iden":{},"passwd":{},"passwd2":{},"rem":{},"user":{}},"isListing":false},{"path":"/api/set_force_https","oauth":[],"extensions":[],"method":"POST","args":{"api_type":{},"curpass":{},"force_https":{},"uh":{}},"isListing":false},{"path":"/api/update","oauth":[],"extensions":[],"method":"POST","args":{"api_type":{},"curpass":{},"dest":{},"email":{},"newpass":{},"uh":{},"verify":{},"verpass":{}},"isListing":false},{"path":"/api/update_email","oauth":[],"extensions":[],"method":"POST","args":{"api_type":{},"curpass":{},"dest":{},"email":{},"uh":{},"verify":{}},"isListing":false},{"path":"/api/update_password","oauth":[],"extensions":[],"method":"POST","args":{"api_type":{},"curpass":{},"newpass":{},"uh":{},"verpass":{}},"isListing":false},{"path":"/api/v1/me","oauth":["identity"],"extensions":[],"method":"GET","args":{},"isListing":false},{"path":"/api/v1/me/karma","oauth":["mysubreddits"],"extensions":[],"method":"GET","args":{},"isListing":false},{"path":"/api/v1/me/prefs","oauth":["identity"],"extensions":[],"method":"GET","args":{"fields":{}},"isListing":false},{"path":"/api/v1/me/prefs","oauth":["account"],"extensions":[],"method":"PATCH","args":{"This":{}},"isListing":false},{"path":"/api/v1/me/trophies","oauth":["identity"],"extensions":[],"method":"GET","args":{},"isListing":false},{"path":"/prefs/$where","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{}},"isListing":true},{"path":"/prefs/friends","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{}},"isListing":true},{"path":"/prefs/blocked","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{}},"isListing":true},{"path":"/api/v1/me/friends","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{}},"isListing":true},{"path":"/api/v1/me/blocked","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{}},"isListing":true},{"path":"/api/adddeveloper","oauth":[],"extensions":[],"method":"POST","args":{"api_type":{},"client_id":{},"name":{},"uh":{}},"isListing":false},{"path":"/api/deleteapp","oauth":[],"extensions":[],"method":"POST","args":{"client_id":{},"uh":{}},"isListing":false},{"path":"/api/removedeveloper","oauth":[],"extensions":[],"method":"POST","args":{"api_type":{},"client_id":{},"name":{},"uh":{}},"isListing":false},{"path":"/api/revokeapp","oauth":[],"extensions":[],"method":"POST","args":{"client_id":{},"uh":{}},"isListing":false},{"path":"/api/setappicon","oauth":[],"extensions":[],"method":"POST","args":{"api_type":{},"client_id":{},"file":{},"uh":{}},"isListing":false},{"path":"/api/updateapp","oauth":[],"extensions":[],"method":"POST","args":{"about_url":{},"api_type":{},"app_type":{},"icon_url":{},"name":{},"redirect_uri":{},"uh":{}},"isListing":false},{"path":"/api/needs_captcha.json","oauth":["any"],"extensions":[],"method":"GET","args":{},"isListing":false},{"path":"/api/new_captcha","oauth":["any"],"extensions":[],"method":"POST","args":{"api_type":{}},"isListing":false},{"path":"/captcha/$iden","oauth":["any"],"extensions":[],"method":"GET","args":{},"isListing":false},{"path":"/api/clearflairtemplates","oauth":["modflair"],"extensions":[],"method":"POST","args":{"api_type":{},"flair_type":{},"uh":{}},"isListing":false},{"path":"/r/$subreddit/api/clearflairtemplates","oauth":["modflair"],"extensions":[],"method":"POST","args":{"api_type":{},"flair_type":{},"uh":{}},"isListing":false},{"path":"/api/deleteflair","oauth":["modflair"],"extensions":[],"method":"POST","args":{"api_type":{},"name":{},"uh":{}},"isListing":false},{"path":"/r/$subreddit/api/deleteflair","oauth":["modflair"],"extensions":[],"method":"POST","args":{"api_type":{},"name":{},"uh":{}},"isListing":false},{"path":"/api/deleteflairtemplate","oauth":["modflair"],"extensions":[],"method":"POST","args":{"api_type":{},"flair_template_id":{},"uh":{}},"isListing":false},{"path":"/r/$subreddit/api/deleteflairtemplate","oauth":["modflair"],"extensions":[],"method":"POST","args":{"api_type":{},"flair_template_id":{},"uh":{}},"isListing":false},{"path":"/api/flair","oauth":["modflair"],"extensions":[],"method":"POST","args":{"api_type":{},"css_class":{},"link":{},"name":{},"text":{},"uh":{}},"isListing":false},{"path":"/r/$subreddit/api/flair","oauth":["modflair"],"extensions":[],"method":"POST","args":{"api_type":{},"css_class":{},"link":{},"name":{},"text":{},"uh":{}},"isListing":false},{"path":"/api/flairconfig","oauth":["modflair"],"extensions":[],"method":"POST","args":{"api_type":{},"flair_enabled":{},"flair_position":{},"flair_self_assign_enabled":{},"link_flair_position":{},"link_flair_self_assign_enabled":{},"uh":{}},"isListing":false},{"path":"/r/$subreddit/api/flairconfig","oauth":["modflair"],"extensions":[],"method":"POST","args":{"api_type":{},"flair_enabled":{},"flair_position":{},"flair_self_assign_enabled":{},"link_flair_position":{},"link_flair_self_assign_enabled":{},"uh":{}},"isListing":false},{"path":"/api/flaircsv","oauth":["modflair"],"extensions":[],"method":"POST","args":{"flair_csv":{},"uh":{}},"isListing":false},{"path":"/r/$subreddit/api/flaircsv","oauth":["modflair"],"extensions":[],"method":"POST","args":{"flair_csv":{},"uh":{}},"isListing":false},{"path":"/api/flairlist","oauth":["modflair"],"extensions":[],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"name":{},"show":{}},"isListing":true},{"path":"/r/$subreddit/api/flairlist","oauth":["modflair"],"extensions":[],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"name":{},"show":{}},"isListing":true},{"path":"/api/flairselector","oauth":["flair"],"extensions":[],"method":"POST","args":{"link":{},"name":{}},"isListing":false},{"path":"/r/$subreddit/api/flairselector","oauth":["flair"],"extensions":[],"method":"POST","args":{"link":{},"name":{}},"isListing":false},{"path":"/api/flairtemplate","oauth":["modflair"],"extensions":[],"method":"POST","args":{"api_type":{},"css_class":{},"flair_template_id":{},"flair_type":{},"text":{},"text_editable":{},"uh":{}},"isListing":false},{"path":"/r/$subreddit/api/flairtemplate","oauth":["modflair"],"extensions":[],"method":"POST","args":{"api_type":{},"css_class":{},"flair_template_id":{},"flair_type":{},"text":{},"text_editable":{},"uh":{}},"isListing":false},{"path":"/api/selectflair","oauth":["flair"],"extensions":[],"method":"POST","args":{"api_type":{},"flair_template_id":{},"link":{},"name":{},"text":{},"uh":{}},"isListing":false},{"path":"/r/$subreddit/api/selectflair","oauth":["flair"],"extensions":[],"method":"POST","args":{"api_type":{},"flair_template_id":{},"link":{},"name":{},"text":{},"uh":{}},"isListing":false},{"path":"/api/setflairenabled","oauth":["flair"],"extensions":[],"method":"POST","args":{"api_type":{},"flair_enabled":{},"uh":{}},"isListing":false},{"path":"/r/$subreddit/api/setflairenabled","oauth":["flair"],"extensions":[],"method":"POST","args":{"api_type":{},"flair_enabled":{},"uh":{}},"isListing":false},{"path":"/api/v1/gold/gild/$fullname","oauth":["creddits"],"extensions":[],"method":"POST","args":{"fullname":{}},"isListing":false},{"path":"/api/v1/gold/give/$username","oauth":["creddits"],"extensions":[],"method":"POST","args":{"months":{},"username":{}},"isListing":false},{"path":"/api/comment","oauth":["submit"],"extensions":[],"method":"POST","args":{"api_type":{},"text":{},"thing_id":{},"uh":{}},"isListing":false},{"path":"/api/del","oauth":["edit"],"extensions":[],"method":"POST","args":{"id":{},"uh":{}},"isListing":false},{"path":"/api/editusertext","oauth":["edit"],"extensions":[],"method":"POST","args":{"api_type":{},"text":{},"thing_id":{},"uh":{}},"isListing":false},{"path":"/api/hide","oauth":["report"],"extensions":[],"method":"POST","args":{"id":{},"uh":{}},"isListing":false},{"path":"/api/info","oauth":["read"],"extensions":[],"method":"GET","args":{"id":{},"url":{}},"isListing":false},{"path":"/r/$subreddit/api/info","oauth":["read"],"extensions":[],"method":"GET","args":{"id":{},"url":{}},"isListing":false},{"path":"/api/marknsfw","oauth":["modposts"],"extensions":[],"method":"POST","args":{"id":{},"uh":{}},"isListing":false},{"path":"/api/morechildren","oauth":["read"],"extensions":[],"method":"POST","args":{"api_type":{},"children":{},"id":{},"link_id":{},"pv_hex":{},"sort":{}},"isListing":false},{"path":"/api/report","oauth":["report"],"extensions":[],"method":"POST","args":{"api_type":{},"other_reason":{},"reason":{},"thing_id":{},"uh":{}},"isListing":false},{"path":"/api/save","oauth":["save"],"extensions":[],"method":"POST","args":{"category":{},"id":{},"uh":{}},"isListing":false},{"path":"/api/saved_categories.json","oauth":["save"],"extensions":[],"method":"GET","args":{},"isListing":false},{"path":"/api/sendreplies","oauth":["edit"],"extensions":[],"method":"POST","args":{"id":{},"state":{},"uh":{}},"isListing":false},{"path":"/api/set_contest_mode","oauth":["modposts"],"extensions":[],"method":"POST","args":{"api_type":{},"id":{},"state":{},"uh":{}},"isListing":false},{"path":"/api/set_subreddit_sticky","oauth":["modposts"],"extensions":[],"method":"POST","args":{"api_type":{},"id":{},"state":{},"uh":{}},"isListing":false},{"path":"/api/store_visits","oauth":["save"],"extensions":[],"method":"POST","args":{"links":{},"uh":{}},"isListing":false},{"path":"/api/submit","oauth":["submit"],"extensions":[],"method":"POST","args":{"api_type":{},"captcha":{},"extension":{},"iden":{},"kind":{},"resubmit":{},"sendreplies":{},"sr":{},"text":{},"then":{},"title":{},"uh":{},"url":{}},"isListing":false},{"path":"/api/unhide","oauth":["report"],"extensions":[],"method":"POST","args":{"id":{},"uh":{}},"isListing":false},{"path":"/api/unmarknsfw","oauth":["modposts"],"extensions":[],"method":"POST","args":{"id":{},"uh":{}},"isListing":false},{"path":"/api/unsave","oauth":["save"],"extensions":[],"method":"POST","args":{"id":{},"uh":{}},"isListing":false},{"path":"/api/vote","oauth":["vote"],"extensions":[],"method":"POST","args":{"dir":{},"id":{},"uh":{},"v":{}},"isListing":false},{"path":"/by_id/$names","oauth":["read"],"extensions":[],"method":"GET","args":{"names":{}},"isListing":false},{"path":"/comments/$article","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"article":{},"comment":{},"context":{},"depth":{},"limit":{},"sort":{}},"isListing":false},{"path":"/r/$subreddit/comments/$article","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"article":{},"comment":{},"context":{},"depth":{},"limit":{},"sort":{}},"isListing":false},{"path":"/hot","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{}},"isListing":true},{"path":"/r/$subreddit/hot","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{}},"isListing":true},{"path":"/new","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{}},"isListing":true},{"path":"/r/$subreddit/new","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{}},"isListing":true},{"path":"/random","oauth":["read"],"extensions":[],"method":"GET","args":{},"isListing":false},{"path":"/r/$subreddit/random","oauth":["read"],"extensions":[],"method":"GET","args":{},"isListing":false},{"path":"/$sort","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"t":{},"after":{},"before":{},"count":{},"limit":{},"show":{}},"isListing":true},{"path":"/r/$subreddit/$sort","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"t":{},"after":{},"before":{},"count":{},"limit":{},"show":{}},"isListing":true},{"path":"/top","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"t":{},"after":{},"before":{},"count":{},"limit":{},"show":{}},"isListing":true},{"path":"/r/$subreddit/top","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"t":{},"after":{},"before":{},"count":{},"limit":{},"show":{}},"isListing":true},{"path":"/controversial","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"t":{},"after":{},"before":{},"count":{},"limit":{},"show":{}},"isListing":true},{"path":"/r/$subreddit/controversial","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"t":{},"after":{},"before":{},"count":{},"limit":{},"show":{}},"isListing":true},{"path":"/api/live/create","oauth":["submit"],"extensions":[],"method":"POST","args":{"api_type":{},"description":{},"nsfw":{},"resources":{},"title":{},"uh":{}},"isListing":false},{"path":"/api/live/$thread/accept_contributor_invite","oauth":["livemanage"],"extensions":[],"method":"POST","args":{"api_type":{},"uh":{}},"isListing":false},{"path":"/api/live/$thread/close_thread","oauth":["livemanage"],"extensions":[],"method":"POST","args":{"api_type":{},"uh":{}},"isListing":false},{"path":"/api/live/$thread/delete_update","oauth":["edit"],"extensions":[],"method":"POST","args":{"api_type":{},"id":{},"uh":{}},"isListing":false},{"path":"/api/live/$thread/edit","oauth":["livemanage"],"extensions":[],"method":"POST","args":{"api_type":{},"description":{},"nsfw":{},"resources":{},"title":{},"uh":{}},"isListing":false},{"path":"/api/live/$thread/invite_contributor","oauth":["livemanage"],"extensions":[],"method":"POST","args":{"api_type":{},"name":{},"permissions":{},"type":{},"uh":{}},"isListing":false},{"path":"/api/live/$thread/leave_contributor","oauth":["livemanage"],"extensions":[],"method":"POST","args":{"api_type":{},"uh":{}},"isListing":false},{"path":"/api/live/$thread/report","oauth":["report"],"extensions":[],"method":"POST","args":{"api_type":{},"type":{},"uh":{}},"isListing":false},{"path":"/api/live/$thread/rm_contributor","oauth":["livemanage"],"extensions":[],"method":"POST","args":{"api_type":{},"id":{},"uh":{}},"isListing":false},{"path":"/api/live/$thread/rm_contributor_invite","oauth":["livemanage"],"extensions":[],"method":"POST","args":{"api_type":{},"id":{},"uh":{}},"isListing":false},{"path":"/api/live/$thread/set_contributor_permissions","oauth":["livemanage"],"extensions":[],"method":"POST","args":{"api_type":{},"name":{},"permissions":{},"type":{},"uh":{}},"isListing":false},{"path":"/api/live/$thread/strike_update","oauth":["edit"],"extensions":[],"method":"POST","args":{"api_type":{},"id":{},"uh":{}},"isListing":false},{"path":"/api/live/$thread/update","oauth":["submit"],"extensions":[],"method":"POST","args":{"api_type":{},"body":{},"uh":{}},"isListing":false},{"path":"/live/$thread","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"is_embed":{},"limit":{},"stylesr":{}},"isListing":false},{"path":"/live/$thread/about.json","oauth":["read"],"extensions":[],"method":"GET","args":{},"isListing":false},{"path":"/live/$thread/contributors.json","oauth":["read"],"extensions":[],"method":"GET","args":{},"isListing":false},{"path":"/live/$thread/discussions","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{}},"isListing":true},{"path":"/api/block","oauth":["privatemessages"],"extensions":[],"method":"POST","args":{"id":{},"uh":{}},"isListing":false},{"path":"/api/compose","oauth":["privatemessages"],"extensions":[],"method":"POST","args":{"api_type":{},"captcha":{},"from_sr":{},"iden":{},"subject":{},"text":{},"to":{},"uh":{}},"isListing":false},{"path":"/api/read_all_messages","oauth":["privatemessages"],"extensions":[],"method":"POST","args":{"uh":{}},"isListing":false},{"path":"/api/read_message","oauth":["privatemessages"],"extensions":[],"method":"POST","args":{"id":{},"uh":{}},"isListing":false},{"path":"/api/unblock_subreddit","oauth":["privatemessages"],"extensions":[],"method":"POST","args":{"id":{},"uh":{}},"isListing":false},{"path":"/api/unread_message","oauth":["privatemessages"],"extensions":[],"method":"POST","args":{"id":{},"uh":{}},"isListing":false},{"path":"/message/$where","oauth":["privatemessages"],"extensions":[".json",".xml"],"method":"GET","args":{"mark":{},"mid":{},"after":{},"before":{},"count":{},"limit":{},"show":{}},"isListing":true},{"path":"/message/inbox","oauth":["privatemessages"],"extensions":[".json",".xml"],"method":"GET","args":{"mark":{},"mid":{},"after":{},"before":{},"count":{},"limit":{},"show":{}},"isListing":true},{"path":"/message/unread","oauth":["privatemessages"],"extensions":[".json",".xml"],"method":"GET","args":{"mark":{},"mid":{},"after":{},"before":{},"count":{},"limit":{},"show":{}},"isListing":true},{"path":"/message/sent","oauth":["privatemessages"],"extensions":[".json",".xml"],"method":"GET","args":{"mark":{},"mid":{},"after":{},"before":{},"count":{},"limit":{},"show":{}},"isListing":true},{"path":"/about/log","oauth":["modlog"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"mod":{},"show":{},"type":{}},"isListing":true},{"path":"/r/$subreddit/about/log","oauth":["modlog"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"mod":{},"show":{},"type":{}},"isListing":true},{"path":"/about/$location","oauth":["read"],"extensions":[],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"location":{},"only":{},"show":{}},"isListing":true},{"path":"/r/$subreddit/about/$location","oauth":["read"],"extensions":[],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"location":{},"only":{},"show":{}},"isListing":true},{"path":"/about/reports","oauth":["read"],"extensions":[],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"location":{},"only":{},"show":{}},"isListing":true},{"path":"/r/$subreddit/about/reports","oauth":["read"],"extensions":[],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"location":{},"only":{},"show":{}},"isListing":true},{"path":"/about/spam","oauth":["read"],"extensions":[],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"location":{},"only":{},"show":{}},"isListing":true},{"path":"/r/$subreddit/about/spam","oauth":["read"],"extensions":[],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"location":{},"only":{},"show":{}},"isListing":true},{"path":"/about/modqueue","oauth":["read"],"extensions":[],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"location":{},"only":{},"show":{}},"isListing":true},{"path":"/r/$subreddit/about/modqueue","oauth":["read"],"extensions":[],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"location":{},"only":{},"show":{}},"isListing":true},{"path":"/about/unmoderated","oauth":["read"],"extensions":[],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"location":{},"only":{},"show":{}},"isListing":true},{"path":"/r/$subreddit/about/unmoderated","oauth":["read"],"extensions":[],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"location":{},"only":{},"show":{}},"isListing":true},{"path":"/about/edited","oauth":["read"],"extensions":[],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"location":{},"only":{},"show":{}},"isListing":true},{"path":"/r/$subreddit/about/edited","oauth":["read"],"extensions":[],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"location":{},"only":{},"show":{}},"isListing":true},{"path":"/api/accept_moderator_invite","oauth":[],"extensions":[],"method":"POST","args":{"api_type":{},"uh":{}},"isListing":false},{"path":"/r/$subreddit/api/accept_moderator_invite","oauth":[],"extensions":[],"method":"POST","args":{"api_type":{},"uh":{}},"isListing":false},{"path":"/api/approve","oauth":["modposts"],"extensions":[],"method":"POST","args":{"id":{},"uh":{}},"isListing":false},{"path":"/api/distinguish","oauth":["modposts"],"extensions":[],"method":"POST","args":{"api_type":{},"how":{},"id":{},"uh":{}},"isListing":false},{"path":"/api/ignore_reports","oauth":["modposts"],"extensions":[],"method":"POST","args":{"id":{},"uh":{}},"isListing":false},{"path":"/api/leavecontributor","oauth":[],"extensions":[],"method":"POST","args":{"id":{},"uh":{}},"isListing":false},{"path":"/api/leavemoderator","oauth":[],"extensions":[],"method":"POST","args":{"id":{},"uh":{}},"isListing":false},{"path":"/api/remove","oauth":["modposts"],"extensions":[],"method":"POST","args":{"id":{},"spam":{},"uh":{}},"isListing":false},{"path":"/api/unignore_reports","oauth":["modposts"],"extensions":[],"method":"POST","args":{"id":{},"uh":{}},"isListing":false},{"path":"/stylesheet","oauth":["modconfig"],"extensions":[],"method":"GET","args":{},"isListing":false},{"path":"/r/$subreddit/stylesheet","oauth":["modconfig"],"extensions":[],"method":"GET","args":{},"isListing":false},{"path":"/api/multi/mine","oauth":["read"],"extensions":[],"method":"GET","args":{},"isListing":false},{"path":"/api/multi/$multipath","oauth":["subscribe"],"extensions":[],"method":"DELETE","args":{"multipath":{},"uh":{}},"isListing":false},{"path":"/api/filter/filterpath","oauth":["subscribe"],"extensions":[],"method":"DELETE","args":{"multipath":{},"uh":{}},"isListing":false},{"path":"/api/multi/$multipath","oauth":["read"],"extensions":[],"method":"GET","args":{"multipath":{}},"isListing":false},{"path":"/api/filter/filterpath","oauth":["read"],"extensions":[],"method":"GET","args":{"multipath":{}},"isListing":false},{"path":"/api/multi/$multipath","oauth":["subscribe"],"extensions":[],"method":"POST","args":{"model":{},"multipath":{},"uh":{}},"isListing":false},{"path":"/api/filter/filterpath","oauth":["subscribe"],"extensions":[],"method":"POST","args":{"model":{},"multipath":{},"uh":{}},"isListing":false},{"path":"/api/multi/$multipath","oauth":["subscribe"],"extensions":[],"method":"PUT","args":{"model":{},"multipath":{},"uh":{}},"isListing":false},{"path":"/api/filter/filterpath","oauth":["subscribe"],"extensions":[],"method":"PUT","args":{"model":{},"multipath":{},"uh":{}},"isListing":false},{"path":"/api/multi/$multipath/copy","oauth":["subscribe"],"extensions":[],"method":"POST","args":{"from":{},"to":{},"uh":{}},"isListing":false},{"path":"/api/multi/$multipath/description","oauth":["read"],"extensions":[],"method":"GET","args":{"multipath":{}},"isListing":false},{"path":"/api/multi/$multipath/description","oauth":["read"],"extensions":[],"method":"PUT","args":{"model":{},"multipath":{},"uh":{}},"isListing":false},{"path":"/api/multi/$multipath/r/$srname","oauth":["subscribe"],"extensions":[],"method":"DELETE","args":{"multipath":{},"srname":{},"uh":{}},"isListing":false},{"path":"/api/filter/filterpath/r/$srname","oauth":["subscribe"],"extensions":[],"method":"DELETE","args":{"multipath":{},"srname":{},"uh":{}},"isListing":false},{"path":"/api/multi/$multipath/r/$srname","oauth":["read"],"extensions":[],"method":"GET","args":{"multipath":{},"srname":{}},"isListing":false},{"path":"/api/filter/filterpath/r/$srname","oauth":["read"],"extensions":[],"method":"GET","args":{"multipath":{},"srname":{}},"isListing":false},{"path":"/api/multi/$multipath/r/$srname","oauth":["subscribe"],"extensions":[],"method":"PUT","args":{"model":{},"multipath":{},"srname":{},"uh":{}},"isListing":false},{"path":"/api/filter/filterpath/r/$srname","oauth":["subscribe"],"extensions":[],"method":"PUT","args":{"model":{},"multipath":{},"srname":{},"uh":{}},"isListing":false},{"path":"/api/multi/$multipath/rename","oauth":["subscribe"],"extensions":[],"method":"POST","args":{"from":{},"to":{},"uh":{}},"isListing":false},{"path":"/search","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"q":{},"restrict_sr":{},"show":{},"sort":{},"syntax":{},"t":{}},"isListing":true},{"path":"/r/$subreddit/search","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"q":{},"restrict_sr":{},"show":{},"sort":{},"syntax":{},"t":{}},"isListing":true},{"path":"/about/$where","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{},"user":{}},"isListing":true},{"path":"/r/$subreddit/about/$where","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{},"user":{}},"isListing":true},{"path":"/about/banned","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{},"user":{}},"isListing":true},{"path":"/r/$subreddit/about/banned","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{},"user":{}},"isListing":true},{"path":"/about/wikibanned","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{},"user":{}},"isListing":true},{"path":"/r/$subreddit/about/wikibanned","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{},"user":{}},"isListing":true},{"path":"/about/contributors","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{},"user":{}},"isListing":true},{"path":"/r/$subreddit/about/contributors","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{},"user":{}},"isListing":true},{"path":"/about/wikicontributors","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{},"user":{}},"isListing":true},{"path":"/r/$subreddit/about/wikicontributors","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{},"user":{}},"isListing":true},{"path":"/about/moderators","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{},"user":{}},"isListing":true},{"path":"/r/$subreddit/about/moderators","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{},"user":{}},"isListing":true},{"path":"/api/delete_sr_header","oauth":["modconfig"],"extensions":[],"method":"POST","args":{"api_type":{},"uh":{}},"isListing":false},{"path":"/r/$subreddit/api/delete_sr_header","oauth":["modconfig"],"extensions":[],"method":"POST","args":{"api_type":{},"uh":{}},"isListing":false},{"path":"/api/delete_sr_img","oauth":["modconfig"],"extensions":[],"method":"POST","args":{"api_type":{},"img_name":{},"uh":{}},"isListing":false},{"path":"/r/$subreddit/api/delete_sr_img","oauth":["modconfig"],"extensions":[],"method":"POST","args":{"api_type":{},"img_name":{},"uh":{}},"isListing":false},{"path":"/api/recommend/sr/$srnames","oauth":["read"],"extensions":[],"method":"GET","args":{"omit":{},"srnames":{}},"isListing":false},{"path":"/api/search_reddit_names.json","oauth":["read"],"extensions":[],"method":"POST","args":{"include_over_18":{},"query":{}},"isListing":false},{"path":"/api/site_admin","oauth":["modconfig"],"extensions":[],"method":"POST","args":{"allow_top":{},"api_type":{},"collapse_deleted_comments":{},"comment_score_hide_mins":{},"css_on_cname":{},"description":{},"exclude_banned_modqueue":{},"header-title":{},"lang":{},"link_type":{},"name":{},"over_18":{},"public_description":{},"public_traffic":{},"show_cname_sidebar":{},"show_media":{},"spam_comments":{},"spam_links":{},"spam_selfposts":{},"sr":{},"submit_link_label":{},"submit_text":{},"submit_text_label":{},"title":{},"type":{},"uh":{},"wiki_edit_age":{},"wiki_edit_karma":{},"wikimode":{}},"isListing":false},{"path":"/api/submit_text.json","oauth":["submit"],"extensions":[],"method":"GET","args":{},"isListing":false},{"path":"/r/$subreddit/api/submit_text.json","oauth":["submit"],"extensions":[],"method":"GET","args":{},"isListing":false},{"path":"/api/$subreddit_stylesheet","oauth":["modconfig"],"extensions":[],"method":"POST","args":{"api_type":{},"op":{},"reason":{},"stylesheet_contents":{},"uh":{}},"isListing":false},{"path":"/r/$subreddit/api/subreddit_stylesheet","oauth":["modconfig"],"extensions":[],"method":"POST","args":{"api_type":{},"op":{},"reason":{},"stylesheet_contents":{},"uh":{}},"isListing":false},{"path":"/api/subreddits_by_topic.json","oauth":["read"],"extensions":[],"method":"GET","args":{"query":{}},"isListing":false},{"path":"/api/subscribe","oauth":["subscribe"],"extensions":[],"method":"POST","args":{"action":{},"sr":{},"uh":{}},"isListing":false},{"path":"/api/upload_sr_img","oauth":["modconfig"],"extensions":[],"method":"POST","args":{"file":{},"formid":{},"header":{},"img_type":{},"name":{},"uh":{}},"isListing":false},{"path":"/r/$subreddit/api/upload_sr_img","oauth":["modconfig"],"extensions":[],"method":"POST","args":{"file":{},"formid":{},"header":{},"img_type":{},"name":{},"uh":{}},"isListing":false},{"path":"/r/$subreddit/about.json","oauth":["read"],"extensions":[],"method":"GET","args":{},"isListing":false},{"path":"/r/$subreddit/about/edit.json","oauth":["modconfig"],"extensions":[],"method":"GET","args":{"created":{},"location":{}},"isListing":false},{"path":"/subreddits/mine/$where","oauth":["mysubreddits"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{}},"isListing":true},{"path":"/subreddits/mine/subscriber","oauth":["mysubreddits"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{}},"isListing":true},{"path":"/subreddits/mine/contributor","oauth":["mysubreddits"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{}},"isListing":true},{"path":"/subreddits/mine/moderator","oauth":["mysubreddits"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{}},"isListing":true},{"path":"/subreddits/search","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"q":{},"show":{}},"isListing":true},{"path":"/subreddits/$where","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{}},"isListing":true},{"path":"/subreddits/popular","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{}},"isListing":true},{"path":"/subreddits/new","oauth":["read"],"extensions":[".json",".xml"],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{}},"isListing":true},{"path":"/api/friend","oauth":[],"extensions":[],"method":"POST","args":{"api_type":{},"ban_message":{},"container":{},"duration":{},"name":{},"note":{},"permissions":{},"type":{},"uh":{}},"isListing":false},{"path":"/api/setpermissions","oauth":[],"extensions":[],"method":"POST","args":{"api_type":{},"name":{},"permissions":{},"type":{},"uh":{}},"isListing":false},{"path":"/r/$subreddit/api/setpermissions","oauth":[],"extensions":[],"method":"POST","args":{"api_type":{},"name":{},"permissions":{},"type":{},"uh":{}},"isListing":false},{"path":"/api/unfriend","oauth":[],"extensions":[],"method":"POST","args":{"container":{},"id":{},"name":{},"type":{},"uh":{}},"isListing":false},{"path":"/api/username_available.json","oauth":[],"extensions":[],"method":"GET","args":{"user":{}},"isListing":false},{"path":"/api/v1/me/friends/$username","oauth":["subscribe"],"extensions":[],"method":"DELETE","args":{"username":{}},"isListing":false},{"path":"/api/v1/me/friends/$username","oauth":["mysubreddits"],"extensions":[],"method":"GET","args":{"username":{}},"isListing":false},{"path":"/api/v1/me/friends/$username","oauth":["subscribe"],"extensions":[],"method":"PUT","args":{"This":{}},"isListing":false},{"path":"/api/v1/user/$username/trophies","oauth":["read"],"extensions":[],"method":"GET","args":{"username":{}},"isListing":false},{"path":"/user/$username/about.json","oauth":["read"],"extensions":[],"method":"GET","args":{"username":{}},"isListing":false},{"path":"/user/$username/$where","oauth":["history"],"extensions":[".json",".xml"],"method":"GET","args":{"show":{},"sort":{},"t":{},"username":{},"after":{},"before":{},"count":{},"limit":{}},"isListing":true},{"path":"/user/$username/overview","oauth":["history"],"extensions":[".json",".xml"],"method":"GET","args":{"show":{},"sort":{},"t":{},"username":{},"after":{},"before":{},"count":{},"limit":{}},"isListing":true},{"path":"/user/$username/submitted","oauth":["history"],"extensions":[".json",".xml"],"method":"GET","args":{"show":{},"sort":{},"t":{},"username":{},"after":{},"before":{},"count":{},"limit":{}},"isListing":true},{"path":"/user/$username/comments","oauth":["history"],"extensions":[".json",".xml"],"method":"GET","args":{"show":{},"sort":{},"t":{},"username":{},"after":{},"before":{},"count":{},"limit":{}},"isListing":true},{"path":"/user/$username/liked","oauth":["history"],"extensions":[".json",".xml"],"method":"GET","args":{"show":{},"sort":{},"t":{},"username":{},"after":{},"before":{},"count":{},"limit":{}},"isListing":true},{"path":"/user/$username/disliked","oauth":["history"],"extensions":[".json",".xml"],"method":"GET","args":{"show":{},"sort":{},"t":{},"username":{},"after":{},"before":{},"count":{},"limit":{}},"isListing":true},{"path":"/user/$username/hidden","oauth":["history"],"extensions":[".json",".xml"],"method":"GET","args":{"show":{},"sort":{},"t":{},"username":{},"after":{},"before":{},"count":{},"limit":{}},"isListing":true},{"path":"/user/$username/saved","oauth":["history"],"extensions":[".json",".xml"],"method":"GET","args":{"show":{},"sort":{},"t":{},"username":{},"after":{},"before":{},"count":{},"limit":{}},"isListing":true},{"path":"/user/$username/gilded","oauth":["history"],"extensions":[".json",".xml"],"method":"GET","args":{"show":{},"sort":{},"t":{},"username":{},"after":{},"before":{},"count":{},"limit":{}},"isListing":true},{"path":"/api/wiki/alloweditor/$act","oauth":["modwiki"],"extensions":[],"method":"POST","args":{"act":{},"page":{},"uh":{},"username":{}},"isListing":false},{"path":"/r/$subreddit/api/wiki/alloweditor/$act","oauth":["modwiki"],"extensions":[],"method":"POST","args":{"act":{},"page":{},"uh":{},"username":{}},"isListing":false},{"path":"/api/wiki/alloweditor/del","oauth":["modwiki"],"extensions":[],"method":"POST","args":{"act":{},"page":{},"uh":{},"username":{}},"isListing":false},{"path":"/r/$subreddit/api/wiki/alloweditor/del","oauth":["modwiki"],"extensions":[],"method":"POST","args":{"act":{},"page":{},"uh":{},"username":{}},"isListing":false},{"path":"/api/wiki/alloweditor/add","oauth":["modwiki"],"extensions":[],"method":"POST","args":{"act":{},"page":{},"uh":{},"username":{}},"isListing":false},{"path":"/r/$subreddit/api/wiki/alloweditor/add","oauth":["modwiki"],"extensions":[],"method":"POST","args":{"act":{},"page":{},"uh":{},"username":{}},"isListing":false},{"path":"/api/wiki/edit","oauth":["wikiedit"],"extensions":[],"method":"POST","args":{"content":{},"page":{},"previous":{},"reason":{},"uh":{}},"isListing":false},{"path":"/r/$subreddit/api/wiki/edit","oauth":["wikiedit"],"extensions":[],"method":"POST","args":{"content":{},"page":{},"previous":{},"reason":{},"uh":{}},"isListing":false},{"path":"/api/wiki/hide","oauth":["modwiki"],"extensions":[],"method":"POST","args":{"page":{},"revision":{},"uh":{}},"isListing":false},{"path":"/r/$subreddit/api/wiki/hide","oauth":["modwiki"],"extensions":[],"method":"POST","args":{"page":{},"revision":{},"uh":{}},"isListing":false},{"path":"/api/wiki/revert","oauth":["modwiki"],"extensions":[],"method":"POST","args":{"page":{},"revision":{},"uh":{}},"isListing":false},{"path":"/r/$subreddit/api/wiki/revert","oauth":["modwiki"],"extensions":[],"method":"POST","args":{"page":{},"revision":{},"uh":{}},"isListing":false},{"path":"/wiki/discussions/$page","oauth":["wikiread"],"extensions":[],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"page":{},"show":{}},"isListing":true},{"path":"/r/$subreddit/wiki/discussions/$page","oauth":["wikiread"],"extensions":[],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"page":{},"show":{}},"isListing":true},{"path":"/wiki/pages","oauth":["wikiread"],"extensions":[],"method":"GET","args":{},"isListing":false},{"path":"/r/$subreddit/wiki/pages","oauth":["wikiread"],"extensions":[],"method":"GET","args":{},"isListing":false},{"path":"/wiki/revisions","oauth":["wikiread"],"extensions":[],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{}},"isListing":true},{"path":"/r/$subreddit/wiki/revisions","oauth":["wikiread"],"extensions":[],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"show":{}},"isListing":true},{"path":"/wiki/revisions/$page","oauth":["wikiread"],"extensions":[],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"page":{},"show":{}},"isListing":true},{"path":"/r/$subreddit/wiki/revisions/$page","oauth":["wikiread"],"extensions":[],"method":"GET","args":{"after":{},"before":{},"count":{},"limit":{},"page":{},"show":{}},"isListing":true},{"path":"/wiki/settings/$page","oauth":["modwiki"],"extensions":[],"method":"GET","args":{"page":{}},"isListing":false},{"path":"/r/$subreddit/wiki/settings/$page","oauth":["modwiki"],"extensions":[],"method":"GET","args":{"page":{}},"isListing":false},{"path":"/wiki/settings/$page","oauth":["modwiki"],"extensions":[],"method":"POST","args":{"listed":{},"page":{},"permlevel":{},"uh":{}},"isListing":false},{"path":"/r/$subreddit/wiki/settings/$page","oauth":["modwiki"],"extensions":[],"method":"POST","args":{"listed":{},"page":{},"permlevel":{},"uh":{}},"isListing":false},{"path":"/wiki/$page","oauth":["wikiread"],"extensions":[],"method":"GET","args":{"page":{},"v":{},"v2":{}},"isListing":false},{"path":"/r/$subreddit/wiki/$page","oauth":["wikiread"],"extensions":[],"method":"GET","args":{"page":{},"v":{},"v2":{}},"isListing":false}];
 
 },{}],3:[function(require,module,exports){
+/*!
+ * The buffer module from node.js, for the browser.
+ *
+ * @author   Feross Aboukhadijeh <feross@feross.org> <http://feross.org>
+ * @license  MIT
+ */
+
+var base64 = require('base64-js')
+var ieee754 = require('ieee754')
+var isArray = require('is-array')
+
+exports.Buffer = Buffer
+exports.SlowBuffer = Buffer
+exports.INSPECT_MAX_BYTES = 50
+Buffer.poolSize = 8192 // not used by this implementation
+
+var kMaxLength = 0x3fffffff
+
+/**
+ * If `Buffer.TYPED_ARRAY_SUPPORT`:
+ *   === true    Use Uint8Array implementation (fastest)
+ *   === false   Use Object implementation (most compatible, even IE6)
+ *
+ * Browsers that support typed arrays are IE 10+, Firefox 4+, Chrome 7+, Safari 5.1+,
+ * Opera 11.6+, iOS 4.2+.
+ *
+ * Note:
+ *
+ * - Implementation must support adding new properties to `Uint8Array` instances.
+ *   Firefox 4-29 lacked support, fixed in Firefox 30+.
+ *   See: https://bugzilla.mozilla.org/show_bug.cgi?id=695438.
+ *
+ *  - Chrome 9-10 is missing the `TypedArray.prototype.subarray` function.
+ *
+ *  - IE10 has a broken `TypedArray.prototype.subarray` function which returns arrays of
+ *    incorrect length in some situations.
+ *
+ * We detect these buggy browsers and set `Buffer.TYPED_ARRAY_SUPPORT` to `false` so they will
+ * get the Object implementation, which is slower but will work correctly.
+ */
+Buffer.TYPED_ARRAY_SUPPORT = (function () {
+  try {
+    var buf = new ArrayBuffer(0)
+    var arr = new Uint8Array(buf)
+    arr.foo = function () { return 42 }
+    return 42 === arr.foo() && // typed array instances can be augmented
+        typeof arr.subarray === 'function' && // chrome 9-10 lack `subarray`
+        new Uint8Array(1).subarray(1, 1).byteLength === 0 // ie10 has broken `subarray`
+  } catch (e) {
+    return false
+  }
+})()
+
+/**
+ * Class: Buffer
+ * =============
+ *
+ * The Buffer constructor returns instances of `Uint8Array` that are augmented
+ * with function properties for all the node `Buffer` API functions. We use
+ * `Uint8Array` so that square bracket notation works as expected -- it returns
+ * a single octet.
+ *
+ * By augmenting the instances, we can avoid modifying the `Uint8Array`
+ * prototype.
+ */
+function Buffer (subject, encoding, noZero) {
+  if (!(this instanceof Buffer))
+    return new Buffer(subject, encoding, noZero)
+
+  var type = typeof subject
+
+  // Find the length
+  var length
+  if (type === 'number')
+    length = subject > 0 ? subject >>> 0 : 0
+  else if (type === 'string') {
+    if (encoding === 'base64')
+      subject = base64clean(subject)
+    length = Buffer.byteLength(subject, encoding)
+  } else if (type === 'object' && subject !== null) { // assume object is array-like
+    if (subject.type === 'Buffer' && isArray(subject.data))
+      subject = subject.data
+    length = +subject.length > 0 ? Math.floor(+subject.length) : 0
+  } else
+    throw new TypeError('must start with number, buffer, array or string')
+
+  if (this.length > kMaxLength)
+    throw new RangeError('Attempt to allocate Buffer larger than maximum ' +
+      'size: 0x' + kMaxLength.toString(16) + ' bytes')
+
+  var buf
+  if (Buffer.TYPED_ARRAY_SUPPORT) {
+    // Preferred: Return an augmented `Uint8Array` instance for best performance
+    buf = Buffer._augment(new Uint8Array(length))
+  } else {
+    // Fallback: Return THIS instance of Buffer (created by `new`)
+    buf = this
+    buf.length = length
+    buf._isBuffer = true
+  }
+
+  var i
+  if (Buffer.TYPED_ARRAY_SUPPORT && typeof subject.byteLength === 'number') {
+    // Speed optimization -- use set if we're copying from a typed array
+    buf._set(subject)
+  } else if (isArrayish(subject)) {
+    // Treat array-ish objects as a byte array
+    if (Buffer.isBuffer(subject)) {
+      for (i = 0; i < length; i++)
+        buf[i] = subject.readUInt8(i)
+    } else {
+      for (i = 0; i < length; i++)
+        buf[i] = ((subject[i] % 256) + 256) % 256
+    }
+  } else if (type === 'string') {
+    buf.write(subject, 0, encoding)
+  } else if (type === 'number' && !Buffer.TYPED_ARRAY_SUPPORT && !noZero) {
+    for (i = 0; i < length; i++) {
+      buf[i] = 0
+    }
+  }
+
+  return buf
+}
+
+Buffer.isBuffer = function (b) {
+  return !!(b != null && b._isBuffer)
+}
+
+Buffer.compare = function (a, b) {
+  if (!Buffer.isBuffer(a) || !Buffer.isBuffer(b))
+    throw new TypeError('Arguments must be Buffers')
+
+  var x = a.length
+  var y = b.length
+  for (var i = 0, len = Math.min(x, y); i < len && a[i] === b[i]; i++) {}
+  if (i !== len) {
+    x = a[i]
+    y = b[i]
+  }
+  if (x < y) return -1
+  if (y < x) return 1
+  return 0
+}
+
+Buffer.isEncoding = function (encoding) {
+  switch (String(encoding).toLowerCase()) {
+    case 'hex':
+    case 'utf8':
+    case 'utf-8':
+    case 'ascii':
+    case 'binary':
+    case 'base64':
+    case 'raw':
+    case 'ucs2':
+    case 'ucs-2':
+    case 'utf16le':
+    case 'utf-16le':
+      return true
+    default:
+      return false
+  }
+}
+
+Buffer.concat = function (list, totalLength) {
+  if (!isArray(list)) throw new TypeError('Usage: Buffer.concat(list[, length])')
+
+  if (list.length === 0) {
+    return new Buffer(0)
+  } else if (list.length === 1) {
+    return list[0]
+  }
+
+  var i
+  if (totalLength === undefined) {
+    totalLength = 0
+    for (i = 0; i < list.length; i++) {
+      totalLength += list[i].length
+    }
+  }
+
+  var buf = new Buffer(totalLength)
+  var pos = 0
+  for (i = 0; i < list.length; i++) {
+    var item = list[i]
+    item.copy(buf, pos)
+    pos += item.length
+  }
+  return buf
+}
+
+Buffer.byteLength = function (str, encoding) {
+  var ret
+  str = str + ''
+  switch (encoding || 'utf8') {
+    case 'ascii':
+    case 'binary':
+    case 'raw':
+      ret = str.length
+      break
+    case 'ucs2':
+    case 'ucs-2':
+    case 'utf16le':
+    case 'utf-16le':
+      ret = str.length * 2
+      break
+    case 'hex':
+      ret = str.length >>> 1
+      break
+    case 'utf8':
+    case 'utf-8':
+      ret = utf8ToBytes(str).length
+      break
+    case 'base64':
+      ret = base64ToBytes(str).length
+      break
+    default:
+      ret = str.length
+  }
+  return ret
+}
+
+// pre-set for values that may exist in the future
+Buffer.prototype.length = undefined
+Buffer.prototype.parent = undefined
+
+// toString(encoding, start=0, end=buffer.length)
+Buffer.prototype.toString = function (encoding, start, end) {
+  var loweredCase = false
+
+  start = start >>> 0
+  end = end === undefined || end === Infinity ? this.length : end >>> 0
+
+  if (!encoding) encoding = 'utf8'
+  if (start < 0) start = 0
+  if (end > this.length) end = this.length
+  if (end <= start) return ''
+
+  while (true) {
+    switch (encoding) {
+      case 'hex':
+        return hexSlice(this, start, end)
+
+      case 'utf8':
+      case 'utf-8':
+        return utf8Slice(this, start, end)
+
+      case 'ascii':
+        return asciiSlice(this, start, end)
+
+      case 'binary':
+        return binarySlice(this, start, end)
+
+      case 'base64':
+        return base64Slice(this, start, end)
+
+      case 'ucs2':
+      case 'ucs-2':
+      case 'utf16le':
+      case 'utf-16le':
+        return utf16leSlice(this, start, end)
+
+      default:
+        if (loweredCase)
+          throw new TypeError('Unknown encoding: ' + encoding)
+        encoding = (encoding + '').toLowerCase()
+        loweredCase = true
+    }
+  }
+}
+
+Buffer.prototype.equals = function (b) {
+  if(!Buffer.isBuffer(b)) throw new TypeError('Argument must be a Buffer')
+  return Buffer.compare(this, b) === 0
+}
+
+Buffer.prototype.inspect = function () {
+  var str = ''
+  var max = exports.INSPECT_MAX_BYTES
+  if (this.length > 0) {
+    str = this.toString('hex', 0, max).match(/.{2}/g).join(' ')
+    if (this.length > max)
+      str += ' ... '
+  }
+  return '<Buffer ' + str + '>'
+}
+
+Buffer.prototype.compare = function (b) {
+  if (!Buffer.isBuffer(b)) throw new TypeError('Argument must be a Buffer')
+  return Buffer.compare(this, b)
+}
+
+// `get` will be removed in Node 0.13+
+Buffer.prototype.get = function (offset) {
+  console.log('.get() is deprecated. Access using array indexes instead.')
+  return this.readUInt8(offset)
+}
+
+// `set` will be removed in Node 0.13+
+Buffer.prototype.set = function (v, offset) {
+  console.log('.set() is deprecated. Access using array indexes instead.')
+  return this.writeUInt8(v, offset)
+}
+
+function hexWrite (buf, string, offset, length) {
+  offset = Number(offset) || 0
+  var remaining = buf.length - offset
+  if (!length) {
+    length = remaining
+  } else {
+    length = Number(length)
+    if (length > remaining) {
+      length = remaining
+    }
+  }
+
+  // must be an even number of digits
+  var strLen = string.length
+  if (strLen % 2 !== 0) throw new Error('Invalid hex string')
+
+  if (length > strLen / 2) {
+    length = strLen / 2
+  }
+  for (var i = 0; i < length; i++) {
+    var byte = parseInt(string.substr(i * 2, 2), 16)
+    if (isNaN(byte)) throw new Error('Invalid hex string')
+    buf[offset + i] = byte
+  }
+  return i
+}
+
+function utf8Write (buf, string, offset, length) {
+  var charsWritten = blitBuffer(utf8ToBytes(string), buf, offset, length)
+  return charsWritten
+}
+
+function asciiWrite (buf, string, offset, length) {
+  var charsWritten = blitBuffer(asciiToBytes(string), buf, offset, length)
+  return charsWritten
+}
+
+function binaryWrite (buf, string, offset, length) {
+  return asciiWrite(buf, string, offset, length)
+}
+
+function base64Write (buf, string, offset, length) {
+  var charsWritten = blitBuffer(base64ToBytes(string), buf, offset, length)
+  return charsWritten
+}
+
+function utf16leWrite (buf, string, offset, length) {
+  var charsWritten = blitBuffer(utf16leToBytes(string), buf, offset, length)
+  return charsWritten
+}
+
+Buffer.prototype.write = function (string, offset, length, encoding) {
+  // Support both (string, offset, length, encoding)
+  // and the legacy (string, encoding, offset, length)
+  if (isFinite(offset)) {
+    if (!isFinite(length)) {
+      encoding = length
+      length = undefined
+    }
+  } else {  // legacy
+    var swap = encoding
+    encoding = offset
+    offset = length
+    length = swap
+  }
+
+  offset = Number(offset) || 0
+  var remaining = this.length - offset
+  if (!length) {
+    length = remaining
+  } else {
+    length = Number(length)
+    if (length > remaining) {
+      length = remaining
+    }
+  }
+  encoding = String(encoding || 'utf8').toLowerCase()
+
+  var ret
+  switch (encoding) {
+    case 'hex':
+      ret = hexWrite(this, string, offset, length)
+      break
+    case 'utf8':
+    case 'utf-8':
+      ret = utf8Write(this, string, offset, length)
+      break
+    case 'ascii':
+      ret = asciiWrite(this, string, offset, length)
+      break
+    case 'binary':
+      ret = binaryWrite(this, string, offset, length)
+      break
+    case 'base64':
+      ret = base64Write(this, string, offset, length)
+      break
+    case 'ucs2':
+    case 'ucs-2':
+    case 'utf16le':
+    case 'utf-16le':
+      ret = utf16leWrite(this, string, offset, length)
+      break
+    default:
+      throw new TypeError('Unknown encoding: ' + encoding)
+  }
+  return ret
+}
+
+Buffer.prototype.toJSON = function () {
+  return {
+    type: 'Buffer',
+    data: Array.prototype.slice.call(this._arr || this, 0)
+  }
+}
+
+function base64Slice (buf, start, end) {
+  if (start === 0 && end === buf.length) {
+    return base64.fromByteArray(buf)
+  } else {
+    return base64.fromByteArray(buf.slice(start, end))
+  }
+}
+
+function utf8Slice (buf, start, end) {
+  var res = ''
+  var tmp = ''
+  end = Math.min(buf.length, end)
+
+  for (var i = start; i < end; i++) {
+    if (buf[i] <= 0x7F) {
+      res += decodeUtf8Char(tmp) + String.fromCharCode(buf[i])
+      tmp = ''
+    } else {
+      tmp += '%' + buf[i].toString(16)
+    }
+  }
+
+  return res + decodeUtf8Char(tmp)
+}
+
+function asciiSlice (buf, start, end) {
+  var ret = ''
+  end = Math.min(buf.length, end)
+
+  for (var i = start; i < end; i++) {
+    ret += String.fromCharCode(buf[i])
+  }
+  return ret
+}
+
+function binarySlice (buf, start, end) {
+  return asciiSlice(buf, start, end)
+}
+
+function hexSlice (buf, start, end) {
+  var len = buf.length
+
+  if (!start || start < 0) start = 0
+  if (!end || end < 0 || end > len) end = len
+
+  var out = ''
+  for (var i = start; i < end; i++) {
+    out += toHex(buf[i])
+  }
+  return out
+}
+
+function utf16leSlice (buf, start, end) {
+  var bytes = buf.slice(start, end)
+  var res = ''
+  for (var i = 0; i < bytes.length; i += 2) {
+    res += String.fromCharCode(bytes[i] + bytes[i + 1] * 256)
+  }
+  return res
+}
+
+Buffer.prototype.slice = function (start, end) {
+  var len = this.length
+  start = ~~start
+  end = end === undefined ? len : ~~end
+
+  if (start < 0) {
+    start += len;
+    if (start < 0)
+      start = 0
+  } else if (start > len) {
+    start = len
+  }
+
+  if (end < 0) {
+    end += len
+    if (end < 0)
+      end = 0
+  } else if (end > len) {
+    end = len
+  }
+
+  if (end < start)
+    end = start
+
+  if (Buffer.TYPED_ARRAY_SUPPORT) {
+    return Buffer._augment(this.subarray(start, end))
+  } else {
+    var sliceLen = end - start
+    var newBuf = new Buffer(sliceLen, undefined, true)
+    for (var i = 0; i < sliceLen; i++) {
+      newBuf[i] = this[i + start]
+    }
+    return newBuf
+  }
+}
+
+/*
+ * Need to make sure that buffer isn't trying to write out of bounds.
+ */
+function checkOffset (offset, ext, length) {
+  if ((offset % 1) !== 0 || offset < 0)
+    throw new RangeError('offset is not uint')
+  if (offset + ext > length)
+    throw new RangeError('Trying to access beyond buffer length')
+}
+
+Buffer.prototype.readUInt8 = function (offset, noAssert) {
+  if (!noAssert)
+    checkOffset(offset, 1, this.length)
+  return this[offset]
+}
+
+Buffer.prototype.readUInt16LE = function (offset, noAssert) {
+  if (!noAssert)
+    checkOffset(offset, 2, this.length)
+  return this[offset] | (this[offset + 1] << 8)
+}
+
+Buffer.prototype.readUInt16BE = function (offset, noAssert) {
+  if (!noAssert)
+    checkOffset(offset, 2, this.length)
+  return (this[offset] << 8) | this[offset + 1]
+}
+
+Buffer.prototype.readUInt32LE = function (offset, noAssert) {
+  if (!noAssert)
+    checkOffset(offset, 4, this.length)
+
+  return ((this[offset]) |
+      (this[offset + 1] << 8) |
+      (this[offset + 2] << 16)) +
+      (this[offset + 3] * 0x1000000)
+}
+
+Buffer.prototype.readUInt32BE = function (offset, noAssert) {
+  if (!noAssert)
+    checkOffset(offset, 4, this.length)
+
+  return (this[offset] * 0x1000000) +
+      ((this[offset + 1] << 16) |
+      (this[offset + 2] << 8) |
+      this[offset + 3])
+}
+
+Buffer.prototype.readInt8 = function (offset, noAssert) {
+  if (!noAssert)
+    checkOffset(offset, 1, this.length)
+  if (!(this[offset] & 0x80))
+    return (this[offset])
+  return ((0xff - this[offset] + 1) * -1)
+}
+
+Buffer.prototype.readInt16LE = function (offset, noAssert) {
+  if (!noAssert)
+    checkOffset(offset, 2, this.length)
+  var val = this[offset] | (this[offset + 1] << 8)
+  return (val & 0x8000) ? val | 0xFFFF0000 : val
+}
+
+Buffer.prototype.readInt16BE = function (offset, noAssert) {
+  if (!noAssert)
+    checkOffset(offset, 2, this.length)
+  var val = this[offset + 1] | (this[offset] << 8)
+  return (val & 0x8000) ? val | 0xFFFF0000 : val
+}
+
+Buffer.prototype.readInt32LE = function (offset, noAssert) {
+  if (!noAssert)
+    checkOffset(offset, 4, this.length)
+
+  return (this[offset]) |
+      (this[offset + 1] << 8) |
+      (this[offset + 2] << 16) |
+      (this[offset + 3] << 24)
+}
+
+Buffer.prototype.readInt32BE = function (offset, noAssert) {
+  if (!noAssert)
+    checkOffset(offset, 4, this.length)
+
+  return (this[offset] << 24) |
+      (this[offset + 1] << 16) |
+      (this[offset + 2] << 8) |
+      (this[offset + 3])
+}
+
+Buffer.prototype.readFloatLE = function (offset, noAssert) {
+  if (!noAssert)
+    checkOffset(offset, 4, this.length)
+  return ieee754.read(this, offset, true, 23, 4)
+}
+
+Buffer.prototype.readFloatBE = function (offset, noAssert) {
+  if (!noAssert)
+    checkOffset(offset, 4, this.length)
+  return ieee754.read(this, offset, false, 23, 4)
+}
+
+Buffer.prototype.readDoubleLE = function (offset, noAssert) {
+  if (!noAssert)
+    checkOffset(offset, 8, this.length)
+  return ieee754.read(this, offset, true, 52, 8)
+}
+
+Buffer.prototype.readDoubleBE = function (offset, noAssert) {
+  if (!noAssert)
+    checkOffset(offset, 8, this.length)
+  return ieee754.read(this, offset, false, 52, 8)
+}
+
+function checkInt (buf, value, offset, ext, max, min) {
+  if (!Buffer.isBuffer(buf)) throw new TypeError('buffer must be a Buffer instance')
+  if (value > max || value < min) throw new TypeError('value is out of bounds')
+  if (offset + ext > buf.length) throw new TypeError('index out of range')
+}
+
+Buffer.prototype.writeUInt8 = function (value, offset, noAssert) {
+  value = +value
+  offset = offset >>> 0
+  if (!noAssert)
+    checkInt(this, value, offset, 1, 0xff, 0)
+  if (!Buffer.TYPED_ARRAY_SUPPORT) value = Math.floor(value)
+  this[offset] = value
+  return offset + 1
+}
+
+function objectWriteUInt16 (buf, value, offset, littleEndian) {
+  if (value < 0) value = 0xffff + value + 1
+  for (var i = 0, j = Math.min(buf.length - offset, 2); i < j; i++) {
+    buf[offset + i] = (value & (0xff << (8 * (littleEndian ? i : 1 - i)))) >>>
+      (littleEndian ? i : 1 - i) * 8
+  }
+}
+
+Buffer.prototype.writeUInt16LE = function (value, offset, noAssert) {
+  value = +value
+  offset = offset >>> 0
+  if (!noAssert)
+    checkInt(this, value, offset, 2, 0xffff, 0)
+  if (Buffer.TYPED_ARRAY_SUPPORT) {
+    this[offset] = value
+    this[offset + 1] = (value >>> 8)
+  } else objectWriteUInt16(this, value, offset, true)
+  return offset + 2
+}
+
+Buffer.prototype.writeUInt16BE = function (value, offset, noAssert) {
+  value = +value
+  offset = offset >>> 0
+  if (!noAssert)
+    checkInt(this, value, offset, 2, 0xffff, 0)
+  if (Buffer.TYPED_ARRAY_SUPPORT) {
+    this[offset] = (value >>> 8)
+    this[offset + 1] = value
+  } else objectWriteUInt16(this, value, offset, false)
+  return offset + 2
+}
+
+function objectWriteUInt32 (buf, value, offset, littleEndian) {
+  if (value < 0) value = 0xffffffff + value + 1
+  for (var i = 0, j = Math.min(buf.length - offset, 4); i < j; i++) {
+    buf[offset + i] = (value >>> (littleEndian ? i : 3 - i) * 8) & 0xff
+  }
+}
+
+Buffer.prototype.writeUInt32LE = function (value, offset, noAssert) {
+  value = +value
+  offset = offset >>> 0
+  if (!noAssert)
+    checkInt(this, value, offset, 4, 0xffffffff, 0)
+  if (Buffer.TYPED_ARRAY_SUPPORT) {
+    this[offset + 3] = (value >>> 24)
+    this[offset + 2] = (value >>> 16)
+    this[offset + 1] = (value >>> 8)
+    this[offset] = value
+  } else objectWriteUInt32(this, value, offset, true)
+  return offset + 4
+}
+
+Buffer.prototype.writeUInt32BE = function (value, offset, noAssert) {
+  value = +value
+  offset = offset >>> 0
+  if (!noAssert)
+    checkInt(this, value, offset, 4, 0xffffffff, 0)
+  if (Buffer.TYPED_ARRAY_SUPPORT) {
+    this[offset] = (value >>> 24)
+    this[offset + 1] = (value >>> 16)
+    this[offset + 2] = (value >>> 8)
+    this[offset + 3] = value
+  } else objectWriteUInt32(this, value, offset, false)
+  return offset + 4
+}
+
+Buffer.prototype.writeInt8 = function (value, offset, noAssert) {
+  value = +value
+  offset = offset >>> 0
+  if (!noAssert)
+    checkInt(this, value, offset, 1, 0x7f, -0x80)
+  if (!Buffer.TYPED_ARRAY_SUPPORT) value = Math.floor(value)
+  if (value < 0) value = 0xff + value + 1
+  this[offset] = value
+  return offset + 1
+}
+
+Buffer.prototype.writeInt16LE = function (value, offset, noAssert) {
+  value = +value
+  offset = offset >>> 0
+  if (!noAssert)
+    checkInt(this, value, offset, 2, 0x7fff, -0x8000)
+  if (Buffer.TYPED_ARRAY_SUPPORT) {
+    this[offset] = value
+    this[offset + 1] = (value >>> 8)
+  } else objectWriteUInt16(this, value, offset, true)
+  return offset + 2
+}
+
+Buffer.prototype.writeInt16BE = function (value, offset, noAssert) {
+  value = +value
+  offset = offset >>> 0
+  if (!noAssert)
+    checkInt(this, value, offset, 2, 0x7fff, -0x8000)
+  if (Buffer.TYPED_ARRAY_SUPPORT) {
+    this[offset] = (value >>> 8)
+    this[offset + 1] = value
+  } else objectWriteUInt16(this, value, offset, false)
+  return offset + 2
+}
+
+Buffer.prototype.writeInt32LE = function (value, offset, noAssert) {
+  value = +value
+  offset = offset >>> 0
+  if (!noAssert)
+    checkInt(this, value, offset, 4, 0x7fffffff, -0x80000000)
+  if (Buffer.TYPED_ARRAY_SUPPORT) {
+    this[offset] = value
+    this[offset + 1] = (value >>> 8)
+    this[offset + 2] = (value >>> 16)
+    this[offset + 3] = (value >>> 24)
+  } else objectWriteUInt32(this, value, offset, true)
+  return offset + 4
+}
+
+Buffer.prototype.writeInt32BE = function (value, offset, noAssert) {
+  value = +value
+  offset = offset >>> 0
+  if (!noAssert)
+    checkInt(this, value, offset, 4, 0x7fffffff, -0x80000000)
+  if (value < 0) value = 0xffffffff + value + 1
+  if (Buffer.TYPED_ARRAY_SUPPORT) {
+    this[offset] = (value >>> 24)
+    this[offset + 1] = (value >>> 16)
+    this[offset + 2] = (value >>> 8)
+    this[offset + 3] = value
+  } else objectWriteUInt32(this, value, offset, false)
+  return offset + 4
+}
+
+function checkIEEE754 (buf, value, offset, ext, max, min) {
+  if (value > max || value < min) throw new TypeError('value is out of bounds')
+  if (offset + ext > buf.length) throw new TypeError('index out of range')
+}
+
+function writeFloat (buf, value, offset, littleEndian, noAssert) {
+  if (!noAssert)
+    checkIEEE754(buf, value, offset, 4, 3.4028234663852886e+38, -3.4028234663852886e+38)
+  ieee754.write(buf, value, offset, littleEndian, 23, 4)
+  return offset + 4
+}
+
+Buffer.prototype.writeFloatLE = function (value, offset, noAssert) {
+  return writeFloat(this, value, offset, true, noAssert)
+}
+
+Buffer.prototype.writeFloatBE = function (value, offset, noAssert) {
+  return writeFloat(this, value, offset, false, noAssert)
+}
+
+function writeDouble (buf, value, offset, littleEndian, noAssert) {
+  if (!noAssert)
+    checkIEEE754(buf, value, offset, 8, 1.7976931348623157E+308, -1.7976931348623157E+308)
+  ieee754.write(buf, value, offset, littleEndian, 52, 8)
+  return offset + 8
+}
+
+Buffer.prototype.writeDoubleLE = function (value, offset, noAssert) {
+  return writeDouble(this, value, offset, true, noAssert)
+}
+
+Buffer.prototype.writeDoubleBE = function (value, offset, noAssert) {
+  return writeDouble(this, value, offset, false, noAssert)
+}
+
+// copy(targetBuffer, targetStart=0, sourceStart=0, sourceEnd=buffer.length)
+Buffer.prototype.copy = function (target, target_start, start, end) {
+  var source = this
+
+  if (!start) start = 0
+  if (!end && end !== 0) end = this.length
+  if (!target_start) target_start = 0
+
+  // Copy 0 bytes; we're done
+  if (end === start) return
+  if (target.length === 0 || source.length === 0) return
+
+  // Fatal error conditions
+  if (end < start) throw new TypeError('sourceEnd < sourceStart')
+  if (target_start < 0 || target_start >= target.length)
+    throw new TypeError('targetStart out of bounds')
+  if (start < 0 || start >= source.length) throw new TypeError('sourceStart out of bounds')
+  if (end < 0 || end > source.length) throw new TypeError('sourceEnd out of bounds')
+
+  // Are we oob?
+  if (end > this.length)
+    end = this.length
+  if (target.length - target_start < end - start)
+    end = target.length - target_start + start
+
+  var len = end - start
+
+  if (len < 1000 || !Buffer.TYPED_ARRAY_SUPPORT) {
+    for (var i = 0; i < len; i++) {
+      target[i + target_start] = this[i + start]
+    }
+  } else {
+    target._set(this.subarray(start, start + len), target_start)
+  }
+}
+
+// fill(value, start=0, end=buffer.length)
+Buffer.prototype.fill = function (value, start, end) {
+  if (!value) value = 0
+  if (!start) start = 0
+  if (!end) end = this.length
+
+  if (end < start) throw new TypeError('end < start')
+
+  // Fill 0 bytes; we're done
+  if (end === start) return
+  if (this.length === 0) return
+
+  if (start < 0 || start >= this.length) throw new TypeError('start out of bounds')
+  if (end < 0 || end > this.length) throw new TypeError('end out of bounds')
+
+  var i
+  if (typeof value === 'number') {
+    for (i = start; i < end; i++) {
+      this[i] = value
+    }
+  } else {
+    var bytes = utf8ToBytes(value.toString())
+    var len = bytes.length
+    for (i = start; i < end; i++) {
+      this[i] = bytes[i % len]
+    }
+  }
+
+  return this
+}
+
+/**
+ * Creates a new `ArrayBuffer` with the *copied* memory of the buffer instance.
+ * Added in Node 0.12. Only available in browsers that support ArrayBuffer.
+ */
+Buffer.prototype.toArrayBuffer = function () {
+  if (typeof Uint8Array !== 'undefined') {
+    if (Buffer.TYPED_ARRAY_SUPPORT) {
+      return (new Buffer(this)).buffer
+    } else {
+      var buf = new Uint8Array(this.length)
+      for (var i = 0, len = buf.length; i < len; i += 1) {
+        buf[i] = this[i]
+      }
+      return buf.buffer
+    }
+  } else {
+    throw new TypeError('Buffer.toArrayBuffer not supported in this browser')
+  }
+}
+
+// HELPER FUNCTIONS
+// ================
+
+var BP = Buffer.prototype
+
+/**
+ * Augment a Uint8Array *instance* (not the Uint8Array class!) with Buffer methods
+ */
+Buffer._augment = function (arr) {
+  arr.constructor = Buffer
+  arr._isBuffer = true
+
+  // save reference to original Uint8Array get/set methods before overwriting
+  arr._get = arr.get
+  arr._set = arr.set
+
+  // deprecated, will be removed in node 0.13+
+  arr.get = BP.get
+  arr.set = BP.set
+
+  arr.write = BP.write
+  arr.toString = BP.toString
+  arr.toLocaleString = BP.toString
+  arr.toJSON = BP.toJSON
+  arr.equals = BP.equals
+  arr.compare = BP.compare
+  arr.copy = BP.copy
+  arr.slice = BP.slice
+  arr.readUInt8 = BP.readUInt8
+  arr.readUInt16LE = BP.readUInt16LE
+  arr.readUInt16BE = BP.readUInt16BE
+  arr.readUInt32LE = BP.readUInt32LE
+  arr.readUInt32BE = BP.readUInt32BE
+  arr.readInt8 = BP.readInt8
+  arr.readInt16LE = BP.readInt16LE
+  arr.readInt16BE = BP.readInt16BE
+  arr.readInt32LE = BP.readInt32LE
+  arr.readInt32BE = BP.readInt32BE
+  arr.readFloatLE = BP.readFloatLE
+  arr.readFloatBE = BP.readFloatBE
+  arr.readDoubleLE = BP.readDoubleLE
+  arr.readDoubleBE = BP.readDoubleBE
+  arr.writeUInt8 = BP.writeUInt8
+  arr.writeUInt16LE = BP.writeUInt16LE
+  arr.writeUInt16BE = BP.writeUInt16BE
+  arr.writeUInt32LE = BP.writeUInt32LE
+  arr.writeUInt32BE = BP.writeUInt32BE
+  arr.writeInt8 = BP.writeInt8
+  arr.writeInt16LE = BP.writeInt16LE
+  arr.writeInt16BE = BP.writeInt16BE
+  arr.writeInt32LE = BP.writeInt32LE
+  arr.writeInt32BE = BP.writeInt32BE
+  arr.writeFloatLE = BP.writeFloatLE
+  arr.writeFloatBE = BP.writeFloatBE
+  arr.writeDoubleLE = BP.writeDoubleLE
+  arr.writeDoubleBE = BP.writeDoubleBE
+  arr.fill = BP.fill
+  arr.inspect = BP.inspect
+  arr.toArrayBuffer = BP.toArrayBuffer
+
+  return arr
+}
+
+var INVALID_BASE64_RE = /[^+\/0-9A-z]/g
+
+function base64clean (str) {
+  // Node strips out invalid characters like \n and \t from the string, base64-js does not
+  str = stringtrim(str).replace(INVALID_BASE64_RE, '')
+  // Node allows for non-padded base64 strings (missing trailing ===), base64-js does not
+  while (str.length % 4 !== 0) {
+    str = str + '='
+  }
+  return str
+}
+
+function stringtrim (str) {
+  if (str.trim) return str.trim()
+  return str.replace(/^\s+|\s+$/g, '')
+}
+
+function isArrayish (subject) {
+  return isArray(subject) || Buffer.isBuffer(subject) ||
+      subject && typeof subject === 'object' &&
+      typeof subject.length === 'number'
+}
+
+function toHex (n) {
+  if (n < 16) return '0' + n.toString(16)
+  return n.toString(16)
+}
+
+function utf8ToBytes (str) {
+  var byteArray = []
+  for (var i = 0; i < str.length; i++) {
+    var b = str.charCodeAt(i)
+    if (b <= 0x7F) {
+      byteArray.push(b)
+    } else {
+      var start = i
+      if (b >= 0xD800 && b <= 0xDFFF) i++
+      var h = encodeURIComponent(str.slice(start, i+1)).substr(1).split('%')
+      for (var j = 0; j < h.length; j++) {
+        byteArray.push(parseInt(h[j], 16))
+      }
+    }
+  }
+  return byteArray
+}
+
+function asciiToBytes (str) {
+  var byteArray = []
+  for (var i = 0; i < str.length; i++) {
+    // Node's code seems to be doing this and not & 0x7F..
+    byteArray.push(str.charCodeAt(i) & 0xFF)
+  }
+  return byteArray
+}
+
+function utf16leToBytes (str) {
+  var c, hi, lo
+  var byteArray = []
+  for (var i = 0; i < str.length; i++) {
+    c = str.charCodeAt(i)
+    hi = c >> 8
+    lo = c % 256
+    byteArray.push(lo)
+    byteArray.push(hi)
+  }
+
+  return byteArray
+}
+
+function base64ToBytes (str) {
+  return base64.toByteArray(str)
+}
+
+function blitBuffer (src, dst, offset, length) {
+  for (var i = 0; i < length; i++) {
+    if ((i + offset >= dst.length) || (i >= src.length))
+      break
+    dst[i + offset] = src[i]
+  }
+  return i
+}
+
+function decodeUtf8Char (str) {
+  try {
+    return decodeURIComponent(str)
+  } catch (err) {
+    return String.fromCharCode(0xFFFD) // UTF 8 invalid char
+  }
+}
+
+},{"base64-js":4,"ieee754":5,"is-array":6}],4:[function(require,module,exports){
+var lookup = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+;(function (exports) {
+	'use strict';
+
+  var Arr = (typeof Uint8Array !== 'undefined')
+    ? Uint8Array
+    : Array
+
+	var PLUS   = '+'.charCodeAt(0)
+	var SLASH  = '/'.charCodeAt(0)
+	var NUMBER = '0'.charCodeAt(0)
+	var LOWER  = 'a'.charCodeAt(0)
+	var UPPER  = 'A'.charCodeAt(0)
+
+	function decode (elt) {
+		var code = elt.charCodeAt(0)
+		if (code === PLUS)
+			return 62 // '+'
+		if (code === SLASH)
+			return 63 // '/'
+		if (code < NUMBER)
+			return -1 //no match
+		if (code < NUMBER + 10)
+			return code - NUMBER + 26 + 26
+		if (code < UPPER + 26)
+			return code - UPPER
+		if (code < LOWER + 26)
+			return code - LOWER + 26
+	}
+
+	function b64ToByteArray (b64) {
+		var i, j, l, tmp, placeHolders, arr
+
+		if (b64.length % 4 > 0) {
+			throw new Error('Invalid string. Length must be a multiple of 4')
+		}
+
+		// the number of equal signs (place holders)
+		// if there are two placeholders, than the two characters before it
+		// represent one byte
+		// if there is only one, then the three characters before it represent 2 bytes
+		// this is just a cheap hack to not do indexOf twice
+		var len = b64.length
+		placeHolders = '=' === b64.charAt(len - 2) ? 2 : '=' === b64.charAt(len - 1) ? 1 : 0
+
+		// base64 is 4/3 + up to two characters of the original data
+		arr = new Arr(b64.length * 3 / 4 - placeHolders)
+
+		// if there are placeholders, only get up to the last complete 4 chars
+		l = placeHolders > 0 ? b64.length - 4 : b64.length
+
+		var L = 0
+
+		function push (v) {
+			arr[L++] = v
+		}
+
+		for (i = 0, j = 0; i < l; i += 4, j += 3) {
+			tmp = (decode(b64.charAt(i)) << 18) | (decode(b64.charAt(i + 1)) << 12) | (decode(b64.charAt(i + 2)) << 6) | decode(b64.charAt(i + 3))
+			push((tmp & 0xFF0000) >> 16)
+			push((tmp & 0xFF00) >> 8)
+			push(tmp & 0xFF)
+		}
+
+		if (placeHolders === 2) {
+			tmp = (decode(b64.charAt(i)) << 2) | (decode(b64.charAt(i + 1)) >> 4)
+			push(tmp & 0xFF)
+		} else if (placeHolders === 1) {
+			tmp = (decode(b64.charAt(i)) << 10) | (decode(b64.charAt(i + 1)) << 4) | (decode(b64.charAt(i + 2)) >> 2)
+			push((tmp >> 8) & 0xFF)
+			push(tmp & 0xFF)
+		}
+
+		return arr
+	}
+
+	function uint8ToBase64 (uint8) {
+		var i,
+			extraBytes = uint8.length % 3, // if we have 1 byte left, pad 2 bytes
+			output = "",
+			temp, length
+
+		function encode (num) {
+			return lookup.charAt(num)
+		}
+
+		function tripletToBase64 (num) {
+			return encode(num >> 18 & 0x3F) + encode(num >> 12 & 0x3F) + encode(num >> 6 & 0x3F) + encode(num & 0x3F)
+		}
+
+		// go through the array every three bytes, we'll deal with trailing stuff later
+		for (i = 0, length = uint8.length - extraBytes; i < length; i += 3) {
+			temp = (uint8[i] << 16) + (uint8[i + 1] << 8) + (uint8[i + 2])
+			output += tripletToBase64(temp)
+		}
+
+		// pad the end with zeros, but make sure to not forget the extra bytes
+		switch (extraBytes) {
+			case 1:
+				temp = uint8[uint8.length - 1]
+				output += encode(temp >> 2)
+				output += encode((temp << 4) & 0x3F)
+				output += '=='
+				break
+			case 2:
+				temp = (uint8[uint8.length - 2] << 8) + (uint8[uint8.length - 1])
+				output += encode(temp >> 10)
+				output += encode((temp >> 4) & 0x3F)
+				output += encode((temp << 2) & 0x3F)
+				output += '='
+				break
+		}
+
+		return output
+	}
+
+	exports.toByteArray = b64ToByteArray
+	exports.fromByteArray = uint8ToBase64
+}(typeof exports === 'undefined' ? (this.base64js = {}) : exports))
+
+},{}],5:[function(require,module,exports){
+exports.read = function(buffer, offset, isLE, mLen, nBytes) {
+  var e, m,
+      eLen = nBytes * 8 - mLen - 1,
+      eMax = (1 << eLen) - 1,
+      eBias = eMax >> 1,
+      nBits = -7,
+      i = isLE ? (nBytes - 1) : 0,
+      d = isLE ? -1 : 1,
+      s = buffer[offset + i];
+
+  i += d;
+
+  e = s & ((1 << (-nBits)) - 1);
+  s >>= (-nBits);
+  nBits += eLen;
+  for (; nBits > 0; e = e * 256 + buffer[offset + i], i += d, nBits -= 8);
+
+  m = e & ((1 << (-nBits)) - 1);
+  e >>= (-nBits);
+  nBits += mLen;
+  for (; nBits > 0; m = m * 256 + buffer[offset + i], i += d, nBits -= 8);
+
+  if (e === 0) {
+    e = 1 - eBias;
+  } else if (e === eMax) {
+    return m ? NaN : ((s ? -1 : 1) * Infinity);
+  } else {
+    m = m + Math.pow(2, mLen);
+    e = e - eBias;
+  }
+  return (s ? -1 : 1) * m * Math.pow(2, e - mLen);
+};
+
+exports.write = function(buffer, value, offset, isLE, mLen, nBytes) {
+  var e, m, c,
+      eLen = nBytes * 8 - mLen - 1,
+      eMax = (1 << eLen) - 1,
+      eBias = eMax >> 1,
+      rt = (mLen === 23 ? Math.pow(2, -24) - Math.pow(2, -77) : 0),
+      i = isLE ? 0 : (nBytes - 1),
+      d = isLE ? 1 : -1,
+      s = value < 0 || (value === 0 && 1 / value < 0) ? 1 : 0;
+
+  value = Math.abs(value);
+
+  if (isNaN(value) || value === Infinity) {
+    m = isNaN(value) ? 1 : 0;
+    e = eMax;
+  } else {
+    e = Math.floor(Math.log(value) / Math.LN2);
+    if (value * (c = Math.pow(2, -e)) < 1) {
+      e--;
+      c *= 2;
+    }
+    if (e + eBias >= 1) {
+      value += rt / c;
+    } else {
+      value += rt * Math.pow(2, 1 - eBias);
+    }
+    if (value * c >= 2) {
+      e++;
+      c /= 2;
+    }
+
+    if (e + eBias >= eMax) {
+      m = 0;
+      e = eMax;
+    } else if (e + eBias >= 1) {
+      m = (value * c - 1) * Math.pow(2, mLen);
+      e = e + eBias;
+    } else {
+      m = value * Math.pow(2, eBias - 1) * Math.pow(2, mLen);
+      e = 0;
+    }
+  }
+
+  for (; mLen >= 8; buffer[offset + i] = m & 0xff, i += d, m /= 256, mLen -= 8);
+
+  e = (e << mLen) | m;
+  eLen += mLen;
+  for (; eLen > 0; buffer[offset + i] = e & 0xff, i += d, e /= 256, eLen -= 8);
+
+  buffer[offset + i - d] |= s * 128;
+};
+
+},{}],6:[function(require,module,exports){
+
+/**
+ * isArray
+ */
+
+var isArray = Array.isArray;
+
+/**
+ * toString
+ */
+
+var str = Object.prototype.toString;
+
+/**
+ * Whether or not the given `val`
+ * is an array.
+ *
+ * example:
+ *
+ *        isArray([]);
+ *        // > true
+ *        isArray(arguments);
+ *        // > false
+ *        isArray('');
+ *        // > false
+ *
+ * @param {mixed} val
+ * @return {bool}
+ */
+
+module.exports = isArray || function (val) {
+  return !! val && '[object Array]' == str.call(val);
+};
+
+},{}],7:[function(require,module,exports){
 if (typeof Object.create === 'function') {
   // implementation from standard node.js 'util' module
   module.exports = function inherits(ctor, superCtor) {
@@ -742,7 +2021,7 @@ if (typeof Object.create === 'function') {
   }
 }
 
-},{}],4:[function(require,module,exports){
+},{}],8:[function(require,module,exports){
 // shim for using process in browser
 
 var process = module.exports = {};
@@ -830,7 +2109,7 @@ process.chdir = function (dir) {
     throw new Error('process.chdir is not supported');
 };
 
-},{}],5:[function(require,module,exports){
+},{}],9:[function(require,module,exports){
 (function (global){
 /*! http://mths.be/punycode v1.2.4 by @mathias */
 ;(function(root) {
@@ -1341,7 +2620,7 @@ process.chdir = function (dir) {
 }(this));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],6:[function(require,module,exports){
+},{}],10:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -1427,7 +2706,7 @@ var isArray = Array.isArray || function (xs) {
   return Object.prototype.toString.call(xs) === '[object Array]';
 };
 
-},{}],7:[function(require,module,exports){
+},{}],11:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -1514,13 +2793,13 @@ var objectKeys = Object.keys || function (obj) {
   return res;
 };
 
-},{}],8:[function(require,module,exports){
+},{}],12:[function(require,module,exports){
 'use strict';
 
 exports.decode = exports.parse = require('./decode');
 exports.encode = exports.stringify = require('./encode');
 
-},{"./decode":6,"./encode":7}],9:[function(require,module,exports){
+},{"./decode":10,"./encode":11}],13:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -2229,14 +3508,14 @@ function isNullOrUndefined(arg) {
   return  arg == null;
 }
 
-},{"punycode":5,"querystring":8}],10:[function(require,module,exports){
+},{"punycode":9,"querystring":12}],14:[function(require,module,exports){
 module.exports = function isBuffer(arg) {
   return arg && typeof arg === 'object'
     && typeof arg.copy === 'function'
     && typeof arg.fill === 'function'
     && typeof arg.readUInt8 === 'function';
 }
-},{}],11:[function(require,module,exports){
+},{}],15:[function(require,module,exports){
 (function (process,global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -2826,1281 +4105,7 @@ function hasOwnProperty(obj, prop) {
 }
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./support/isBuffer":10,"_process":4,"inherits":3}],12:[function(require,module,exports){
-/**
- * Module dependencies.
- */
-
-var Emitter = require('emitter');
-var reduce = require('reduce');
-
-/**
- * Root reference for iframes.
- */
-
-var root = 'undefined' == typeof window
-  ? this
-  : window;
-
-/**
- * Noop.
- */
-
-function noop(){};
-
-/**
- * Check if `obj` is a host object,
- * we don't want to serialize these :)
- *
- * TODO: future proof, move to compoent land
- *
- * @param {Object} obj
- * @return {Boolean}
- * @api private
- */
-
-function isHost(obj) {
-  var str = {}.toString.call(obj);
-
-  switch (str) {
-    case '[object File]':
-    case '[object Blob]':
-    case '[object FormData]':
-      return true;
-    default:
-      return false;
-  }
-}
-
-/**
- * Determine XHR.
- */
-
-function getXHR() {
-  if (root.XMLHttpRequest
-    && ('file:' != root.location.protocol || !root.ActiveXObject)) {
-    return new XMLHttpRequest;
-  } else {
-    try { return new ActiveXObject('Microsoft.XMLHTTP'); } catch(e) {}
-    try { return new ActiveXObject('Msxml2.XMLHTTP.6.0'); } catch(e) {}
-    try { return new ActiveXObject('Msxml2.XMLHTTP.3.0'); } catch(e) {}
-    try { return new ActiveXObject('Msxml2.XMLHTTP'); } catch(e) {}
-  }
-  return false;
-}
-
-/**
- * Removes leading and trailing whitespace, added to support IE.
- *
- * @param {String} s
- * @return {String}
- * @api private
- */
-
-var trim = ''.trim
-  ? function(s) { return s.trim(); }
-  : function(s) { return s.replace(/(^\s*|\s*$)/g, ''); };
-
-/**
- * Check if `obj` is an object.
- *
- * @param {Object} obj
- * @return {Boolean}
- * @api private
- */
-
-function isObject(obj) {
-  return obj === Object(obj);
-}
-
-/**
- * Serialize the given `obj`.
- *
- * @param {Object} obj
- * @return {String}
- * @api private
- */
-
-function serialize(obj) {
-  if (!isObject(obj)) return obj;
-  var pairs = [];
-  for (var key in obj) {
-    if (null != obj[key]) {
-      pairs.push(encodeURIComponent(key)
-        + '=' + encodeURIComponent(obj[key]));
-    }
-  }
-  return pairs.join('&');
-}
-
-/**
- * Expose serialization method.
- */
-
- request.serializeObject = serialize;
-
- /**
-  * Parse the given x-www-form-urlencoded `str`.
-  *
-  * @param {String} str
-  * @return {Object}
-  * @api private
-  */
-
-function parseString(str) {
-  var obj = {};
-  var pairs = str.split('&');
-  var parts;
-  var pair;
-
-  for (var i = 0, len = pairs.length; i < len; ++i) {
-    pair = pairs[i];
-    parts = pair.split('=');
-    obj[decodeURIComponent(parts[0])] = decodeURIComponent(parts[1]);
-  }
-
-  return obj;
-}
-
-/**
- * Expose parser.
- */
-
-request.parseString = parseString;
-
-/**
- * Default MIME type map.
- *
- *     superagent.types.xml = 'application/xml';
- *
- */
-
-request.types = {
-  html: 'text/html',
-  json: 'application/json',
-  xml: 'application/xml',
-  urlencoded: 'application/x-www-form-urlencoded',
-  'form': 'application/x-www-form-urlencoded',
-  'form-data': 'application/x-www-form-urlencoded'
-};
-
-/**
- * Default serialization map.
- *
- *     superagent.serialize['application/xml'] = function(obj){
- *       return 'generated xml here';
- *     };
- *
- */
-
- request.serialize = {
-   'application/x-www-form-urlencoded': serialize,
-   'application/json': JSON.stringify
- };
-
- /**
-  * Default parsers.
-  *
-  *     superagent.parse['application/xml'] = function(str){
-  *       return { object parsed from str };
-  *     };
-  *
-  */
-
-request.parse = {
-  'application/x-www-form-urlencoded': parseString,
-  'application/json': JSON.parse
-};
-
-/**
- * Parse the given header `str` into
- * an object containing the mapped fields.
- *
- * @param {String} str
- * @return {Object}
- * @api private
- */
-
-function parseHeader(str) {
-  var lines = str.split(/\r?\n/);
-  var fields = {};
-  var index;
-  var line;
-  var field;
-  var val;
-
-  lines.pop(); // trailing CRLF
-
-  for (var i = 0, len = lines.length; i < len; ++i) {
-    line = lines[i];
-    index = line.indexOf(':');
-    field = line.slice(0, index).toLowerCase();
-    val = trim(line.slice(index + 1));
-    fields[field] = val;
-  }
-
-  return fields;
-}
-
-/**
- * Return the mime type for the given `str`.
- *
- * @param {String} str
- * @return {String}
- * @api private
- */
-
-function type(str){
-  return str.split(/ *; */).shift();
-};
-
-/**
- * Return header field parameters.
- *
- * @param {String} str
- * @return {Object}
- * @api private
- */
-
-function params(str){
-  return reduce(str.split(/ *; */), function(obj, str){
-    var parts = str.split(/ *= */)
-      , key = parts.shift()
-      , val = parts.shift();
-
-    if (key && val) obj[key] = val;
-    return obj;
-  }, {});
-};
-
-/**
- * Initialize a new `Response` with the given `xhr`.
- *
- *  - set flags (.ok, .error, etc)
- *  - parse header
- *
- * Examples:
- *
- *  Aliasing `superagent` as `request` is nice:
- *
- *      request = superagent;
- *
- *  We can use the promise-like API, or pass callbacks:
- *
- *      request.get('/').end(function(res){});
- *      request.get('/', function(res){});
- *
- *  Sending data can be chained:
- *
- *      request
- *        .post('/user')
- *        .send({ name: 'tj' })
- *        .end(function(res){});
- *
- *  Or passed to `.send()`:
- *
- *      request
- *        .post('/user')
- *        .send({ name: 'tj' }, function(res){});
- *
- *  Or passed to `.post()`:
- *
- *      request
- *        .post('/user', { name: 'tj' })
- *        .end(function(res){});
- *
- * Or further reduced to a single call for simple cases:
- *
- *      request
- *        .post('/user', { name: 'tj' }, function(res){});
- *
- * @param {XMLHTTPRequest} xhr
- * @param {Object} options
- * @api private
- */
-
-function Response(req, options) {
-  options = options || {};
-  this.req = req;
-  this.xhr = this.req.xhr;
-  this.text = this.req.method !='HEAD' 
-     ? this.xhr.responseText 
-     : null;
-  this.setStatusProperties(this.xhr.status);
-  this.header = this.headers = parseHeader(this.xhr.getAllResponseHeaders());
-  // getAllResponseHeaders sometimes falsely returns "" for CORS requests, but
-  // getResponseHeader still works. so we get content-type even if getting
-  // other headers fails.
-  this.header['content-type'] = this.xhr.getResponseHeader('content-type');
-  this.setHeaderProperties(this.header);
-  this.body = this.req.method != 'HEAD'
-    ? this.parseBody(this.text)
-    : null;
-}
-
-/**
- * Get case-insensitive `field` value.
- *
- * @param {String} field
- * @return {String}
- * @api public
- */
-
-Response.prototype.get = function(field){
-  return this.header[field.toLowerCase()];
-};
-
-/**
- * Set header related properties:
- *
- *   - `.type` the content type without params
- *
- * A response of "Content-Type: text/plain; charset=utf-8"
- * will provide you with a `.type` of "text/plain".
- *
- * @param {Object} header
- * @api private
- */
-
-Response.prototype.setHeaderProperties = function(header){
-  // content-type
-  var ct = this.header['content-type'] || '';
-  this.type = type(ct);
-
-  // params
-  var obj = params(ct);
-  for (var key in obj) this[key] = obj[key];
-};
-
-/**
- * Parse the given body `str`.
- *
- * Used for auto-parsing of bodies. Parsers
- * are defined on the `superagent.parse` object.
- *
- * @param {String} str
- * @return {Mixed}
- * @api private
- */
-
-Response.prototype.parseBody = function(str){
-  var parse = request.parse[this.type];
-  return parse && str && str.length
-    ? parse(str)
-    : null;
-};
-
-/**
- * Set flags such as `.ok` based on `status`.
- *
- * For example a 2xx response will give you a `.ok` of __true__
- * whereas 5xx will be __false__ and `.error` will be __true__. The
- * `.clientError` and `.serverError` are also available to be more
- * specific, and `.statusType` is the class of error ranging from 1..5
- * sometimes useful for mapping respond colors etc.
- *
- * "sugar" properties are also defined for common cases. Currently providing:
- *
- *   - .noContent
- *   - .badRequest
- *   - .unauthorized
- *   - .notAcceptable
- *   - .notFound
- *
- * @param {Number} status
- * @api private
- */
-
-Response.prototype.setStatusProperties = function(status){
-  var type = status / 100 | 0;
-
-  // status / class
-  this.status = status;
-  this.statusType = type;
-
-  // basics
-  this.info = 1 == type;
-  this.ok = 2 == type;
-  this.clientError = 4 == type;
-  this.serverError = 5 == type;
-  this.error = (4 == type || 5 == type)
-    ? this.toError()
-    : false;
-
-  // sugar
-  this.accepted = 202 == status;
-  this.noContent = 204 == status || 1223 == status;
-  this.badRequest = 400 == status;
-  this.unauthorized = 401 == status;
-  this.notAcceptable = 406 == status;
-  this.notFound = 404 == status;
-  this.forbidden = 403 == status;
-};
-
-/**
- * Return an `Error` representative of this response.
- *
- * @return {Error}
- * @api public
- */
-
-Response.prototype.toError = function(){
-  var req = this.req;
-  var method = req.method;
-  var url = req.url;
-
-  var msg = 'cannot ' + method + ' ' + url + ' (' + this.status + ')';
-  var err = new Error(msg);
-  err.status = this.status;
-  err.method = method;
-  err.url = url;
-
-  return err;
-};
-
-/**
- * Expose `Response`.
- */
-
-request.Response = Response;
-
-/**
- * Initialize a new `Request` with the given `method` and `url`.
- *
- * @param {String} method
- * @param {String} url
- * @api public
- */
-
-function Request(method, url) {
-  var self = this;
-  Emitter.call(this);
-  this._query = this._query || [];
-  this.method = method;
-  this.url = url;
-  this.header = {};
-  this._header = {};
-  this.on('end', function(){
-    var err = null;
-    var res = null;
-
-    try {
-      res = new Response(self); 
-    } catch(e) {
-      err = new Error('Parser is unable to parse the response');
-      err.parse = true;
-      err.original = e;
-    }
-
-    self.callback(err, res);
-  });
-}
-
-/**
- * Mixin `Emitter`.
- */
-
-Emitter(Request.prototype);
-
-/**
- * Allow for extension
- */
-
-Request.prototype.use = function(fn) {
-  fn(this);
-  return this;
-}
-
-/**
- * Set timeout to `ms`.
- *
- * @param {Number} ms
- * @return {Request} for chaining
- * @api public
- */
-
-Request.prototype.timeout = function(ms){
-  this._timeout = ms;
-  return this;
-};
-
-/**
- * Clear previous timeout.
- *
- * @return {Request} for chaining
- * @api public
- */
-
-Request.prototype.clearTimeout = function(){
-  this._timeout = 0;
-  clearTimeout(this._timer);
-  return this;
-};
-
-/**
- * Abort the request, and clear potential timeout.
- *
- * @return {Request}
- * @api public
- */
-
-Request.prototype.abort = function(){
-  if (this.aborted) return;
-  this.aborted = true;
-  this.xhr.abort();
-  this.clearTimeout();
-  this.emit('abort');
-  return this;
-};
-
-/**
- * Set header `field` to `val`, or multiple fields with one object.
- *
- * Examples:
- *
- *      req.get('/')
- *        .set('Accept', 'application/json')
- *        .set('X-API-Key', 'foobar')
- *        .end(callback);
- *
- *      req.get('/')
- *        .set({ Accept: 'application/json', 'X-API-Key': 'foobar' })
- *        .end(callback);
- *
- * @param {String|Object} field
- * @param {String} val
- * @return {Request} for chaining
- * @api public
- */
-
-Request.prototype.set = function(field, val){
-  if (isObject(field)) {
-    for (var key in field) {
-      this.set(key, field[key]);
-    }
-    return this;
-  }
-  this._header[field.toLowerCase()] = val;
-  this.header[field] = val;
-  return this;
-};
-
-/**
- * Remove header `field`.
- *
- * Example:
- *
- *      req.get('/')
- *        .unset('User-Agent')
- *        .end(callback);
- *
- * @param {String} field
- * @return {Request} for chaining
- * @api public
- */
-
-Request.prototype.unset = function(field){
-  delete this._header[field.toLowerCase()];
-  delete this.header[field];
-  return this;
-};
-
-/**
- * Get case-insensitive header `field` value.
- *
- * @param {String} field
- * @return {String}
- * @api private
- */
-
-Request.prototype.getHeader = function(field){
-  return this._header[field.toLowerCase()];
-};
-
-/**
- * Set Content-Type to `type`, mapping values from `request.types`.
- *
- * Examples:
- *
- *      superagent.types.xml = 'application/xml';
- *
- *      request.post('/')
- *        .type('xml')
- *        .send(xmlstring)
- *        .end(callback);
- *
- *      request.post('/')
- *        .type('application/xml')
- *        .send(xmlstring)
- *        .end(callback);
- *
- * @param {String} type
- * @return {Request} for chaining
- * @api public
- */
-
-Request.prototype.type = function(type){
-  this.set('Content-Type', request.types[type] || type);
-  return this;
-};
-
-/**
- * Set Accept to `type`, mapping values from `request.types`.
- *
- * Examples:
- *
- *      superagent.types.json = 'application/json';
- *
- *      request.get('/agent')
- *        .accept('json')
- *        .end(callback);
- *
- *      request.get('/agent')
- *        .accept('application/json')
- *        .end(callback);
- *
- * @param {String} accept
- * @return {Request} for chaining
- * @api public
- */
-
-Request.prototype.accept = function(type){
-  this.set('Accept', request.types[type] || type);
-  return this;
-};
-
-/**
- * Set Authorization field value with `user` and `pass`.
- *
- * @param {String} user
- * @param {String} pass
- * @return {Request} for chaining
- * @api public
- */
-
-Request.prototype.auth = function(user, pass){
-  var str = btoa(user + ':' + pass);
-  this.set('Authorization', 'Basic ' + str);
-  return this;
-};
-
-/**
-* Add query-string `val`.
-*
-* Examples:
-*
-*   request.get('/shoes')
-*     .query('size=10')
-*     .query({ color: 'blue' })
-*
-* @param {Object|String} val
-* @return {Request} for chaining
-* @api public
-*/
-
-Request.prototype.query = function(val){
-  if ('string' != typeof val) val = serialize(val);
-  if (val) this._query.push(val);
-  return this;
-};
-
-/**
- * Write the field `name` and `val` for "multipart/form-data"
- * request bodies.
- *
- * ``` js
- * request.post('/upload')
- *   .field('foo', 'bar')
- *   .end(callback);
- * ```
- *
- * @param {String} name
- * @param {String|Blob|File} val
- * @return {Request} for chaining
- * @api public
- */
-
-Request.prototype.field = function(name, val){
-  if (!this._formData) this._formData = new FormData();
-  this._formData.append(name, val);
-  return this;
-};
-
-/**
- * Queue the given `file` as an attachment to the specified `field`,
- * with optional `filename`.
- *
- * ``` js
- * request.post('/upload')
- *   .attach(new Blob(['<a id="a"><b id="b">hey!</b></a>'], { type: "text/html"}))
- *   .end(callback);
- * ```
- *
- * @param {String} field
- * @param {Blob|File} file
- * @param {String} filename
- * @return {Request} for chaining
- * @api public
- */
-
-Request.prototype.attach = function(field, file, filename){
-  if (!this._formData) this._formData = new FormData();
-  this._formData.append(field, file, filename);
-  return this;
-};
-
-/**
- * Send `data`, defaulting the `.type()` to "json" when
- * an object is given.
- *
- * Examples:
- *
- *       // querystring
- *       request.get('/search')
- *         .end(callback)
- *
- *       // multiple data "writes"
- *       request.get('/search')
- *         .send({ search: 'query' })
- *         .send({ range: '1..5' })
- *         .send({ order: 'desc' })
- *         .end(callback)
- *
- *       // manual json
- *       request.post('/user')
- *         .type('json')
- *         .send('{"name":"tj"})
- *         .end(callback)
- *
- *       // auto json
- *       request.post('/user')
- *         .send({ name: 'tj' })
- *         .end(callback)
- *
- *       // manual x-www-form-urlencoded
- *       request.post('/user')
- *         .type('form')
- *         .send('name=tj')
- *         .end(callback)
- *
- *       // auto x-www-form-urlencoded
- *       request.post('/user')
- *         .type('form')
- *         .send({ name: 'tj' })
- *         .end(callback)
- *
- *       // defaults to x-www-form-urlencoded
-  *      request.post('/user')
-  *        .send('name=tobi')
-  *        .send('species=ferret')
-  *        .end(callback)
- *
- * @param {String|Object} data
- * @return {Request} for chaining
- * @api public
- */
-
-Request.prototype.send = function(data){
-  var obj = isObject(data);
-  var type = this.getHeader('Content-Type');
-
-  // merge
-  if (obj && isObject(this._data)) {
-    for (var key in data) {
-      this._data[key] = data[key];
-    }
-  } else if ('string' == typeof data) {
-    if (!type) this.type('form');
-    type = this.getHeader('Content-Type');
-    if ('application/x-www-form-urlencoded' == type) {
-      this._data = this._data
-        ? this._data + '&' + data
-        : data;
-    } else {
-      this._data = (this._data || '') + data;
-    }
-  } else {
-    this._data = data;
-  }
-
-  if (!obj) return this;
-  if (!type) this.type('json');
-  return this;
-};
-
-/**
- * Invoke the callback with `err` and `res`
- * and handle arity check.
- *
- * @param {Error} err
- * @param {Response} res
- * @api private
- */
-
-Request.prototype.callback = function(err, res){
-  var fn = this._callback;
-  this.clearTimeout();
-  if (2 == fn.length) return fn(err, res);
-  if (err) return this.emit('error', err);
-  fn(res);
-};
-
-/**
- * Invoke callback with x-domain error.
- *
- * @api private
- */
-
-Request.prototype.crossDomainError = function(){
-  var err = new Error('Origin is not allowed by Access-Control-Allow-Origin');
-  err.crossDomain = true;
-  this.callback(err);
-};
-
-/**
- * Invoke callback with timeout error.
- *
- * @api private
- */
-
-Request.prototype.timeoutError = function(){
-  var timeout = this._timeout;
-  var err = new Error('timeout of ' + timeout + 'ms exceeded');
-  err.timeout = timeout;
-  this.callback(err);
-};
-
-/**
- * Enable transmission of cookies with x-domain requests.
- *
- * Note that for this to work the origin must not be
- * using "Access-Control-Allow-Origin" with a wildcard,
- * and also must set "Access-Control-Allow-Credentials"
- * to "true".
- *
- * @api public
- */
-
-Request.prototype.withCredentials = function(){
-  this._withCredentials = true;
-  return this;
-};
-
-/**
- * Initiate request, invoking callback `fn(res)`
- * with an instanceof `Response`.
- *
- * @param {Function} fn
- * @return {Request} for chaining
- * @api public
- */
-
-Request.prototype.end = function(fn){
-  var self = this;
-  var xhr = this.xhr = getXHR();
-  var query = this._query.join('&');
-  var timeout = this._timeout;
-  var data = this._formData || this._data;
-
-  // store callback
-  this._callback = fn || noop;
-
-  // state change
-  xhr.onreadystatechange = function(){
-    if (4 != xhr.readyState) return;
-    if (0 == xhr.status) {
-      if (self.aborted) return self.timeoutError();
-      return self.crossDomainError();
-    }
-    self.emit('end');
-  };
-
-  // progress
-  if (xhr.upload) {
-    xhr.upload.onprogress = function(e){
-      e.percent = e.loaded / e.total * 100;
-      self.emit('progress', e);
-    };
-  }
-
-  // timeout
-  if (timeout && !this._timer) {
-    this._timer = setTimeout(function(){
-      self.abort();
-    }, timeout);
-  }
-
-  // querystring
-  if (query) {
-    query = request.serializeObject(query);
-    this.url += ~this.url.indexOf('?')
-      ? '&' + query
-      : '?' + query;
-  }
-
-  // initiate request
-  xhr.open(this.method, this.url, true);
-
-  // CORS
-  if (this._withCredentials) xhr.withCredentials = true;
-
-  // body
-  if ('GET' != this.method && 'HEAD' != this.method && 'string' != typeof data && !isHost(data)) {
-    // serialize stuff
-    var serialize = request.serialize[this.getHeader('Content-Type')];
-    if (serialize) data = serialize(data);
-  }
-
-  // set header fields
-  for (var field in this.header) {
-    if (null == this.header[field]) continue;
-    xhr.setRequestHeader(field, this.header[field]);
-  }
-
-  // send stuff
-  this.emit('request', this);
-  xhr.send(data);
-  return this;
-};
-
-/**
- * Expose `Request`.
- */
-
-request.Request = Request;
-
-/**
- * Issue a request:
- *
- * Examples:
- *
- *    request('GET', '/users').end(callback)
- *    request('/users').end(callback)
- *    request('/users', callback)
- *
- * @param {String} method
- * @param {String|Function} url or callback
- * @return {Request}
- * @api public
- */
-
-function request(method, url) {
-  // callback
-  if ('function' == typeof url) {
-    return new Request('GET', method).end(url);
-  }
-
-  // url first
-  if (1 == arguments.length) {
-    return new Request('GET', method);
-  }
-
-  return new Request(method, url);
-}
-
-/**
- * GET `url` with optional callback `fn(res)`.
- *
- * @param {String} url
- * @param {Mixed|Function} data or fn
- * @param {Function} fn
- * @return {Request}
- * @api public
- */
-
-request.get = function(url, data, fn){
-  var req = request('GET', url);
-  if ('function' == typeof data) fn = data, data = null;
-  if (data) req.query(data);
-  if (fn) req.end(fn);
-  return req;
-};
-
-/**
- * HEAD `url` with optional callback `fn(res)`.
- *
- * @param {String} url
- * @param {Mixed|Function} data or fn
- * @param {Function} fn
- * @return {Request}
- * @api public
- */
-
-request.head = function(url, data, fn){
-  var req = request('HEAD', url);
-  if ('function' == typeof data) fn = data, data = null;
-  if (data) req.send(data);
-  if (fn) req.end(fn);
-  return req;
-};
-
-/**
- * DELETE `url` with optional callback `fn(res)`.
- *
- * @param {String} url
- * @param {Function} fn
- * @return {Request}
- * @api public
- */
-
-request.del = function(url, fn){
-  var req = request('DELETE', url);
-  if (fn) req.end(fn);
-  return req;
-};
-
-/**
- * PATCH `url` with optional `data` and callback `fn(res)`.
- *
- * @param {String} url
- * @param {Mixed} data
- * @param {Function} fn
- * @return {Request}
- * @api public
- */
-
-request.patch = function(url, data, fn){
-  var req = request('PATCH', url);
-  if ('function' == typeof data) fn = data, data = null;
-  if (data) req.send(data);
-  if (fn) req.end(fn);
-  return req;
-};
-
-/**
- * POST `url` with optional `data` and callback `fn(res)`.
- *
- * @param {String} url
- * @param {Mixed} data
- * @param {Function} fn
- * @return {Request}
- * @api public
- */
-
-request.post = function(url, data, fn){
-  var req = request('POST', url);
-  if ('function' == typeof data) fn = data, data = null;
-  if (data) req.send(data);
-  if (fn) req.end(fn);
-  return req;
-};
-
-/**
- * PUT `url` with optional `data` and callback `fn(res)`.
- *
- * @param {String} url
- * @param {Mixed|Function} data or fn
- * @param {Function} fn
- * @return {Request}
- * @api public
- */
-
-request.put = function(url, data, fn){
-  var req = request('PUT', url);
-  if ('function' == typeof data) fn = data, data = null;
-  if (data) req.send(data);
-  if (fn) req.end(fn);
-  return req;
-};
-
-/**
- * Expose `request`.
- */
-
-module.exports = request;
-
-},{"emitter":13,"reduce":14}],13:[function(require,module,exports){
-
-/**
- * Expose `Emitter`.
- */
-
-module.exports = Emitter;
-
-/**
- * Initialize a new `Emitter`.
- *
- * @api public
- */
-
-function Emitter(obj) {
-  if (obj) return mixin(obj);
-};
-
-/**
- * Mixin the emitter properties.
- *
- * @param {Object} obj
- * @return {Object}
- * @api private
- */
-
-function mixin(obj) {
-  for (var key in Emitter.prototype) {
-    obj[key] = Emitter.prototype[key];
-  }
-  return obj;
-}
-
-/**
- * Listen on the given `event` with `fn`.
- *
- * @param {String} event
- * @param {Function} fn
- * @return {Emitter}
- * @api public
- */
-
-Emitter.prototype.on =
-Emitter.prototype.addEventListener = function(event, fn){
-  this._callbacks = this._callbacks || {};
-  (this._callbacks[event] = this._callbacks[event] || [])
-    .push(fn);
-  return this;
-};
-
-/**
- * Adds an `event` listener that will be invoked a single
- * time then automatically removed.
- *
- * @param {String} event
- * @param {Function} fn
- * @return {Emitter}
- * @api public
- */
-
-Emitter.prototype.once = function(event, fn){
-  var self = this;
-  this._callbacks = this._callbacks || {};
-
-  function on() {
-    self.off(event, on);
-    fn.apply(this, arguments);
-  }
-
-  on.fn = fn;
-  this.on(event, on);
-  return this;
-};
-
-/**
- * Remove the given callback for `event` or all
- * registered callbacks.
- *
- * @param {String} event
- * @param {Function} fn
- * @return {Emitter}
- * @api public
- */
-
-Emitter.prototype.off =
-Emitter.prototype.removeListener =
-Emitter.prototype.removeAllListeners =
-Emitter.prototype.removeEventListener = function(event, fn){
-  this._callbacks = this._callbacks || {};
-
-  // all
-  if (0 == arguments.length) {
-    this._callbacks = {};
-    return this;
-  }
-
-  // specific event
-  var callbacks = this._callbacks[event];
-  if (!callbacks) return this;
-
-  // remove all handlers
-  if (1 == arguments.length) {
-    delete this._callbacks[event];
-    return this;
-  }
-
-  // remove specific handler
-  var cb;
-  for (var i = 0; i < callbacks.length; i++) {
-    cb = callbacks[i];
-    if (cb === fn || cb.fn === fn) {
-      callbacks.splice(i, 1);
-      break;
-    }
-  }
-  return this;
-};
-
-/**
- * Emit `event` with the given args.
- *
- * @param {String} event
- * @param {Mixed} ...
- * @return {Emitter}
- */
-
-Emitter.prototype.emit = function(event){
-  this._callbacks = this._callbacks || {};
-  var args = [].slice.call(arguments, 1)
-    , callbacks = this._callbacks[event];
-
-  if (callbacks) {
-    callbacks = callbacks.slice(0);
-    for (var i = 0, len = callbacks.length; i < len; ++i) {
-      callbacks[i].apply(this, args);
-    }
-  }
-
-  return this;
-};
-
-/**
- * Return array of callbacks for `event`.
- *
- * @param {String} event
- * @return {Array}
- * @api public
- */
-
-Emitter.prototype.listeners = function(event){
-  this._callbacks = this._callbacks || {};
-  return this._callbacks[event] || [];
-};
-
-/**
- * Check if this emitter has `event` handlers.
- *
- * @param {String} event
- * @return {Boolean}
- * @api public
- */
-
-Emitter.prototype.hasListeners = function(event){
-  return !! this.listeners(event).length;
-};
-
-},{}],14:[function(require,module,exports){
-
-/**
- * Reduce `arr` with `fn`.
- *
- * @param {Array} arr
- * @param {Function} fn
- * @param {Mixed} initial
- *
- * TODO: combatible error handling?
- */
-
-module.exports = function(arr, fn, initial){  
-  var idx = 0;
-  var len = arr.length;
-  var curr = arguments.length == 3
-    ? initial
-    : arr[idx++];
-
-  while (idx < len) {
-    curr = fn.call(null, curr, arr[idx], ++idx, arr);
-  }
-  
-  return curr;
-};
-},{}],15:[function(require,module,exports){
+},{"./support/isBuffer":14,"_process":8,"inherits":7}],16:[function(require,module,exports){
 /** @license MIT License (c) copyright 2011-2013 original author or authors */
 
 /**
@@ -4129,7 +4134,7 @@ define(function(require) {
 
 
 
-},{"./when":32}],16:[function(require,module,exports){
+},{"./when":33}],17:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -4148,7 +4153,7 @@ define(function (require) {
 });
 })(typeof define === 'function' && define.amd ? define : function (factory) { module.exports = factory(require); });
 
-},{"./Scheduler":17,"./env":29,"./makePromise":30}],17:[function(require,module,exports){
+},{"./Scheduler":18,"./env":30,"./makePromise":31}],18:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -4230,7 +4235,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],18:[function(require,module,exports){
+},{}],19:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -4258,7 +4263,7 @@ define(function() {
 	return TimeoutError;
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
-},{}],19:[function(require,module,exports){
+},{}],20:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -4315,7 +4320,7 @@ define(function() {
 
 
 
-},{}],20:[function(require,module,exports){
+},{}],21:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -4602,7 +4607,7 @@ define(function(require) {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(require); }));
 
-},{"../apply":19,"../state":31}],21:[function(require,module,exports){
+},{"../apply":20,"../state":32}],22:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -4764,7 +4769,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],22:[function(require,module,exports){
+},{}],23:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -4793,7 +4798,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],23:[function(require,module,exports){
+},{}],24:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -4815,7 +4820,7 @@ define(function(require) {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(require); }));
 
-},{"../state":31}],24:[function(require,module,exports){
+},{"../state":32}],25:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -4882,7 +4887,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],25:[function(require,module,exports){
+},{}],26:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -4908,7 +4913,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],26:[function(require,module,exports){
+},{}],27:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -4988,7 +4993,7 @@ define(function(require) {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(require); }));
 
-},{"../TimeoutError":18,"../env":29}],27:[function(require,module,exports){
+},{"../TimeoutError":19,"../env":30}],28:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -5096,7 +5101,7 @@ define(function(require) {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(require); }));
 
-},{"../env":29}],28:[function(require,module,exports){
+},{"../env":30}],29:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -5136,7 +5141,7 @@ define(function() {
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
 
-},{}],29:[function(require,module,exports){
+},{}],30:[function(require,module,exports){
 (function (process){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
@@ -5213,7 +5218,7 @@ define(function(require) {
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(require); }));
 
 }).call(this,require('_process'))
-},{"_process":4}],30:[function(require,module,exports){
+},{"_process":8}],31:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -6098,7 +6103,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],31:[function(require,module,exports){
+},{}],32:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -6135,7 +6140,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],32:[function(require,module,exports){
+},{}],33:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 
 /**
@@ -6366,15 +6371,17 @@ define(function (require) {
 });
 })(typeof define === 'function' && define.amd ? define : function (factory) { module.exports = factory(require); });
 
-},{"./lib/Promise":16,"./lib/TimeoutError":18,"./lib/apply":19,"./lib/decorators/array":20,"./lib/decorators/flow":21,"./lib/decorators/fold":22,"./lib/decorators/inspect":23,"./lib/decorators/iterate":24,"./lib/decorators/progress":25,"./lib/decorators/timed":26,"./lib/decorators/unhandledRejection":27,"./lib/decorators/with":28}],33:[function(require,module,exports){
+},{"./lib/Promise":17,"./lib/TimeoutError":19,"./lib/apply":20,"./lib/decorators/array":21,"./lib/decorators/flow":22,"./lib/decorators/fold":23,"./lib/decorators/inspect":24,"./lib/decorators/iterate":25,"./lib/decorators/progress":26,"./lib/decorators/timed":27,"./lib/decorators/unhandledRejection":28,"./lib/decorators/with":29}],34:[function(require,module,exports){
 "use strict";
 
 var querystring = require('querystring');
 var util = require('util');
+var Buffer = require('buffer');
+
 var when = require('when');
-var request = require('superagent');
-var redditNodeParser = require('./redditNodeParser');
+
 var utils = require('./utils');
+var request = require('./request');
 
 var oauth = {};
 var isNode = utils.isNode();
@@ -6431,87 +6438,59 @@ oauth.getAuthData = function(type, options) {
   } else if (type === 'refresh') {
     params.grant_type = 'refresh_token';
     params.refresh_token = options.refreshToken;
-  }
-  // non-confedintial - no secret, inelegable for client credentails grant
-  else if (type === 'installed_client') {
-    params.grant_type = 'https://oauth.reddit.com/grants/installed_client';
-  } else if (type === 'client_credentials') {
-    // need a device id associated with them
-    if (!options.deviceId) {
-      return when.reject(new Error('`client_credentials` requires a deviceId. For non-confidential apps use `installed_client`'));
-    }
-    params.grant_type = 'client_credentials';
   } else {
     return when.reject(new Error('invalid type specified'));
   }
 
-  var defer = when.defer();
-  var url = 'https://ssl.reddit.com/api/v1/access_token';
-  var call = request.post(url);
+  console.log(options);
 
-
-  // Only use the reddit parser if in node, else use default
-  // client side superagent one
-  if (isNode) {
-    call.parse(redditNodeParser);
-  }
-
-  call.type('form');
-  call.auth(options.consumerKey, options.consumerSecret);
-  call.send(params);
-  call.end(function(error, response) {
-    if (error) { return defer.reject(error); }
-
+  return request.https({
+    method: 'POST',
+    hostname: 'ssl.reddit.com',
+    path: '/api/v1/access_token',
+    headers: {
+      'Authorization': 'Basic ' + new Buffer(
+	options.consumerKey + ':' + options.consumerSecret).toString('base64')
+    }
+  }, querystring.stringify(params)).then(function(response) {
     var data;
-    try { data = JSON.parse(response.text); }
-    catch(e) {
-      return defer.reject(new Error(
-	'Response Text:\n' + response.text + '\n\n' + e.stack));
+
+    try {
+      data = JSON.parse(response._body);
+    } catch(e) {
+      throw new Error('Failed to get Auth Data' + response._body + '\n' + e.stack);
     }
 
     if (data.error) {
-      return defer.reject(new Error(data.error));
+      throw new Error('Reddit Error' + data.error);
     }
-
-    return defer.resolve(data);
   });
 
-  return defer.promise;
 };
 
 oauth.revokeToken = function(token, isRefreshToken, options) {
 
-  var defer = when.defer();
-
   var tokenTypeHint = isRefreshToken ? 'refresh_token' : 'access_token';
   var params = { token: token, token_type_hint: tokenTypeHint };
-  var url = 'https://ssl.reddit.com/api/v1/revoke_token';
 
-  var call = request.post(url);
-
-  if (isNode) {
-    call.parse(redditNodeParser);
-  }
-
-  call.type('form');
-  call.auth(options.consumerKey, options.consumerSecret);
-  call.send(params);
-  call.end(function(error, response) {
-    if (error) {
-      return defer.reject(error);
+  return request.https({
+    method: 'POST',
+    hostname: 'ssl.reddit.com',
+    path: '/api/v1/revoke_token',
+    headers: {
+      'Authorization': 'Basic ' + new Buffer(
+	options.consumerKey + ':' + options.consumerSecret).toString('base64')
     }
-    if (response.status !== 204) {
-      return defer.reject(new Error('Unable to revoke the given token'));
+  }, querystring.stringify(params)).then(function(response) {
+    if (response._status !== 204) {
+      throw new Error('Unable to revoke the given token');
     }
-    return defer.resolve();
   });
-
-  return defer.promise;
 };
 
 module.exports = oauth;
 
-},{"./redditNodeParser":34,"./utils":35,"querystring":8,"superagent":12,"util":11,"when":32}],34:[function(require,module,exports){
+},{"./request":36,"./utils":38,"buffer":3,"querystring":12,"util":15,"when":33}],35:[function(require,module,exports){
 "use strict";
 
 // Override SuperAgents parser with one of our own that
@@ -6534,7 +6513,66 @@ module.exports = function redditParser(response, done) {
     });
 };
 
-},{}],35:[function(require,module,exports){
+},{}],36:[function(require,module,exports){
+var utils = require('../utils');
+
+module.exports = utils.isNode() ? require('./requestNode') : require('./requestBrowser');
+
+},{"../utils":38,"./requestBrowser":37,"./requestNode":undefined}],37:[function(require,module,exports){
+//
+// Browser requests, mirrors the syntax of the node requests
+//
+
+var when = require('when');
+
+exports.https = function(options, formData) {
+
+  options = options || {};
+  options.headers = options.headers || {};
+
+  return when.promise(function(resolve, reject) {
+
+    try {
+      // https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest
+      var x = new XMLHttpRequest();
+
+      var url = 'https://' + options.hostname + options.path;
+
+      // append the form data to the end of the url
+      if (options.method === 'GET') {
+	url += '?' + formData;
+      }
+
+      x.open(options.method, url, true);
+
+      x.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+      x.setRequestHeader('Content-length', formData ? formData.length : 0);
+
+      Object.keys(options.headers).forEach(function(headerKey) {
+	x.setRequestHeader(headerKey, headers[headerKey]);
+      });
+
+      x.onreadystatechange = function() {
+	if (x.readyState > 3) {
+	  // Normalize the result to match how requestNode.js works
+	  return resolve({
+	    _body: x.responseText,
+	    _status: x.status
+	  });
+	}
+      };
+
+      x.send(options.method === 'GET' ? null : formData);
+
+    } catch (e) {
+      return reject(e);
+    }
+
+  });
+
+};
+
+},{"when":33}],38:[function(require,module,exports){
 "use strict";
 
 // checks basic globals to help determine which environment we are in

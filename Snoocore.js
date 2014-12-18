@@ -1,9 +1,11 @@
 "use strict";
 
 var urlLib = require('url');
+var querystring = require('querystring');
+
 var when = require('when');
 var delay = require('when/delay');
-var superagent = require('superagent');
+
 var rawApi = require('./build/api');
 var redditNodeParser = require('./redditNodeParser');
 var utils = require('./utils');
@@ -11,8 +13,8 @@ var utils = require('./utils');
 module.exports = Snoocore;
 
 Snoocore.oauth = require('./oauth');
+Snoocore.request = require('./request');
 Snoocore.when = when;
-Snoocore.superagent = superagent;
 
 function Snoocore(config) {
 
@@ -196,77 +198,55 @@ function Snoocore(config) {
     // Wait for the throttle delay amount, then call the Reddit API
     return delay(throttleDelay - throttle).then(function() {
 
-      var method = endpoint.method.toLowerCase();
+      var method = endpoint.method.toUpperCase();
       var url = buildUrl(givenArgs, endpoint);
+      var parsedUrl = urlLib.parse(url);
+
       var args = buildArgs(givenArgs);
 
-      var call = superagent[method](url);
+      var headers = {};
 
       if (self._isNode) {
-	call.parse(redditNodeParser);
+	// Can't set User-Agent in browser based JavaScript!
+	headers['User-Agent'] = self._userAgent;
+
+	// Can't set custom headers in Firefox CORS requests
+	headers['X-Modhash'] = self._modhash;
       }
 
-      // Can't set User-Agent in browser based JavaScript!
-      if (self._isNode) {
-	call.set('User-Agent', self._userAgent);
-      }
+      // If we are nod bypassing authentication, authenticate the user
+      if (!bypassAuth) {
 
-      // If we're logged in, set the modhash & cookie
-      if (!bypassAuth && isLoggedIn()) {
-	call.set('X-Modhash', self._modhash);
-	if (self._isNode) {
-	  call.set('Cookie',
-		   'reddit_session=' + self._redditSession + ';');
+	if (isAuthenticated()) {
+	  // OAuth based authentication
+
+	  // Check that the correct scopes have been requested
+	  endpoint.oauth.forEach(function(requiredScope) {
+	    if ((self._oauth.scope || []).indexOf(requiredScope) === -1) {
+	      throw new Error('missing required scope(s): ' + endpoint.oauth.join(', '));
+	    }
+	  });
+
+	  headers['Authorization'] = self._authData.token_type + ' ' +
+				     self._authData.access_token;
 	}
-      }
-
-      // if we're authenticated, set the authorization header
-      // and provide an option to not provide auth if necessary
-      if (!bypassAuth && isAuthenticated()) {
-
-	// Check that the correct scopes have been requested
-	endpoint.oauth.forEach(function(requiredScope) {
-	  if ((self._oauth.scope || []).indexOf(requiredScope) === -1) {
-	    throw new Error('missing required scope(s): ' + endpoint.oauth.join(', '));
-	  }
-	});
-
-	call.set('Authorization',
-		 self._authData.token_type + ' ' +
-		 self._authData.access_token);
-      }
-
-      // Handle arguments
-      if (method === 'get') {
-	call.query(args);
-      } else {
-	call.type('form');
-	// Handle file uploads
-	if (typeof args.file !== 'undefined') {
-	  var file = args.file;
-	  delete args.file;
-	  for (var field in args) {
-	    call.field(field, args[field]);
-	  }
-	  call.attach('file', file);
+	else if (isLoggedIn() && self._isNode) {
+	  // Cookie based authentication (only supported in Node.js)
+	    headers['Cookie'] = 'reddit_session=' + self._redditSession + ';';
 	}
-	// standard request without file uploads
-	else {
-	  call.send(args);
-	}
+
       }
 
-      // Here is where we actually make the call to Reddit.
-      // Wrap it in a promise to better handle the error logic
-      return when.promise(function(resolve, reject) {
-	call.end(function(error, response) {
-	  return error ? reject(error) : resolve(response);
-	});
-      }).then(function(response) {
+      return Snoocore.request.https({
+	method: method,
+	hostname: parsedUrl.hostname,
+	path: parsedUrl.path,
+	headers: headers
+      }, querystring.stringify(args)).then(function(response) {
 
 	// Forbidden. Try to get a new access_token if we have
 	// a refresh token
-	if (response.status === 403 && self._refreshToken !== '') {
+	if (response._status === 403 && self._refreshToken !== '') {
 
 	  if (options._refreshTokenFail) { // fail if the refresh fail flag was set.
 	    throw new Error('unable to fetch a new access_token');
@@ -279,21 +259,16 @@ function Snoocore(config) {
 	  });
 	}
 
-	var data = response.body || {};
+	var data = response._body || {};
 
-	// set the modhash if the data contains it
-	if (typeof data !== 'undefined' &&
-	    typeof data.json !== 'undefined' &&
-	    typeof data.json.data !== 'undefined')
+	// Attempt to parse some JSON, otherwise continue on (may be empty, or text)
+	  try { data = JSON.parse(data); } catch(e) {}
+
+	// Set the modhash if the data contains it (Cookie based login)
+	  if (data && data.json && data.json.data)
 	{
-
-	  if (typeof data.json.data.modhash !== 'undefined') {
-	    self._modhash = data.json.data.modhash;
-	  }
-
-	  if (typeof data.json.data.cookie !== 'undefined') {
-	    self._redditSession = data.json.data.cookie;
-	  }
+	  self._modhash = data.json.data.modhash;
+	  self._redditSession = data.json.data.cookie;
 	}
 
 	// Throw any errors that reddit may inform us about
@@ -306,7 +281,6 @@ function Snoocore(config) {
 
 	return data;
       });
-
 
     }).finally(function() {
       // decrement the throttle delay. If the call is quick and snappy, we
@@ -341,7 +315,7 @@ function Snoocore(config) {
 
 	slice.count = count;
 
-	slice.get = result;
+	slice.get = result || {};
 
 	slice.before = slice.get.data.before || null;
 	slice.after = slice.get.data.after || null;
@@ -585,18 +559,20 @@ function Snoocore(config) {
 
       var defer = when.defer();
 
-      superagent.post('http://www.reddit.com/logout')
-		.set('X-Modhash', modhash)
-	 .type('form')
-	 .send({ uh: modhash })
-	 .end(function(error, res) {
-	   return error ? defer.reject(error) : defer.resolve(res);
-	 });
-
-      return defer.promise.then(function() {
+      return Snoocore.request.https({
+	method: 'POST',
+	hostname: 'www.reddit.com',
+	path: '/logout',
+	headers: {
+	  'X-Modhash': modhash
+	}
+      }, querystring.stringify({ 
+	uh: modhash 
+      })).then(function(response) {
 	self._modhash = '';
 	self._redditSession = '';
       });
+
     });
   };
 

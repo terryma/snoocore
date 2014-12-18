@@ -2,10 +2,11 @@
 
 var querystring = require('querystring');
 var util = require('util');
+
 var when = require('when');
-var request = require('superagent');
-var redditNodeParser = require('./redditNodeParser');
+
 var utils = require('./utils');
+var request = require('./request');
 
 var oauth = {};
 var isNode = utils.isNode();
@@ -66,68 +67,55 @@ oauth.getAuthData = function(type, options) {
     return when.reject(new Error('invalid type specified'));
   }
 
-  var defer = when.defer();
-  var url = 'https://ssl.reddit.com/api/v1/access_token';
-  var call = request.post(url);
+  var strr = options.consumerKey + ':' + options.consumerSecret;
+  var buff = new Buffer(strr, 'utf-8');
+  var auth = 'Basic ' + (buff).toString('base64');
 
-
-  // Only use the reddit parser if in node, else use default
-  // client side superagent one
-  if (isNode) {
-    call.parse(redditNodeParser);
-  }
-
-  call.type('form');
-  call.auth(options.consumerKey, options.consumerSecret);
-  call.send(params);
-  call.end(function(error, response) {
-    if (error) { return defer.reject(error); }
-
+  return request.https({
+    method: 'POST',
+    hostname: 'ssl.reddit.com',
+    path: '/api/v1/access_token',
+    headers: {
+      'Authorization': auth
+    }
+  }, querystring.stringify(params)).then(function(response) {
     var data;
-    try { data = JSON.parse(response.text); }
-    catch(e) {
-      return defer.reject(new Error(
-        'Response Text:\n' + response.text + '\n\n' + e.stack));
+
+    try {
+      data = JSON.parse(response._body);
+    } catch(e) {
+      throw new Error('Failed to get Auth Data:\n' + response._body + '\n' + e.stack);
     }
 
     if (data.error) {
-      return defer.reject(new Error(data.error));
+      throw new Error('Reddit Error:\n' + data.error);
     }
 
-    return defer.resolve(data);
+    return data;
   });
 
-  return defer.promise;
 };
 
 oauth.revokeToken = function(token, isRefreshToken, options) {
 
-  var defer = when.defer();
-
   var tokenTypeHint = isRefreshToken ? 'refresh_token' : 'access_token';
   var params = { token: token, token_type_hint: tokenTypeHint };
-  var url = 'https://ssl.reddit.com/api/v1/revoke_token';
 
-  var call = request.post(url);
+  var auth = 'Basic ' + (new Buffer(
+    options.consumerKey + ':' + options.consumerSecret)).toString('base64');
 
-  if (isNode) {
-    call.parse(redditNodeParser);
-  }
-
-  call.type('form');
-  call.auth(options.consumerKey, options.consumerSecret);
-  call.send(params);
-  call.end(function(error, response) {
-    if (error) {
-      return defer.reject(error);
+  return request.https({
+    method: 'POST',
+    hostname: 'ssl.reddit.com',
+    path: '/api/v1/revoke_token',
+    headers: {
+      'Authorization': auth
     }
-    if (response.status !== 204) {
-      return defer.reject(new Error('Unable to revoke the given token'));
+  }, querystring.stringify(params)).then(function(response) {
+    if (response._status !== 204) {
+      throw new Error('Unable to revoke the given token');
     }
-    return defer.resolve();
   });
-
-  return defer.promise;
 };
 
 module.exports = oauth;

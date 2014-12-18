@@ -16,7 +16,6 @@ module.exports = function(config) {
     files: [
       'node_modules/chai/chai.js',
       'node_modules/chai-as-promised/lib/chai-as-promised.js',
-      // 'node_modules/when/build/when.js',
       'dist/Snoocore-standalone.js',
       'test/*'
     ],
@@ -61,8 +60,9 @@ module.exports = function(config) {
     // - PhantomJS
     // - IE (only Windows; has to be installed with `npm install karma-ie-launcher`)
     browsers: [
-      'PhantomJsNoWebSecurity',
-      'ChromeNoWebSecutity'
+//      'PhantomJsNoWebSecurity',
+//      'ChromeNoWebSecurity',
+      'FirefoxNoWebSecurity'
     ],
 
 
@@ -71,9 +71,12 @@ module.exports = function(config) {
         base: 'PhantomJS',
         flags: ['--web-security=false']
       },
-      ChromeNoWebSecutity: {
+      ChromeNoWebSecurity: {
         base: 'Chrome',
         flags: ['--disable-web-security']
+      },
+      FirefoxNoWebSecurity: {
+	base: 'Firefox'
       }
     },
 

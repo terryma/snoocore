@@ -7,10 +7,10 @@ typeof window === "undefined";
 
 if (isNode)
 {
-  var Snoocore = require('../Snoocore')
-    , config = require('./testConfig')
-    , chai = require('chai')
-    , chaiAsPromised = require('chai-as-promised');
+  var Snoocore = require('../Snoocore');
+  var config = require('./testConfig');
+  var chai = require('chai');
+  var chaiAsPromised = require('chai-as-promised');
 }
 
 chai.use(chaiAsPromised);

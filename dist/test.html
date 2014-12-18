@@ -1,0 +1,16 @@
+<html>
+
+  <head></head>
+  <body>
+    <script src="Snoocore-standalone.js"></script>
+    <script type="text/javascript">
+     Snoocore.request.https({ 
+       hostname: 'www.reddit.com', 
+       path: '/r/askreddit/hot.json', 
+       method: 'GET'
+     }).done(function(res) {
+
+     });
+    </script>
+  </body>
+</html>

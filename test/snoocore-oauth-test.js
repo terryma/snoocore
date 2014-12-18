@@ -47,7 +47,7 @@ describe('Snoocore OAuth Test', function () {
 
   });
 
-  describe('Authenticate tests (EXTERNAL Snoocore.oauth)', function() {
+  describe.only('Authenticate tests (EXTERNAL Snoocore.oauth)', function() {
 
     var reddit = new Snoocore({ userAgent: 'snoocore-test-userAgent' });
 

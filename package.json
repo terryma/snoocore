@@ -13,7 +13,6 @@
     "url": "https://github.com/trevorsenior/snoocore/issues"
   },
   "dependencies": {
-    "superagent": "^0.21.0",
     "when": "^3.6.3"
   },
   "devDependencies": {
