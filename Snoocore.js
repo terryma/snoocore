@@ -566,8 +566,8 @@ function Snoocore(config) {
 	headers: {
 	  'X-Modhash': modhash
 	}
-      }, querystring.stringify({ 
-	uh: modhash 
+      }, querystring.stringify({
+	uh: modhash
       })).then(function(response) {
 	self._modhash = '';
 	self._redditSession = '';
@@ -576,10 +576,18 @@ function Snoocore(config) {
     });
   };
 
-  self.getAuthUrl = function(state) {
+  // keep backwards compatability
+  self.getAuthUrl = 
+  self.getExplicitAuthUrl = function(state) {
     var options = self._oauth;
     options.state = state || Math.ceil(Math.random() * 1000);
-    return Snoocore.oauth.getAuthUrl(options);
+    return Snoocore.oauth.getExplicitAuthUrl(options);
+  };
+
+  self.getImplicitAuthUrl = function(state) {
+    var options = self._oauth;
+    options.state = state || Math.ceil(Maht.random() * 1000);
+    return Snoocore.oauth.getImplicitAuthUrl(options);
   };
 
   self.refresh = function(refreshToken) {
@@ -598,39 +606,57 @@ function Snoocore(config) {
   };
 
   // Sets the auth data from the oauth module to allow OAuth calls.
-  // Can accept a promise for the authentication data as well.
-  self.auth = function(authenticationCodeOrData) {
+  // 
+  // This function can authenticate with:
+  //
+  // - Script based OAuth (no parameter)
+  // - Raw authentication data
+  // - Authorization Code (request_type = "code")
+  // - Access Token (request_type = "token") / Implicit OAuth
+  //
+  self.auth = function(authDataOrAuthCodeOrAccessToken) {
 
-    var args = Array.prototype.slice.call(arguments);
-    var authData = authenticationCodeOrData;
+    var authData;
 
-    // Use internal config to get authentication data
-    // this will always be a type of script
-    if (args.length === 0) {
-      authData = Snoocore.oauth.getAuthData(self._oauth.type, {
-	consumerKey: self._oauth.consumerKey,
-	consumerSecret: self._oauth.consumerSecret,
-	scope: self._oauth.scope,
-	username: self._login.username,
-	password: self._login.password
-      });
-    }
-    // Use internal config to get authentication data
-    // this will either be a type of web or installed
-    else if (typeof args[0] === 'string') {
+    switch(self._oauth.type) {
+      case 'script':
+	authData = Snoocore.oauth.getAuthData(self._oauth.type, {
+	  consumerKey: self._oauth.consumerKey,
+	  consumerSecret: self._oauth.consumerSecret,
+	  scope: self._oauth.scope,
+	  username: self._login.username,
+	  password: self._login.password
+	});
+	break;
 
-      var authorizationCode = args[0];
+      case 'web': // keep web/insatlled here for backwards compatability
+      case 'installed': 
+      case 'explicit':
+	authData = Snoocore.oauth.getAuthData(self._oauth.type, {
+	  authorizationCode: authDataOrAuthCodeOrAccessToken, // auth code in this case
+	  consumerKey: self._oauth.consumerKey,
+	  consumerSecret: self._oauth.consumerSecret || '',
+	  redirectUri: self._oauth.redirectUri,
+	  scope: self._oauth.scope
+	});
+	break;
 
-      authData = Snoocore.oauth.getAuthData(self._oauth.type, {
-	authorizationCode: authorizationCode,
-	consumerKey: self._oauth.consumerKey,
-	consumerSecret: self._oauth.consumerSecret || '',
-	redirectUri: self._oauth.redirectUri,
-	scope: self._oauth.scope
-      });
+      case 'implicit':
+	authData = {
+	  access_token: authDataOrAuthCodeOrAccessToken, // access token in this case
+	  token_type: 'bearer',
+	  expires_in: 3600,
+	  scope: self._oauth.scope
+	};
+	break;
+
+      default:
+	// assume that it is the authData
+	authData = authDataOrAuthCodeOrAccessToken; 
     }
 
     return when(authData).then(function(authDataResult) {
+
       self._authData = authDataResult;
 
       // if the web/installed app used a perminant duration, send

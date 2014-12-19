@@ -16,15 +16,6 @@ describe('Snoocore OAuth Test', function () {
 
   this.timeout(30000);
 
-  function openAndAuth(url) {
-    console.log('##############################################');
-    console.log('Opening the following url in your browser:');
-    console.log('\n' + url + '\n');
-    console.log('You have thirty seconds...');
-    console.log('##############################################');
-    open(url);
-  }
-
   describe('Unauthenticated test cases', function() {
 
     var reddit = new Snoocore({ userAgent: 'snoocore-test-userAgent' });
@@ -43,22 +34,22 @@ describe('Snoocore OAuth Test', function () {
 
   });
 
-  describe('Authenticate tests (EXTERNAL Snoocore.oauth)', function() {
+  describe('External OAuth (using oauth.js)', function() {
 
     var reddit = new Snoocore({ userAgent: 'snoocore-test-userAgent' });
 
-    it('should authenticate with OAuth, and call an oauth endpoint (EXTERNAL Snoocore.oauth => WEB)', function() {
+    it('(Explicit) should authenticate with OAuth, and call an oauth endpoint', function() {
       // because there is user intervention with these tests, give them
       // two minutes before timing out!
       this.timeout(30000);
 
-      var url = Snoocore.oauth.getAuthUrl({
+      var url = Snoocore.oauth.getExplicitAuthUrl({
         consumerKey: config.reddit.REDDIT_KEY_WEB,
         redirectUri: config.reddit.redirectUri,
         state: 'foo'
       });
 
-      openAndAuth(url);
+      open(url);
 
       return testServer.waitForRequest().then(function(params) {
 
@@ -68,22 +59,19 @@ describe('Snoocore OAuth Test', function () {
           consumerSecret: config.reddit.REDDIT_SECRET_WEB,
           authorizationCode: authorizationCode,
           redirectUri: config.reddit.redirectUri
-        })
-			     .then(function(authData) {
-                               return reddit.auth(authData);
-			     })
-			     .then(function() {
-                               return reddit('/api/v1/me').get();
-			     })
-			     .then(function(data) {
-                               expect(data.error).to.be.undefined;
-                               expect(data.name).to.be.a('string');
-			     });
+        }).then(function(authData) {
+          return reddit.auth(authData);
+	}).then(function() {
+          return reddit('/api/v1/me').get();
+	}).then(function(data) {
+          expect(data.error).to.be.undefined;
+          expect(data.name).to.be.a('string');
+	});
       });
 
     });
 
-    it('should authenticate with OAuth, and call an oauth endpoint (EXTERNAL Snoocore.oauth => SCRIPT)', function() {
+    it('(Script) should authenticate with OAuth, and call an oauth endpoint', function() {
       this.timeout(30000);
 
       return Snoocore.oauth.getAuthData('script', {
@@ -101,7 +89,7 @@ describe('Snoocore OAuth Test', function () {
       });
     });
 
-    it('should take a promise for authData', function() {
+    it('(Script) should take a promise for authData', function() {
       this.timeout(30000);
 
       var authData = Snoocore.oauth.getAuthData('script', {
@@ -113,21 +101,20 @@ describe('Snoocore OAuth Test', function () {
 
       return reddit.auth(authData).then(function() {
         return reddit('/api/v1/me').get();
-      })
-                   .then(function(data) {
-                     expect(data.error).to.be.undefined;
-                     expect(data.name).to.equal(config.reddit.REDDIT_USERNAME);
-                   });
+      }).then(function(data) {
+        expect(data.error).to.be.undefined;
+        expect(data.name).to.equal(config.reddit.REDDIT_USERNAME);
+      });
     });
 
   });
 
-  describe('Authenticate tests (INTERNAL config based WEB PERMANENT)', function() {
+  describe('Internal OAuth; Explicit internal configuration (duration permanent)', function() {
 
     var reddit = new Snoocore({
       userAgent: 'snoocore-test-userAgent',
       oauth: {
-        type: 'web',
+        type: 'explicit',
         duration: 'permanent',
         consumerKey: config.reddit.REDDIT_KEY_WEB,
         consumerSecret: config.reddit.REDDIT_SECRET_WEB,
@@ -136,12 +123,12 @@ describe('Snoocore OAuth Test', function () {
       }
     });
 
-    it('should authenticate with OAuth, get refresh token, deauth, use refresh token to reauth, deauth(true) -> refresh should fail', function() {
+    it('should auth, get refresh token, deauth, use refresh token to reauth, deauth(true) -> refresh sh', function() {
       this.timeout(30000);
 
-      var url = reddit.getAuthUrl();
+      var url = reddit.getExplicitAuthUrl();
 
-      openAndAuth(url);
+      open(url);
 
       return testServer.waitForRequest().then(function(params) {
         var authorizationCode = params.code;
@@ -174,12 +161,12 @@ describe('Snoocore OAuth Test', function () {
       });
     });
 
-    it('Should authenticate with OAuth, deauth (simulate expired access_token), call endpoint which will request a new access_token', function() {
+    it('should auth, deauth (simulate expired access_token), call endpoint which will request a new access_token', function() {
       this.timeout(30000);
 
-      var url = reddit.getAuthUrl();
+      var url = reddit.getExplicitAuthUrl();
 
-      openAndAuth(url);
+      open(url);
 
       return testServer.waitForRequest().then(function(params) {
         var authorizationCode = params.code;
@@ -212,12 +199,12 @@ describe('Snoocore OAuth Test', function () {
 
   });
 
-  describe('Authenticate tests (INTERNAL config based WEB)', function() {
+  describe('Internal OAuth; Explicit internal configuration (duration temporary)', function() {
 
     var reddit = new Snoocore({
       userAgent: 'snoocore-test-userAgent',
       oauth: {
-        type: 'web',
+        type: 'explicit',
         consumerKey: config.reddit.REDDIT_KEY_WEB,
         consumerSecret: config.reddit.REDDIT_SECRET_WEB,
         redirectUri: config.reddit.redirectUri,
@@ -225,12 +212,12 @@ describe('Snoocore OAuth Test', function () {
       }
     });
 
-    it('should authenticate with OAuth, and call an oauth endpoint', function() {
+    it('should auth, and call an oauth endpoint', function() {
       this.timeout(30000);
 
-      var url = reddit.getAuthUrl();
+      var url = reddit.getExplicitAuthUrl();
 
-      openAndAuth(url);
+      open(url);
 
       return testServer.waitForRequest().then(function(params) {
         var authorizationCode = params.code;
@@ -243,13 +230,13 @@ describe('Snoocore OAuth Test', function () {
       });
     });
 
-    it('should authenticate with OAuth, and call an oauth endpoint (WITH STATE)', function() {
+    it('should auth, and call an oauth endpoint (check state)', function() {
       this.timeout(30000);
 
       var state = 'foobar';
-      var url = reddit.getAuthUrl(state);
+      var url = reddit.getExplicitAuthUrl(state);
 
-      openAndAuth(url);
+      open(url);
 
       return testServer.waitForRequest().then(function(params) {
 
@@ -267,7 +254,43 @@ describe('Snoocore OAuth Test', function () {
 
   });
 
-  describe('Authenticate tests (INTERNAL config based SCRIPT)', function() {
+  describe('Internal OAuth; Implicit internal configuration', function() {
+    var reddit = new Snoocore({
+      userAgent: 'snoocore-test-userAgent',
+      oauth: {
+        type: 'implicit',
+        consumerKey: config.reddit.REDDIT_KEY_INSTALLED,
+        redirectUri: config.reddit.redirectUri,
+        scope: [ 'identity' ]
+      }
+    });
+
+    it('should auth, and call an oauth endpoint (check state)', function() {
+      this.timeout(30000);
+
+      var state = 'foobar';
+      var url = reddit.getImplicitAuthUrl(state);
+
+      open(url);
+
+      return testServer.waitForRequest().then(function(params) {
+	
+        expect(params.state).to.equal(state);
+
+        var accessToken = params['access_token'];
+
+        return reddit.auth(accessToken).then(function() {
+          return reddit('/api/v1/me').get();
+        }).then(function(data) {
+          expect(data.error).to.be.undefined;
+          expect(data.name).to.be.a('string');
+        });
+      });
+    });
+
+  });
+
+  describe('Internal OAuth; Script internal configuration Authenticate tests', function() {
 
     var reddit = new Snoocore({
       userAgent: 'snoocore-test-userAgent',
@@ -292,7 +315,7 @@ describe('Snoocore OAuth Test', function () {
     });
   });
 
-  describe('General Reddit API Tests (OAUTH)', function() {
+  describe('General Reddit API Tests using OAuth', function() {
 
     var reddit = new Snoocore({
       userAgent: 'snoocore-test-userAgent',

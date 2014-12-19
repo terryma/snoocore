@@ -567,8 +567,8 @@ function Snoocore(config) {
 	headers: {
 	  'X-Modhash': modhash
 	}
-      }, querystring.stringify({ 
-	uh: modhash 
+      }, querystring.stringify({
+	uh: modhash
       })).then(function(response) {
 	self._modhash = '';
 	self._redditSession = '';
@@ -577,10 +577,18 @@ function Snoocore(config) {
     });
   };
 
-  self.getAuthUrl = function(state) {
+  // keep backwards compatability
+  self.getAuthUrl = 
+  self.getExplicitAuthUrl = function(state) {
     var options = self._oauth;
     options.state = state || Math.ceil(Math.random() * 1000);
-    return Snoocore.oauth.getAuthUrl(options);
+    return Snoocore.oauth.getExplicitAuthUrl(options);
+  };
+
+  self.getImplicitAuthUrl = function(state) {
+    var options = self._oauth;
+    options.state = state || Math.ceil(Maht.random() * 1000);
+    return Snoocore.oauth.getImplicitAuthUrl(options);
   };
 
   self.refresh = function(refreshToken) {
@@ -599,39 +607,57 @@ function Snoocore(config) {
   };
 
   // Sets the auth data from the oauth module to allow OAuth calls.
-  // Can accept a promise for the authentication data as well.
-  self.auth = function(authenticationCodeOrData) {
+  // 
+  // This function can authenticate with:
+  //
+  // - Script based OAuth (no parameter)
+  // - Raw authentication data
+  // - Authorization Code (request_type = "code")
+  // - Access Token (request_type = "token") / Implicit OAuth
+  //
+  self.auth = function(authDataOrAuthCodeOrAccessToken) {
 
-    var args = Array.prototype.slice.call(arguments);
-    var authData = authenticationCodeOrData;
+    var authData;
 
-    // Use internal config to get authentication data
-    // this will always be a type of script
-    if (args.length === 0) {
-      authData = Snoocore.oauth.getAuthData(self._oauth.type, {
-	consumerKey: self._oauth.consumerKey,
-	consumerSecret: self._oauth.consumerSecret,
-	scope: self._oauth.scope,
-	username: self._login.username,
-	password: self._login.password
-      });
-    }
-    // Use internal config to get authentication data
-    // this will either be a type of web or installed
-    else if (typeof args[0] === 'string') {
+    switch(self._oauth.type) {
+      case 'script':
+	authData = Snoocore.oauth.getAuthData(self._oauth.type, {
+	  consumerKey: self._oauth.consumerKey,
+	  consumerSecret: self._oauth.consumerSecret,
+	  scope: self._oauth.scope,
+	  username: self._login.username,
+	  password: self._login.password
+	});
+	break;
 
-      var authorizationCode = args[0];
+      case 'web': // keep web/insatlled here for backwards compatability
+      case 'installed': 
+      case 'explicit':
+	authData = Snoocore.oauth.getAuthData(self._oauth.type, {
+	  authorizationCode: authDataOrAuthCodeOrAccessToken, // auth code in this case
+	  consumerKey: self._oauth.consumerKey,
+	  consumerSecret: self._oauth.consumerSecret || '',
+	  redirectUri: self._oauth.redirectUri,
+	  scope: self._oauth.scope
+	});
+	break;
 
-      authData = Snoocore.oauth.getAuthData(self._oauth.type, {
-	authorizationCode: authorizationCode,
-	consumerKey: self._oauth.consumerKey,
-	consumerSecret: self._oauth.consumerSecret || '',
-	redirectUri: self._oauth.redirectUri,
-	scope: self._oauth.scope
-      });
+      case 'implicit':
+	authData = {
+	  access_token: authDataOrAuthCodeOrAccessToken, // access token in this case
+	  token_type: 'bearer',
+	  expires_in: 3600,
+	  scope: self._oauth.scope
+	};
+	break;
+
+      default:
+	// assume that it is the authData
+	authData = authDataOrAuthCodeOrAccessToken; 
     }
 
     return when(authData).then(function(authDataResult) {
+
       self._authData = authDataResult;
 
       // if the web/installed app used a perminant duration, send
@@ -6377,7 +6403,6 @@ var utils = require('./utils');
 var request = require('./request');
 
 var oauth = {};
-var isNode = utils.isNode();
 
 function normalizeScope(scope) {
   // Set options.scope if not set, or convert an array into a string
@@ -6389,17 +6414,37 @@ function normalizeScope(scope) {
   return scope;
 }
 
-oauth.getAuthUrl = function(options) {
+// keep backwards compatability
+oauth.getAuthUrl = 
+oauth.getExplicitAuthUrl = function(options) {
   var query = {};
 
   query.client_id = options.consumerKey;
   query.state = options.state;
   query.redirect_uri = options.redirectUri;
   query.duration = options.duration || 'temporary';
-  query.response_type = options.response_type || 'code';
+  query.response_type = 'code';
   query.scope = normalizeScope(options.scope);
 
-  var baseUrl = 'https://ssl.reddit.com/api/v1/authorize';
+  var baseUrl = 'https://www.reddit.com/api/v1/authorize';
+
+  if (options.mobile) {
+    baseUrl += '.compact';
+  }
+
+  return baseUrl + '?' + querystring.stringify(query);
+};
+
+oauth.getImplicitAuthUrl = function(options) {
+  var query = {};
+
+  query.client_id = options.consumerKey;
+  query.state = options.state;
+  query.redirect_uri = options.redirectUri;
+  query.response_type = 'token';
+  query.scope = normalizeScope(options.scope);
+
+  var baseUrl = 'https://www.reddit.com/api/v1/authorize';
 
   if (options.mobile) {
     baseUrl += '.compact';
@@ -6409,7 +6454,7 @@ oauth.getAuthUrl = function(options) {
 };
 
 /*
-   `type` can be one of 'web', 'installed', 'script', or 'refresh'
+   `type` can be one of 'script', 'explicit', or 'refresh'
    depending on the type of token (and accompanying auth data) is
    needed.
  */
@@ -6419,24 +6464,29 @@ oauth.getAuthData = function(type, options) {
 
   params.scope = normalizeScope(options.scope);
 
-  if (type === 'script') {
-    params.grant_type = 'password';
-    params.username = options.username;
-    params.password = options.password;
-  } else if (type === 'installed' || type === 'web') {
-    params.grant_type = 'authorization_code';
-    params.client_id = options.consumerKey;
-    params.redirect_uri = options.redirectUri;
-    params.code = options.authorizationCode;
-  } else if (type === 'refresh') {
-    params.grant_type = 'refresh_token';
-    params.refresh_token = options.refreshToken;
-  } else {
-    return when.reject(new Error('invalid type specified'));
+  switch (type) {
+    case 'script':
+      params.grant_type = 'password';
+      params.username = options.username;
+      params.password = options.password;
+      break;
+    case 'web': // web & installed for backwards compatability
+    case 'insalled':
+    case 'explicit':
+      params.grant_type = 'authorization_code';
+      params.client_id = options.consumerKey;
+      params.redirect_uri = options.redirectUri;
+      params.code = options.authorizationCode;
+      break;
+    case 'refresh':
+      params.grant_type = 'refresh_token';
+      params.refresh_token = options.refreshToken;
+      break;
+    default:
+      return when.reject(new Error('invalid type specified'));
   }
 
-  var strr = options.consumerKey + ':' + options.consumerSecret;
-  var buff = new Buffer(strr, 'utf-8');
+  var buff = new Buffer(options.consumerKey + ':' + options.consumerSecret);
   var auth = 'Basic ' + (buff).toString('base64');
 
   return request.https({

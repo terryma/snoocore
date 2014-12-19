@@ -9,7 +9,6 @@ var utils = require('./utils');
 var request = require('./request');
 
 var oauth = {};
-var isNode = utils.isNode();
 
 function normalizeScope(scope) {
   // Set options.scope if not set, or convert an array into a string
@@ -21,14 +20,34 @@ function normalizeScope(scope) {
   return scope;
 }
 
-oauth.getAuthUrl = function(options) {
+// keep backwards compatability
+oauth.getAuthUrl = 
+oauth.getExplicitAuthUrl = function(options) {
   var query = {};
 
   query.client_id = options.consumerKey;
   query.state = options.state;
   query.redirect_uri = options.redirectUri;
   query.duration = options.duration || 'temporary';
-  query.response_type = options.response_type || 'code';
+  query.response_type = 'code';
+  query.scope = normalizeScope(options.scope);
+
+  var baseUrl = 'https://www.reddit.com/api/v1/authorize';
+
+  if (options.mobile) {
+    baseUrl += '.compact';
+  }
+
+  return baseUrl + '?' + querystring.stringify(query);
+};
+
+oauth.getImplicitAuthUrl = function(options) {
+  var query = {};
+
+  query.client_id = options.consumerKey;
+  query.state = options.state;
+  query.redirect_uri = options.redirectUri;
+  query.response_type = 'token';
   query.scope = normalizeScope(options.scope);
 
   var baseUrl = 'https://www.reddit.com/api/v1/authorize';
@@ -41,7 +60,7 @@ oauth.getAuthUrl = function(options) {
 };
 
 /*
-   `type` can be one of 'web', 'installed', 'script', or 'refresh'
+   `type` can be one of 'script', 'explicit', or 'refresh'
    depending on the type of token (and accompanying auth data) is
    needed.
  */
@@ -51,24 +70,29 @@ oauth.getAuthData = function(type, options) {
 
   params.scope = normalizeScope(options.scope);
 
-  if (type === 'script') {
-    params.grant_type = 'password';
-    params.username = options.username;
-    params.password = options.password;
-  } else if (type === 'installed' || type === 'web') {
-    params.grant_type = 'authorization_code';
-    params.client_id = options.consumerKey;
-    params.redirect_uri = options.redirectUri;
-    params.code = options.authorizationCode;
-  } else if (type === 'refresh') {
-    params.grant_type = 'refresh_token';
-    params.refresh_token = options.refreshToken;
-  } else {
-    return when.reject(new Error('invalid type specified'));
+  switch (type) {
+    case 'script':
+      params.grant_type = 'password';
+      params.username = options.username;
+      params.password = options.password;
+      break;
+    case 'web': // web & installed for backwards compatability
+    case 'insalled':
+    case 'explicit':
+      params.grant_type = 'authorization_code';
+      params.client_id = options.consumerKey;
+      params.redirect_uri = options.redirectUri;
+      params.code = options.authorizationCode;
+      break;
+    case 'refresh':
+      params.grant_type = 'refresh_token';
+      params.refresh_token = options.refreshToken;
+      break;
+    default:
+      return when.reject(new Error('invalid type specified'));
   }
 
-  var strr = options.consumerKey + ':' + options.consumerSecret;
-  var buff = new Buffer(strr, 'utf-8');
+  var buff = new Buffer(options.consumerKey + ':' + options.consumerSecret);
   var auth = 'Basic ' + (buff).toString('base64');
 
   return request.https({
