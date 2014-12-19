@@ -18,7 +18,7 @@ All calls follow the reddit API directly. To use the endpoint [`GET /api/v1/me`]
 var promise = reddit('/api/v1/me').get();
 ```
 
-See the [basic usage](http://trevorsenior.github.io/snoocore/basicUsage.html) section of the documentation for more information on how to call endpoints with parameters and url paramters.
+See the [basic usage](http://trevorsenior.github.io/snoocore/basicUsage.html) section of the documentation for more information on how to call endpoints with parameters and url parameters.
 
 <sub>Snoocore [uses promises](http://tsenior.com/snoocore/promises.html)!</sub>
 
