@@ -214,7 +214,7 @@ function Snoocore(config) {
 	// Can't set custom headers in Firefox CORS requests
 	headers['X-Modhash'] = self._modhash;
       }
-      
+
       // If we are nod bypassing authentication, authenticate the user
       if (!bypassAuth) {
 
@@ -231,9 +231,9 @@ function Snoocore(config) {
 	  headers['Authorization'] = self._authData.token_type + ' ' +
 				     self._authData.access_token;
 	}
-	else if (isLoggedIn() && self._isNode()) {
+	else if (isLoggedIn() && self._isNode) {
 	  // Cookie based authentication (only supported in Node.js)
-	  headers['Cookie'] = 'reddit_session=' + self._redditSession + ';';
+	    headers['Cookie'] = 'reddit_session=' + self._redditSession + ';';
 	}
 
       }
@@ -241,7 +241,8 @@ function Snoocore(config) {
       return Snoocore.request.https({
 	method: method,
 	hostname: parsedUrl.hostname,
-	path: parsedUrl.path
+	path: parsedUrl.path,
+	headers: headers
       }, querystring.stringify(args)).then(function(response) {
 
 	// Forbidden. Try to get a new access_token if we have
@@ -262,23 +263,13 @@ function Snoocore(config) {
 	var data = response._body || {};
 
 	// Attempt to parse some JSON, otherwise continue on (may be empty, or text)
-	try {
-	  data = JSON.parse(data);
-	} catch(e) {}
+	  try { data = JSON.parse(data); } catch(e) {}
 
-	// set the modhash if the data contains it
-	if (typeof data !== 'undefined' &&
-	    typeof data.json !== 'undefined' &&
-	    typeof data.json.data !== 'undefined')
+	// Set the modhash if the data contains it (Cookie based login)
+	  if (data && data.json && data.json.data)
 	{
-
-	  if (typeof data.json.data.modhash !== 'undefined') {
-	    self._modhash = data.json.data.modhash;
-	  }
-
-	  if (typeof data.json.data.cookie !== 'undefined') {
-	    self._redditSession = data.json.data.cookie;
-	  }
+	  self._modhash = data.json.data.modhash;
+	  self._redditSession = data.json.data.cookie;
 	}
 
 	// Throw any errors that reddit may inform us about
@@ -325,7 +316,7 @@ function Snoocore(config) {
 
 	slice.count = count;
 
-	slice.get = result;
+	slice.get = result || {};
 
 	slice.before = slice.get.data.before || null;
 	slice.after = slice.get.data.after || null;
@@ -569,18 +560,20 @@ function Snoocore(config) {
 
       var defer = when.defer();
 
-      superagent.post('http://www.reddit.com/logout')
-		.set('X-Modhash', modhash)
-	 .type('form')
-	 .send({ uh: modhash })
-	 .end(function(error, res) {
-	   return error ? defer.reject(error) : defer.resolve(res);
-	 });
-
-      return defer.promise.then(function() {
+      return Snoocore.request.https({
+	method: 'POST',
+	hostname: 'www.reddit.com',
+	path: '/logout',
+	headers: {
+	  'X-Modhash': modhash
+	}
+      }, querystring.stringify({ 
+	uh: modhash 
+      })).then(function(response) {
 	self._modhash = '';
 	self._redditSession = '';
       });
+
     });
   };
 
@@ -6372,11 +6365,11 @@ define(function (require) {
 })(typeof define === 'function' && define.amd ? define : function (factory) { module.exports = factory(require); });
 
 },{"./lib/Promise":17,"./lib/TimeoutError":19,"./lib/apply":20,"./lib/decorators/array":21,"./lib/decorators/flow":22,"./lib/decorators/fold":23,"./lib/decorators/inspect":24,"./lib/decorators/iterate":25,"./lib/decorators/progress":26,"./lib/decorators/timed":27,"./lib/decorators/unhandledRejection":28,"./lib/decorators/with":29}],34:[function(require,module,exports){
+(function (Buffer){
 "use strict";
 
 var querystring = require('querystring');
 var util = require('util');
-var Buffer = require('buffer');
 
 var when = require('when');
 
@@ -6442,15 +6435,16 @@ oauth.getAuthData = function(type, options) {
     return when.reject(new Error('invalid type specified'));
   }
 
-  console.log(options);
+  var strr = options.consumerKey + ':' + options.consumerSecret;
+  var buff = new Buffer(strr, 'utf-8');
+  var auth = 'Basic ' + (buff).toString('base64');
 
   return request.https({
     method: 'POST',
     hostname: 'ssl.reddit.com',
     path: '/api/v1/access_token',
     headers: {
-      'Authorization': 'Basic ' + new Buffer(
-	options.consumerKey + ':' + options.consumerSecret).toString('base64')
+      'Authorization': auth
     }
   }, querystring.stringify(params)).then(function(response) {
     var data;
@@ -6458,12 +6452,14 @@ oauth.getAuthData = function(type, options) {
     try {
       data = JSON.parse(response._body);
     } catch(e) {
-      throw new Error('Failed to get Auth Data' + response._body + '\n' + e.stack);
+      throw new Error('Failed to get Auth Data:\n' + response._body + '\n' + e.stack);
     }
 
     if (data.error) {
-      throw new Error('Reddit Error' + data.error);
+      throw new Error('Reddit Error:\n' + data.error);
     }
+
+    return data;
   });
 
 };
@@ -6473,13 +6469,15 @@ oauth.revokeToken = function(token, isRefreshToken, options) {
   var tokenTypeHint = isRefreshToken ? 'refresh_token' : 'access_token';
   var params = { token: token, token_type_hint: tokenTypeHint };
 
+  var auth = 'Basic ' + (new Buffer(
+    options.consumerKey + ':' + options.consumerSecret)).toString('base64');
+
   return request.https({
     method: 'POST',
     hostname: 'ssl.reddit.com',
     path: '/api/v1/revoke_token',
     headers: {
-      'Authorization': 'Basic ' + new Buffer(
-	options.consumerKey + ':' + options.consumerSecret).toString('base64')
+      'Authorization': auth
     }
   }, querystring.stringify(params)).then(function(response) {
     if (response._status !== 204) {
@@ -6490,6 +6488,7 @@ oauth.revokeToken = function(token, isRefreshToken, options) {
 
 module.exports = oauth;
 
+}).call(this,require("buffer").Buffer)
 },{"./request":36,"./utils":38,"buffer":3,"querystring":12,"util":15,"when":33}],35:[function(require,module,exports){
 "use strict";
 

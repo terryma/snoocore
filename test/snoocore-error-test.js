@@ -1,5 +1,4 @@
-"use strict";
-/* global describe it */
+/* global describe, it */
 
 // The point of these test cases is to check that we are providing
 // helpful error messages to users that can guide them in the

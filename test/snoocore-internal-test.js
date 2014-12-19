@@ -1,4 +1,4 @@
-"use strict";
+/* describe, it, afterEach, beforeEach */
 
 var isNode = typeof require === "function" &&
 typeof exports === "object" &&
@@ -15,11 +15,6 @@ if (isNode)
 
 chai.use(chaiAsPromised);
 var expect = chai.expect;
-
-/* global describe */
-/* global it */
-/* global afterEach */
-/* global beforeEach */
 
 describe('Snoocore Internal Tests', function () {
 

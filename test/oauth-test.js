@@ -1,4 +1,4 @@
-"use strict";
+/* global describe, it */
 
 var oauth = require('../oauth');
 var when = require('when');
@@ -11,9 +11,6 @@ var chaiAsPromised = require('chai-as-promised');;
 
 chai.use(chaiAsPromised);
 var expect = chai.expect;
-
-/* global describe */
-/* global it */
 
 describe('OAuth Module Test', function (require) {
 

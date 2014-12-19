@@ -1,4 +1,4 @@
-"use strict";
+/* global describe, it, beforeEach */
 
 var Snoocore = require('../Snoocore');
 var when = require('when');
@@ -11,10 +11,6 @@ var chaiAsPromised = require('chai-as-promised');
 
 chai.use(chaiAsPromised);
 var expect = chai.expect;
-
-/* global describe */
-/* global it */
-/* global beforeEach */
 
 describe('Snoocore OAuth Test', function () {
 
@@ -47,7 +43,7 @@ describe('Snoocore OAuth Test', function () {
 
   });
 
-  describe.only('Authenticate tests (EXTERNAL Snoocore.oauth)', function() {
+  describe('Authenticate tests (EXTERNAL Snoocore.oauth)', function() {
 
     var reddit = new Snoocore({ userAgent: 'snoocore-test-userAgent' });
 

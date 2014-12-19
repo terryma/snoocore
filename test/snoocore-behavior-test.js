@@ -1,4 +1,3 @@
-"use strict";
 /* global describe, it, before, beforeEach */
 
 var isNode = typeof require === "function" &&

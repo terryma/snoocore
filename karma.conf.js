@@ -25,7 +25,9 @@ module.exports = function(config) {
     exclude: [
       'test/oauth-test.js',
       'test/snoocore-oauth-test.js',
-      'test/snoocore-error-test.js'
+      'test/snoocore-error-test.js',
+      'test/snoocore-cookie-test.js',
+      'test/snoocore-behavior-test.js'
     ],
 
 
@@ -60,25 +62,13 @@ module.exports = function(config) {
     // - PhantomJS
     // - IE (only Windows; has to be installed with `npm install karma-ie-launcher`)
     browsers: [
-//      'PhantomJsNoWebSecurity',
-//      'ChromeNoWebSecurity',
-      'FirefoxNoWebSecurity'
+      'PhantomJS',
+      'Chrome',
+      'Firefox',
+      'Safari'
     ],
 
-
-    customLaunchers: {
-      PhantomJsNoWebSecurity: {
-        base: 'PhantomJS',
-        flags: ['--web-security=false']
-      },
-      ChromeNoWebSecurity: {
-        base: 'Chrome',
-        flags: ['--disable-web-security']
-      },
-      FirefoxNoWebSecurity: {
-	base: 'Firefox'
-      }
-    },
+    customLaunchers: {},
 
     // If browser does not capture in given timeout [ms], kill it
     captureTimeout: 60000,

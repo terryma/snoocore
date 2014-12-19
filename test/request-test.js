@@ -1,5 +1,4 @@
-"use strict";
-/* global describe, it, before, beforeEach */
+/* global describe, it */
 
 var isNode = typeof require === "function" &&
 typeof exports === "object" &&
