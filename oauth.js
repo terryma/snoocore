@@ -31,7 +31,7 @@ oauth.getAuthUrl = function(options) {
   query.response_type = options.response_type || 'code';
   query.scope = normalizeScope(options.scope);
 
-  var baseUrl = 'https://ssl.reddit.com/api/v1/authorize';
+  var baseUrl = 'https://www.reddit.com/api/v1/authorize';
 
   if (options.mobile) {
     baseUrl += '.compact';

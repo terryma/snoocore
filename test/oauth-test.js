@@ -7,7 +7,7 @@ var open = require('open');
 var config = require('./testConfig');
 var testServer = require('./server/testServer');
 var chai = require('chai');
-var chaiAsPromised = require('chai-as-promised');;
+var chaiAsPromised = require('chai-as-promised');
 
 chai.use(chaiAsPromised);
 var expect = chai.expect;
@@ -34,7 +34,7 @@ describe('OAuth Module Test', function (require) {
         state: 'foo'
       });
 
-      expect(url.indexOf('https://ssl.reddit.com/api/v1/authorize?')).to.not.equal(-1);
+      expect(url.indexOf('https://www.reddit.com/api/v1/authorize?')).to.not.equal(-1);
       expect(url.indexOf('client_id=' + config.reddit.REDDIT_KEY_WEB)).to.not.equal(-1);
       expect(url.indexOf('state=foo')).to.not.equal(-1);
       expect(url.indexOf('redirect_uri=' + encodeURIComponent(config.reddit.redirectUri))).to.not.equal(-1);
@@ -51,7 +51,7 @@ describe('OAuth Module Test', function (require) {
         mobile: true
       });
 
-      expect(url.indexOf('https://ssl.reddit.com/api/v1/authorize.compact?')).to.not.equal(-1);
+      expect(url.indexOf('https://www.reddit.com/api/v1/authorize.compact?')).to.not.equal(-1);
       expect(url.indexOf('client_id=' + config.reddit.REDDIT_KEY_WEB)).to.not.equal(-1);
       expect(url.indexOf('state=foo')).to.not.equal(-1);
       expect(url.indexOf('redirect_uri=' + encodeURIComponent(config.reddit.redirectUri))).to.not.equal(-1);
@@ -68,7 +68,7 @@ describe('OAuth Module Test', function (require) {
         scope: [ 'identity', 'read', 'subscribe' ]
       });
 
-      expect(url.indexOf('https://ssl.reddit.com/api/v1/authorize?')).to.not.equal(-1);
+      expect(url.indexOf('https://www.reddit.com/api/v1/authorize?')).to.not.equal(-1);
       expect(url.indexOf('client_id=' + config.reddit.REDDIT_KEY_WEB)).to.not.equal(-1);
       expect(url.indexOf('state=foo')).to.not.equal(-1);
       expect(url.indexOf('redirect_uri=' + encodeURIComponent(config.reddit.redirectUri))).to.not.equal(-1);
