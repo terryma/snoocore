@@ -3,8 +3,6 @@ title: Snoocore include & install
 layout: default
 ---
 
-# Install & Include
-
 ## Install
 
 **[npm](https://www.npmjs.org/)**
@@ -27,7 +25,7 @@ var Snoocore = require('snoocore');
 var reddit = new Snoocore(/* config options */);
 ```
 
-**[browserify](http://browserify.org/)**
+**[Browserify](http://browserify.org/)**
 
 Same as Node.js
 

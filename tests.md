@@ -3,6 +3,8 @@ title: Snoocore running tests
 layout: default
 ---
 
+Change in progress: https://github.com/trevorsenior/snoocore/issues/73
+
 # Running Tests
 
 ## Configuring the tests with your information

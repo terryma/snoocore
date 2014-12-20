@@ -97,6 +97,6 @@ Get a promise for the first slice in a listing. Useful for going back to the beg
 
 ### `slice.requery()`
 
-Get a pormise for the same slice. Useful if you've modified (removed, edited, etc.) some content from a listing and need to requery for the slice of data.
+Get a promise for the same slice. Useful if you've modified (removed, edited, etc.) some content from a listing and need to requery for the slice of data.
 
 

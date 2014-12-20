@@ -1,3 +1,14 @@
-name: snoocore docs
+# Site settings
+title: Snoocore Documentation
+email: trevor@tsenior.com
+description: "Snoocore - A minimal and complete JavaScript driver for the Reddit API"
+baseurl: ""
+url: "http://tsenior.com/snoocore"
+
+# Build settings
 markdown: redcarpet
-pygments: true
+redcarpet:
+  extensions: ["tables", "autolink", "strikethrough", "space_after_headers", "with_toc_data", "fenced_code_blocks"]
+
+highlighter: pygments
+

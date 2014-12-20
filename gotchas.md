@@ -24,11 +24,11 @@ The call looks like:
 reddit('/subreddits/search').get(/* query parameters */);
 ```
 
-### [GET /r/{subreddit}/about.json](https://www.reddit.com/dev/api#GET_r_{subreddit}_about.json)
+### [GET /r/$subreddit/about.json](https://www.reddit.com/dev/api#GET_r_{subreddit}_about.json)
 
 Some endpoints *require* that the `.json` extension to be included in the call.
 
-![Gotcha Invalid Path - GET /r/{subreddit}/about.json](/snoocore/i/gotcha_invalid_path_1.png)
+![Gotcha Invalid Path - GET /r/$subreddit/about.json](/snoocore/i/gotcha_invalid_path_1.png)
 
 The call looks like:
 
