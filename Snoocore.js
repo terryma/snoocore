@@ -221,8 +221,13 @@ function Snoocore(config) {
 	  // OAuth based authentication
 
 	  // Check that the correct scopes have been requested
+	  var missingScope;
 	  endpoint.oauth.forEach(function(requiredScope) {
-	    if ((self._oauth.scope || []).indexOf(requiredScope) === -1) {
+	    missingScope = (
+	      (self._oauth.scope || []).indexOf(requiredScope) === -1 && 
+	      requiredScope !== 'any');
+
+	    if (missingScope) {
 	      throw new Error('missing required scope(s): ' + endpoint.oauth.join(', '));
 	    }
 	  });
