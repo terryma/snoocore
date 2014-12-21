@@ -25,10 +25,9 @@ exports.https = function(options, formData) {
       x.open(options.method, url, true);
 
       x.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
-      x.setRequestHeader('Content-length', formData ? formData.length : 0);
 
       Object.keys(options.headers).forEach(function(headerKey) {
-	x.setRequestHeader(headerKey, headers[headerKey]);
+	x.setRequestHeader(headerKey, options.headers[headerKey]);
       });
 
       x.onreadystatechange = function() {
