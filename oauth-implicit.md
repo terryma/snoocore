@@ -5,7 +5,7 @@ layout: default
 
 # Authenticating with Implicit OAuth
 
-See an example [here](https://github.com/trevorsenior/snoocore-examples/blob/master/node/oauth-implicit.js).
+See an example [here](https://github.com/trevorsenior/snoocore-examples/blob/master/browser/oauth-implicit.html).
 
 This should only be used in client side JavaScript applications. It follows roughly the same steps as explicit based OAuth in terms of flow.
 
