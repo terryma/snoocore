@@ -2,7 +2,7 @@
 title: Snoocore Documentation
 email: trevor@tsenior.com
 description: "Snoocore - A minimal and complete JavaScript driver for the Reddit API"
-baseurl: ""
+baseurl: "/snoocore"
 url: "http://tsenior.com/snoocore"
 
 # Build settings
