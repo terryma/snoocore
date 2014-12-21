@@ -222,8 +222,13 @@ function Snoocore(config) {
 	  // OAuth based authentication
 
 	  // Check that the correct scopes have been requested
+	  var missingScope;
 	  endpoint.oauth.forEach(function(requiredScope) {
-	    if ((self._oauth.scope || []).indexOf(requiredScope) === -1) {
+	    missingScope = (
+	      (self._oauth.scope || []).indexOf(requiredScope) === -1 && 
+	      requiredScope !== 'any');
+
+	    if (missingScope) {
 	      throw new Error('missing required scope(s): ' + endpoint.oauth.join(', '));
 	    }
 	  });
@@ -587,7 +592,7 @@ function Snoocore(config) {
 
   self.getImplicitAuthUrl = function(state) {
     var options = self._oauth;
-    options.state = state || Math.ceil(Maht.random() * 1000);
+    options.state = state || Math.ceil(Math.random() * 1000);
     return Snoocore.oauth.getImplicitAuthUrl(options);
   };
 
@@ -6595,10 +6600,9 @@ exports.https = function(options, formData) {
       x.open(options.method, url, true);
 
       x.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
-      x.setRequestHeader('Content-length', formData ? formData.length : 0);
 
       Object.keys(options.headers).forEach(function(headerKey) {
-	x.setRequestHeader(headerKey, headers[headerKey]);
+	x.setRequestHeader(headerKey, options.headers[headerKey]);
       });
 
       x.onreadystatechange = function() {
