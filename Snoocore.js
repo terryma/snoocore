@@ -591,7 +591,7 @@ function Snoocore(config) {
 
   self.getImplicitAuthUrl = function(state) {
     var options = self._oauth;
-    options.state = state || Math.ceil(Maht.random() * 1000);
+    options.state = state || Math.ceil(Math.random() * 1000);
     return Snoocore.oauth.getImplicitAuthUrl(options);
   };
 
