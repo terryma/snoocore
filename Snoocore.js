@@ -2,6 +2,8 @@
 
 var urlLib = require('url');
 var querystring = require('querystring');
+var events = require('events');
+var util = require('util');
 
 var when = require('when');
 var delay = require('when/delay');
@@ -16,9 +18,12 @@ Snoocore.oauth = require('./oauth');
 Snoocore.request = require('./request');
 Snoocore.when = when;
 
+util.inherits(Snoocore, events.EventEmitter);
 function Snoocore(config) {
 
-  var self = {};
+  var self = this;
+
+  events.EventEmitter.call(self);
 
   self._userAgent = config.userAgent || 'snoocore-default-User-Agent';
 
@@ -35,6 +40,9 @@ function Snoocore(config) {
   self._modhash = ''; // The current mod hash of whatever user we have
   self._redditSession = ''; // The current cookie (reddit_session)
   self._authData = {}; // Set if user has authenticated with OAuth
+  self._access_token_expires_at = 0; // The unix time (ms) when the auth token expires
+  self._access_token_expires_timeout = void 0; // the timeout handle for token_expires
+
   self._refreshToken = ''; // Set when calling `refresh` and when duration:'permanent'
 
   self._login = config.login || {};
@@ -45,6 +53,7 @@ function Snoocore(config) {
   // @TODO move this into a build step in ./run.js, no need to build
   // this every time we load the library
   self._endpointTree = buildEndpointTree(rawApi);
+
 
   // The current throttle delay before a request will go through
   // increments every time a call is made, and is reduced when a
@@ -57,6 +66,14 @@ function Snoocore(config) {
   function isAuthenticated() {
     return typeof self._authData.access_token !== 'undefined' &&
     typeof self._authData.token_type !== 'undefined';
+  }
+
+  function hasRefreshToken() {
+    return self._refreshToken !== '';
+  }
+
+  function hasAccessTokenExpired() {
+    return Date.now() >= self._access_token_expires_at;
   }
 
   function isLoggedIn() {
@@ -188,6 +205,18 @@ function Snoocore(config) {
   // Call the reddit api
   function callRedditApi(endpoint, givenArgs, options) {
 
+    // If we are authenticated, do not have a refresh token, and we have 
+    // passed the time that the token expires, we should throw an error
+    // and inform the user to listen for the event 'auth_token_expired'
+
+    console.log(isAuthenticated(), !hasRefreshToken(), hasAccessTokenExpired());
+    
+    if (isAuthenticated() && !hasRefreshToken() && hasAccessTokenExpired()) {
+      return when.reject(new Error('Authorization token has expired. Listen for ' +
+				   'the "auth_token_expired" event to handle ' +
+				   'this gracefully in your app.'));
+    }
+
     // Options that will change the way this call behaves
     options = options || {};
     var bypassAuth = options.bypassAuth || false;
@@ -224,7 +253,7 @@ function Snoocore(config) {
 	  var missingScope;
 	  endpoint.oauth.forEach(function(requiredScope) {
 	    missingScope = (
-	      (self._oauth.scope || []).indexOf(requiredScope) === -1 && 
+	      (self._oauth.scope || []).indexOf(requiredScope) === -1 &&
 	      requiredScope !== 'any');
 
 	    if (missingScope) {
@@ -251,13 +280,13 @@ function Snoocore(config) {
 
 	// Forbidden. Try to get a new access_token if we have
 	// a refresh token
-	if (response._status === 403 && self._refreshToken !== '') {
+	if (response._status === 403 && hasRefreshToken()) {
 
 	  if (options._refreshTokenFail) { // fail if the refresh fail flag was set.
-	    throw new Error('unable to fetch a new access_token');
+	    throw new Error('Unable to refresh the access_token.');
 	  }
 
-	  // attempt to refresh the access token
+	  // attempt to refresh the access token if we have a refresh token
 	  return self.refresh(self._refreshToken).then(function() {
 	    // make the call again and flag to fail if it happens again
 	    return callRedditApi(endpoint, givenArgs, { _refreshTokenFail: true });
@@ -582,7 +611,7 @@ function Snoocore(config) {
   };
 
   // keep backwards compatability
-  self.getAuthUrl = 
+  self.getAuthUrl =
   self.getExplicitAuthUrl = function(state) {
     var options = self._oauth;
     options.state = state || Math.ceil(Math.random() * 1000);
@@ -619,9 +648,16 @@ function Snoocore(config) {
   // - Authorization Code (request_type = "code")
   // - Access Token (request_type = "token") / Implicit OAuth
   //
-  self.auth = function(authDataOrAuthCodeOrAccessToken) {
+  self.auth = function(authDataOrAuthCodeOrAccessToken, tokenExpiresInMs) {
 
     var authData;
+
+    // Set the expire time for this token
+    tokenExpiresInMs = tokenExpiresInMs || (3600 * 1000);
+    self._access_token_expires_at = Date.now() + tokenExpiresInMs;
+    self._access_token_expires_timeout = setTimeout(function() {
+      self.emit('auth_token_expired');
+    }, tokenExpiresInMs);
 
     switch(self._oauth.type) {
       case 'script':
@@ -635,7 +671,7 @@ function Snoocore(config) {
 	break;
 
       case 'web': // keep web/insatlled here for backwards compatability
-      case 'installed': 
+      case 'installed':
       case 'explicit':
 	authData = Snoocore.oauth.getAuthData(self._oauth.type, {
 	  authorizationCode: authDataOrAuthCodeOrAccessToken, // auth code in this case
@@ -657,7 +693,7 @@ function Snoocore(config) {
 
       default:
 	// assume that it is the authData
-	authData = authDataOrAuthCodeOrAccessToken; 
+	authData = authDataOrAuthCodeOrAccessToken;
     }
 
     return when(authData).then(function(authDataResult) {
@@ -695,6 +731,7 @@ function Snoocore(config) {
       consumerSecret: self._oauth.consumerSecret
     }).then(function() {
       self._authData = {}; // clear internal auth data
+      clearTimeout(self._access_token_expires_timeout); // clear the expires timeout
     });
   };
 
@@ -709,11 +746,13 @@ function Snoocore(config) {
     buildCall: buildCall
   };
 
+
   // Make self.path the primary function that we return, but 
   // still allow access to the objects defined on self
-  Object.keys(self).forEach(function(key) {
+  var key;
+  for (key in self) {
     self.path[key] = self[key];
-  });
+  }
 
   self = self.path;
   return self;
