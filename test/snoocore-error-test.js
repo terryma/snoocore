@@ -36,6 +36,25 @@ describe('Snoocore Error Test', function () {
     return reddit;
   }
 
+  it.only('should handle data.json.errors field', function() {
+
+    var reddit = getRedditInstance([ 'identity' ]);
+
+    return reddit.login().then(function() {
+      return reddit('/r/snoocoreTest/about/edit.json').get();
+    }).then(function(result) {
+
+      var data = result.data;
+
+      data.api_type = 'json'; // must be the string 'json'
+
+      return reddit('/api/site_admin').post(data);
+
+    }).catch(function(error) {
+      expect(error.message.indexOf('BAD_SR_NAME')).to.not.equal(-1);
+    });
+  });
+
   it('should explain what scope was missing', function() {
     var reddit = getRedditInstance([ 'identity' ]);
 

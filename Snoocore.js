@@ -311,19 +311,24 @@ function Snoocore(config) {
 	  data = he.decode(data);
 	}
 
-	// Attempt to parse some JSON, otherwise continue on (may be empty, or text)
-	  try { data = JSON.parse(data); } catch(e) {}
+	try { // Attempt to parse some JSON, otherwise continue on (may be empty, or text)
+	  data = JSON.parse(data);
+	} catch(e) {}
 
-	// Set the modhash if the data contains it (Cookie based login)
-	  if (data && data.json && data.json.data)
+	if (data && data.json && data.json.data)
 	{
+	  // login cookie information
 	  self._modhash = data.json.data.modhash;
 	  self._redditSession = data.json.data.cookie;
 	}
 
 	// Throw any errors that reddit may inform us about
-	if (data.hasOwnProperty('error')) {
-	  throw new Error('\n>>> Reddit Response:\n\n' + String(data.error)
+	var hasErrors = (data.hasOwnProperty('error') ||
+			 (data && data.json && data.json.errors && data.json.errors.length > 0))
+
+	if (hasErrors) {
+	  var redditResponse = typeof data === 'object' ? JSON.stringify(data, null, 2) : response._body;
+	  throw new Error('\n>>> Reddit Response:\n\n' + redditResponse
 			    + '\n\n>>> Endpoint URL: '+ url
 			  + '\n\n>>> Endpoint method: ' + endpoint.method
 			  + '\n\n>>> Arguments: ' + JSON.stringify(args, null, 2));
