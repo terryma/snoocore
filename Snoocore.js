@@ -63,8 +63,16 @@ function Snoocore(config) {
   // call finishes.
   //
   // Time is added / removed based on the throttle variable.
-  var throttle = config.throttle || 2000;
-  var throttleDelay = 1;
+  self._throttleDelay = 1;
+
+  function getThrottle() {
+
+    if (config.throttle) {
+      return config.throttle;
+    }
+
+    return isAuthenticated() ? 1000 : 2000;
+  }
 
   function isAuthenticated() {
     return typeof self._authData.access_token !== 'undefined' &&
@@ -224,11 +232,12 @@ function Snoocore(config) {
     var decodeHtmlEntities = (typeof options.decodeHtmlEntities !== 'undefined') ?
 			     options.decodeHtmlEntities : self._decodeHtmlEntities;
 
+    var throttle = getThrottle();
     var startCallTime = Date.now();
-    throttleDelay += throttle;
+    self._throttleDelay += throttle;
 
     // Wait for the throttle delay amount, then call the Reddit API
-    return delay(throttleDelay - throttle).then(function() {
+    return delay(self._throttleDelay - throttle).then(function() {
 
       var method = endpoint.method.toUpperCase();
       var url = buildUrl(givenArgs, endpoint);
@@ -330,9 +339,9 @@ function Snoocore(config) {
       var callDuration = endCallTime - startCallTime;
 
       if (callDuration < throttle) {
-	throttleDelay -= callDuration;
+	self._throttleDelay -= callDuration;
       } else {
-	throttleDelay -= throttle;
+	self._throttleDelay -= throttle;
       }
     });
 
