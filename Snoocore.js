@@ -5,6 +5,7 @@ var querystring = require('querystring');
 var events = require('events');
 var util = require('util');
 
+var he = require('he');
 var when = require('when');
 var delay = require('when/delay');
 
@@ -36,6 +37,8 @@ function Snoocore(config) {
     www: 'https://www.reddit.com',
     ssl: 'https://ssl.reddit.com'
   };
+
+  self._decodeHtmlEntities = config.decodeHtmlEntities || false;
 
   self._modhash = ''; // The current mod hash of whatever user we have
   self._redditSession = ''; // The current cookie (reddit_session)
@@ -209,8 +212,6 @@ function Snoocore(config) {
     // passed the time that the token expires, we should throw an error
     // and inform the user to listen for the event 'auth_token_expired'
 
-    console.log(isAuthenticated(), !hasRefreshToken(), hasAccessTokenExpired());
-    
     if (isAuthenticated() && !hasRefreshToken() && hasAccessTokenExpired()) {
       return when.reject(new Error('Authorization token has expired. Listen for ' +
 				   'the "auth_token_expired" event to handle ' +
@@ -220,6 +221,8 @@ function Snoocore(config) {
     // Options that will change the way this call behaves
     options = options || {};
     var bypassAuth = options.bypassAuth || false;
+    var decodeHtmlEntities = (typeof options.decodeHtmlEntities !== 'undefined') ?
+			     options.decodeHtmlEntities : self._decodeHtmlEntities;
 
     var startCallTime = Date.now();
     throttleDelay += throttle;
@@ -294,6 +297,10 @@ function Snoocore(config) {
 	}
 
 	var data = response._body || {};
+
+	if (decodeHtmlEntities) {
+	  data = he.decode(data);
+	}
 
 	// Attempt to parse some JSON, otherwise continue on (may be empty, or text)
 	  try { data = JSON.parse(data); } catch(e) {}

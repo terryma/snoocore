@@ -120,6 +120,38 @@ describe('Snoocore Behavior Test', function () {
 
   });
 
+  //
+  it('should not decode html', function() {
+    return reddit('/r/snoocoreTest/about.json').get().then(function(result) {
+      expect(result.data.description_html.indexOf('&lt;/p&gt;')).to.not.equal(-1);
+    });
+  });
+
+  it('should decode html on a per call basis', function() {
+    return reddit('/r/snoocoreTest/about.json').get(null, {
+      decodeHtmlEntities: true
+    }).then(function(result) {
+      expect(result.data.description_html.indexOf('</p>')).to.not.equal(-1);
+    });
+  });
+
+
+  it('should decode html globally & respect per call override', function() {
+
+    var localReddit = new Snoocore({
+      decodeHtmlEntities: true
+    });
+
+    return localReddit('/r/snoocoreTest/about.json').get().then(function(result) {
+      expect(result.data.description_html.indexOf('</p>')).to.not.equal(-1);
+      
+      // override global 'true'
+      return reddit('/r/snoocoreTest/about.json').get(null, { decodeHtmlEntities: false });
+    }).then(function(result) {
+      expect(result.data.description_html.indexOf('&lt;/p&gt;')).to.not.equal(-1);
+    });
+  });
+
   // Can only test this in node based environments. The browser tests 
   // are unable to unset the cookies (when using user/pass auth).
   //
@@ -137,8 +169,8 @@ describe('Snoocore Behavior Test', function () {
 
 	// make sure the user is subscribed
 	return isSubbed ? when.resolve() : reddit('/api/subscribe').post({
-          action: 'sub',
-          sr: subName
+	  action: 'sub',
+	  sr: subName
 	});
 
       }).then(function() {
@@ -148,8 +180,8 @@ describe('Snoocore Behavior Test', function () {
 	expect(result.data.user_is_subscriber).to.equal(true);
 	// run another request, but make it unauthenticated (bypass)
 	  return reddit('/r/$subreddit/about.json').get(
-            { $subreddit: 'snoocoreTest' },
-            { bypassAuth: true });
+	    { $subreddit: 'snoocoreTest' },
+	    { bypassAuth: true });
       }).then(function(result) {
 	expect(result.data.user_is_subscriber).to.not.equal(true);
       });

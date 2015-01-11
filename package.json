@@ -13,6 +13,7 @@
     "url": "https://github.com/trevorsenior/snoocore/issues"
   },
   "dependencies": {
+    "he": "^0.5.0",
     "when": "^3.6.3"
   },
   "devDependencies": {
