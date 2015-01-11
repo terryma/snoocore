@@ -123,7 +123,7 @@ describe('Snoocore OAuth Test', function () {
       }
     });
 
-    it('should auth, get refresh token, deauth, use refresh token to reauth, deauth(true) -> refresh sh', function() {
+    it('should auth, get refresh token, deauth, use refresh token to reauth, deauth(true) -> refresh', function() {
       this.timeout(30000);
 
       var url = reddit.getExplicitAuthUrl();

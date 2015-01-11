@@ -23,13 +23,9 @@ describe('Snoocore Behavior Test', function () {
 
   this.timeout(20000);
 
-  var reddit;
-
-  before(function() {
-    reddit = new Snoocore({
-      userAgent: 'snoocore-test-userAgent',
-      browser: !isNode
-    });
+  var reddit = new Snoocore({
+    userAgent: 'snoocore-test-userAgent',
+    browser: !isNode
   });
 
   beforeEach(function() {
@@ -43,21 +39,6 @@ describe('Snoocore Behavior Test', function () {
       password: config.reddit.REDDIT_PASSWORD
     });
   }
-
-  it('should GET resources while not logged in', function() {
-    return reddit('/r/$subreddit/new').get({
-      $subreddit: 'pcmasterrace'
-    }).then(function(result) {
-      var subreddit = result.data.children[0].data.subreddit;
-      expect(subreddit).to.equal('pcmasterrace');
-    });
-  });
-
-  it('should not get resources when not logged in', function() {
-    return reddit('/api/me.json').get().then(function(data) {
-      return expect(data).to.eql({});
-    });
-  });
 
   it('should get resources when logged in', function() {
     return login()
@@ -118,38 +99,6 @@ describe('Snoocore Behavior Test', function () {
       });
     });
 
-  });
-
-  //
-  it('should not decode html', function() {
-    return reddit('/r/snoocoreTest/about.json').get().then(function(result) {
-      expect(result.data.description_html.indexOf('&lt;/p&gt;')).to.not.equal(-1);
-    });
-  });
-
-  it('should decode html on a per call basis', function() {
-    return reddit('/r/snoocoreTest/about.json').get(null, {
-      decodeHtmlEntities: true
-    }).then(function(result) {
-      expect(result.data.description_html.indexOf('</p>')).to.not.equal(-1);
-    });
-  });
-
-
-  it('should decode html globally & respect per call override', function() {
-
-    var localReddit = new Snoocore({
-      decodeHtmlEntities: true
-    });
-
-    return localReddit('/r/snoocoreTest/about.json').get().then(function(result) {
-      expect(result.data.description_html.indexOf('</p>')).to.not.equal(-1);
-      
-      // override global 'true'
-      return reddit('/r/snoocoreTest/about.json').get(null, { decodeHtmlEntities: false });
-    }).then(function(result) {
-      expect(result.data.description_html.indexOf('&lt;/p&gt;')).to.not.equal(-1);
-    });
   });
 
   // Can only test this in node based environments. The browser tests 
