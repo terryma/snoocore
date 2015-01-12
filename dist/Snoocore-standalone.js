@@ -39,6 +39,12 @@ function Snoocore(config) {
     ssl: 'https://ssl.reddit.com'
   };
 
+  // Sets the default value used when endpoints specify a `api_type`
+  // attribute. Most of the time, users will need the string "json"
+  // See the docs for more information on this.
+  self._apiType = (typeof config.apiType === 'undefined') ?
+		  'json' : config.apiType;
+
   self._decodeHtmlEntities = config.decodeHtmlEntities || false;
 
   self._modhash = ''; // The current mod hash of whatever user we have
@@ -64,8 +70,16 @@ function Snoocore(config) {
   // call finishes.
   //
   // Time is added / removed based on the throttle variable.
-  var throttle = config.throttle || 2000;
-  var throttleDelay = 1;
+  self._throttleDelay = 1;
+
+  function getThrottle() {
+
+    if (config.throttle) {
+      return config.throttle;
+    }
+
+    return isAuthenticated() ? 1000 : 2000;
+  }
 
   function isAuthenticated() {
     return typeof self._authData.access_token !== 'undefined' &&
@@ -140,7 +154,9 @@ function Snoocore(config) {
     return url;
   }
 
-  function buildArgs(endpointArgs) {
+  function buildArgs(endpointArgs, endpoint) {
+
+    endpoint = endpoint || {};
     var args = {};
 
     // Skip any url parameters (e.g. items that begin with $)
@@ -148,6 +164,15 @@ function Snoocore(config) {
       if (key.substring(0, 1) !== '$') {
         args[key] = endpointArgs[key];
       }
+    }
+
+    var apiType = (typeof endpointArgs.api_type === 'undefined') ? 
+		  self._apiType : endpointArgs.api_type;
+
+    // If we have an api type (not false), and the endpoint requires it
+    // go ahead and set it in the args.
+    if (apiType && endpoint.args && typeof endpoint.args.api_type !== 'undefined') {
+      args.api_type = 'json';
     }
 
     return args;
@@ -225,17 +250,18 @@ function Snoocore(config) {
     var decodeHtmlEntities = (typeof options.decodeHtmlEntities !== 'undefined') ?
 			     options.decodeHtmlEntities : self._decodeHtmlEntities;
 
+    var throttle = getThrottle();
     var startCallTime = Date.now();
-    throttleDelay += throttle;
+    self._throttleDelay += throttle;
 
     // Wait for the throttle delay amount, then call the Reddit API
-    return delay(throttleDelay - throttle).then(function() {
+    return delay(self._throttleDelay - throttle).then(function() {
 
       var method = endpoint.method.toUpperCase();
       var url = buildUrl(givenArgs, endpoint);
       var parsedUrl = urlLib.parse(url);
 
-      var args = buildArgs(givenArgs);
+      var args = buildArgs(givenArgs, endpoint);
 
       var headers = {};
 
@@ -303,19 +329,24 @@ function Snoocore(config) {
 	  data = he.decode(data);
 	}
 
-	// Attempt to parse some JSON, otherwise continue on (may be empty, or text)
-	  try { data = JSON.parse(data); } catch(e) {}
+	try { // Attempt to parse some JSON, otherwise continue on (may be empty, or text)
+	  data = JSON.parse(data);
+	} catch(e) {}
 
-	// Set the modhash if the data contains it (Cookie based login)
-	  if (data && data.json && data.json.data)
+	if (data && data.json && data.json.data)
 	{
+	  // login cookie information
 	  self._modhash = data.json.data.modhash;
 	  self._redditSession = data.json.data.cookie;
 	}
 
 	// Throw any errors that reddit may inform us about
-	if (data.hasOwnProperty('error')) {
-	  throw new Error('\n>>> Reddit Response:\n\n' + String(data.error)
+	var hasErrors = (data.hasOwnProperty('error') ||
+			 (data && data.json && data.json.errors && data.json.errors.length > 0))
+
+	if (hasErrors) {
+	  var redditResponse = typeof data === 'object' ? JSON.stringify(data, null, 2) : response._body;
+	  throw new Error('\n>>> Reddit Response:\n\n' + redditResponse
 			    + '\n\n>>> Endpoint URL: '+ url
 			  + '\n\n>>> Endpoint method: ' + endpoint.method
 			  + '\n\n>>> Arguments: ' + JSON.stringify(args, null, 2));
@@ -331,9 +362,9 @@ function Snoocore(config) {
       var callDuration = endCallTime - startCallTime;
 
       if (callDuration < throttle) {
-	throttleDelay -= callDuration;
+	self._throttleDelay -= callDuration;
       } else {
-	throttleDelay -= throttle;
+	self._throttleDelay -= throttle;
       }
     });
 

@@ -36,7 +36,7 @@ describe('Snoocore Error Test', function () {
     return reddit;
   }
 
-  it.only('should handle data.json.errors field', function() {
+  it('should handle data.json.errors field', function() {
 
     var reddit = getRedditInstance([ 'identity' ]);
 

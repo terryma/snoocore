@@ -154,6 +154,31 @@ describe('Snoocore Internal Tests', function () {
       expect(reddit._test.buildArgs({ $foo: 'bar' })).to.eql({});
     });
 
+    it('should add in the default api type', function() {
+      reddit = new Snoocore({});
+
+      var args = {};
+      var endpoint = { args: { api_type: '' } };
+
+      expect(reddit._test.buildArgs(args, endpoint)).to.eql({
+	api_type: 'json'
+      });
+    });
+
+    it('should NOT add in the default api type', function() {
+      // By setting apiType to false / '' / anything else falsy, we
+      // will get the default reddit behavior. This is generally 
+      // what most users want to avoid.
+      reddit = new Snoocore({
+	apiType: false
+      });
+
+      var args = {};
+      var endpoint = { args: { api_type: '' } };
+
+      expect(reddit._test.buildArgs(args, endpoint)).to.eql({});
+    });
+
   });
 
   describe('#raw()', function() {

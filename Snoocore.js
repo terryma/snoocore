@@ -38,6 +38,12 @@ function Snoocore(config) {
     ssl: 'https://ssl.reddit.com'
   };
 
+  // Sets the default value used when endpoints specify a `api_type`
+  // attribute. Most of the time, users will need the string "json"
+  // See the docs for more information on this.
+  self._apiType = (typeof config.apiType === 'undefined') ?
+		  'json' : config.apiType;
+
   self._decodeHtmlEntities = config.decodeHtmlEntities || false;
 
   self._modhash = ''; // The current mod hash of whatever user we have
@@ -147,7 +153,9 @@ function Snoocore(config) {
     return url;
   }
 
-  function buildArgs(endpointArgs) {
+  function buildArgs(endpointArgs, endpoint) {
+
+    endpoint = endpoint || {};
     var args = {};
 
     // Skip any url parameters (e.g. items that begin with $)
@@ -155,6 +163,15 @@ function Snoocore(config) {
       if (key.substring(0, 1) !== '$') {
         args[key] = endpointArgs[key];
       }
+    }
+
+    var apiType = (typeof endpointArgs.api_type === 'undefined') ? 
+		  self._apiType : endpointArgs.api_type;
+
+    // If we have an api type (not false), and the endpoint requires it
+    // go ahead and set it in the args.
+    if (apiType && endpoint.args && typeof endpoint.args.api_type !== 'undefined') {
+      args.api_type = 'json';
     }
 
     return args;
@@ -243,7 +260,7 @@ function Snoocore(config) {
       var url = buildUrl(givenArgs, endpoint);
       var parsedUrl = urlLib.parse(url);
 
-      var args = buildArgs(givenArgs);
+      var args = buildArgs(givenArgs, endpoint);
 
       var headers = {};
 

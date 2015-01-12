@@ -101,6 +101,18 @@ describe('Snoocore Behavior Test', function () {
 
   });
 
+  it('should auto-fill api_type to be "json"', function() {
+    return login().then(function() {
+      return reddit('/r/snoocoreTest/about/edit.json').get();
+    }).then(function(result) {
+      var data = result.data;
+      return reddit('/api/site_admin').post(data);
+    }).catch(function(error) {
+      console.log(error);
+      expect(error.message.indexOf('BAD_SR_NAME')).to.not.equal(-1);
+    });
+  });
+
   // Can only test this in node based environments. The browser tests 
   // are unable to unset the cookies (when using user/pass auth).
   //
