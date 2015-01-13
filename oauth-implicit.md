@@ -92,3 +92,7 @@ var deauthPromise = reddit.deauth();
 ```
 
 Generally it is a good idea to call this everytime you are finished using the users data.
+
+### Renewing authentication
+
+Implicit auth does not have a refresh token. You will have to listen for an event and have the user re-authenticate with your application. For more information on this view the [Snoocore Events](events.html) documentation.

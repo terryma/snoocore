@@ -139,3 +139,7 @@ var deauthPromise = reddit.deauth(REFRESH_TOKEN);
 ```
 
 Note that this will revoke all `access_tokens` associated with this refreshToken. It will not be possible to use the refreshToken to get new access_tokens (e.g. re-authenticate with `reddit.refresh`).
+
+### Renewing authentication for `duration: 'temporary'`
+
+If you do not use `duration: "permanent"` then we will not have a refresh token. You will have to listen for an event and have the user re-authenticate with your application. For more information on this view the [Snoocore Events](events.html) documentation.

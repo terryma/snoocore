@@ -9,18 +9,45 @@ Adjust the following default options as necessary when initializing Snoocore. On
 
 ```javascript
 {
-  // You should set a custom user agent for your application
+  /*
+  REQUIRED - Uniquely identify your application
+  */
   userAgent: 'snoocore-default',
 
-  // The default wait is 1 request per 2 seconds. If you use OAuth
-  // for authentication, you can set this to 1 request per second (1000ms)
-  // To disable, set to 0
-  throttle: 2000,
+  /*
+  OPTIONAL - <default: varies>
+  
+  Milliseconds to throttle requests at.
 
-  // See the cookie login section for more information
+  - The default wait is 1 request per 2 seconds (2000ms)
+  - If using OAuth, will adjust to 1 request per second (1000ms)
+  - To disable, set to 0
+  */
+  throttle: <varies>,
+
+  /*
+  OPTIONAL - <default: false>
+
+  Globally decode html entities from reddits response.
+  */
+  decodeHtmlEntities: false
+
+  /*
+  OPTIONAL - <default: "json">
+
+  Auto fill the `api_type` parameter with this value.
+  Set to `false` to not auto-fill this parameter.
+  */
+  apiType: "json"
+
+  /*
+  See the cookie login section for more information
+  */
   login: {},
 
-  // See the oauth login section for more information
+  /*
+  See the oauth login section for more information
+  */
   oauth: {}
 }
 ```
