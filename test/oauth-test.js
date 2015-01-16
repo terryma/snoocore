@@ -3,7 +3,6 @@
 var oauth = require('../oauth');
 var when = require('when');
 var delay = require('when/delay');
-var open = require('open');
 var config = require('./testConfig');
 var testServer = require('./server/testServer');
 var chai = require('chai');
@@ -120,9 +119,7 @@ describe('OAuth Module Test', function (require) {
 	state: 'foo'
       });
 
-      openAndAuth(url);
-
-      return testServer.waitForRequest().then(function(params) {
+      return testServer.allowAuthUrl(url).then(function(params) {
 
 	if (params.error) { throw new Error(params.error); }
 
