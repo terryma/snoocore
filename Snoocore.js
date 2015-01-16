@@ -10,7 +10,6 @@ var when = require('when');
 var delay = require('when/delay');
 
 var rawApi = require('./build/api');
-var redditNodeParser = require('./redditNodeParser');
 var utils = require('./utils');
 
 module.exports = Snoocore;
