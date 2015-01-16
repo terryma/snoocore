@@ -15,7 +15,7 @@ function normalizeScope(scope) {
   if (typeof scope === 'undefined') {
     scope = 'identity';
   } else if (util.isArray(scope)) {
-    scope = scope.join(',');
+    scope = scope.join(' ');
   }
   return scope;
 }

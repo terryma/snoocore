@@ -67,7 +67,7 @@ describe('OAuth Module Test', function (require) {
       expect(url.indexOf('redirect_uri=' + encodeURIComponent(config.reddit.redirectUri))).to.not.equal(-1);
       expect(url.indexOf('duration=temporary')).to.not.equal(-1);
       expect(url.indexOf('response_type=code')).to.not.equal(-1);
-      expect(url.indexOf('scope=' + encodeURIComponent('identity,read,subscribe'))).to.not.equal(-1);
+      expect(url.indexOf('scope=' + encodeURIComponent('identity read subscribe'))).to.not.equal(-1);
     });
 
   });
@@ -87,7 +87,7 @@ describe('OAuth Module Test', function (require) {
       expect(url.indexOf('redirect_uri=' + encodeURIComponent(config.reddit.redirectUri))).to.not.equal(-1);
       expect(url.indexOf('duration=temporary')).to.not.equal(-1);
       expect(url.indexOf('response_type=code')).to.not.equal(-1);
-      expect(url.indexOf('scope=' + encodeURIComponent('identity,read,subscribe'))).to.not.equal(-1);
+      expect(url.indexOf('scope=' + encodeURIComponent('identity read subscribe'))).to.not.equal(-1);
     });
   });
 
@@ -228,7 +228,7 @@ describe('OAuth Module Test', function (require) {
         expect(authData.access_token).to.be.a('string');
         expect(authData.token_type).to.equal('bearer');
         expect(authData.expires_in).to.equal(3600);
-        expect(authData.scope).to.equal('flair,identity');
+        expect(authData.scope).to.equal('flair identity');
       });
     });
 
