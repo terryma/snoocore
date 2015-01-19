@@ -9,7 +9,7 @@ var chaiAsPromised = require('chai-as-promised');
 chai.use(chaiAsPromised);
 var expect = chai.expect;
 
-var Snoocore = require('../../../Snoocore');
+var Snoocore = require('../../Snoocore');
 var config = require('../config');
 var util = require('./util');
 
