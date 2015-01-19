@@ -222,7 +222,8 @@ function Snoocore(config) {
 	return callRedditApi(endpoint, givenArgs, callOptions);
       };
 
-      if (endpoint.isListing) {
+      // Listings can only be 'GET' requests
+      if (endpoint.method === 'GET' && endpoint.isListing) {
 	methods.listing = function(givenArgs, callOptions) {
 	  givenArgs = fixGivenArgs(givenArgs);
 	  return getListing(endpoint, givenArgs, callOptions);
@@ -391,7 +392,7 @@ function Snoocore(config) {
 	slice.count = count;
 
 	slice.get = result || {};
-
+ 
 	slice.before = slice.get.data.before || null;
 	slice.after = slice.get.data.after || null;
 	slice.allChildren = slice.get.data.children || [];
@@ -512,7 +513,7 @@ function Snoocore(config) {
       };
     }
 
-    var endpoints = ['get', 'post', 'put', 'patch', 'delete', 'update']
+    var endpoints = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'UPDATE']
 		       .map(getEndpoint);
     return buildCall(endpoints);
   };
