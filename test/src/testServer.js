@@ -122,9 +122,6 @@ exports.allowOrDeclineAuthUrl = function(url, shouldDecline) {
 	function() { // login
 	  console.log(2);
 	  var login =  when.promise(function(resolve, reject) {
-
-	    console.log(config.reddit);
-
 	    page.evaluate(function(config) {
 	      $('#user_login').val(config.reddit.login.username);
 	      $('#passwd_login').val(config.reddit.login.password);
