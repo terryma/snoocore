@@ -13,7 +13,7 @@ var Snoocore = require('../../Snoocore');
 var config = require('../config');
 var util = require('./util');
 
-describe.only('Snoocore Behavior Test (noauth)', function () {
+describe('Snoocore Behavior Test (noauth)', function () {
 
   this.timeout(config.testTimeout);
 
