@@ -9,11 +9,11 @@ var chaiAsPromised = require('chai-as-promised');
 chai.use(chaiAsPromised);
 var expect = chai.expect;
 
-var Snoocore = require('../../../Snoocore');
+var Snoocore = require('../../Snoocore');
 var config = require('../config');
 var util = require('./util');
 
-describe('Snoocore Behavior Test (noauth)', function () {
+describe.only('Snoocore Behavior Test (noauth)', function () {
 
   this.timeout(config.testTimeout);
 
