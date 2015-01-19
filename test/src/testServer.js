@@ -115,12 +115,10 @@ exports.allowOrDeclineAuthUrl = function(url, shouldDecline) {
 
       var steps = [
 	function() { // open the authentication page
-	  console.log(1);
 	  var openPage = when.promise(function(r) { page.open(url, r); });
 	  return when.join(pageCycle(), openPage);
 	},
 	function() { // login
-	  console.log(2);
 	  var login =  when.promise(function(resolve, reject) {
 	    page.evaluate(function(config) {
 	      $('#user_login').val(config.reddit.login.username);
@@ -133,7 +131,6 @@ exports.allowOrDeclineAuthUrl = function(url, shouldDecline) {
 
 	},
 	function() { // click allow or deny button in form
-	  console.log(3);
 	  var authenticate = when.promise(function(resolve, reject) {
 	    var evalObj = {
 	      shouldDecline: shouldDecline
