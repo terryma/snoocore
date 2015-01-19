@@ -225,7 +225,7 @@ describe('Snoocore OAuth Test', function () {
 
     it('should auth, and call an oauth endpoint', function() {
 
-      var reddit = util.getImplicitInstance([ 'identity ']);
+      var reddit = util.getImplicitInstance([ 'identity' ]);
 
       var state = 'foobar';
       var url = reddit.getImplicitAuthUrl(state);
