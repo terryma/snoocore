@@ -14,6 +14,8 @@ var utils = require('./utils');
 
 module.exports = Snoocore;
 
+Snoocore.version = '2.3.0';
+
 Snoocore.oauth = require('./oauth');
 Snoocore.request = require('./request');
 Snoocore.when = when;
@@ -70,13 +72,15 @@ function Snoocore(config) {
   // Time is added / removed based on the throttle variable.
   self._throttleDelay = 1;
 
-  function getThrottle() {
+  function getThrottle(bypassAuth) {
 
     if (config.throttle) {
       return config.throttle;
     }
 
-    return isAuthenticated() ? 1000 : 2000;
+    // if we are not bypassing the authentication, and are authenticated
+    // then we can wait 1 second, else 2 seconds
+    return (!bypassAuth && isAuthenticated()) ? 1000 : 2000;
   }
 
   function isAuthenticated() {
@@ -131,10 +135,10 @@ function Snoocore(config) {
     return endpointUrl;
   }
 
-  function getAuthOrStandardUrl(endpoint) {
+  function getAuthOrStandardUrl(endpoint, bypassAuth) {
 
     // if we are authenticated and we have oauth scopes for this endpoint...
-    if (isAuthenticated() && endpoint.oauth.length > 0) {
+    if (!bypassAuth && isAuthenticated() && endpoint.oauth.length > 0) {
       return self._server.oauth + endpoint.path;
     }
     // else, decide if we want to use www vs. ssl
@@ -145,8 +149,8 @@ function Snoocore(config) {
 
   // Builds the URL that we will query taking into account any
   // variables in the url containing `$`
-  function buildUrl(givenArgs, endpoint) {
-    var url = getAuthOrStandardUrl(endpoint);
+  function buildUrl(givenArgs, endpoint, bypassAuth) {
+    var url = getAuthOrStandardUrl(endpoint, bypassAuth);
     url = replaceUrlParams(url, givenArgs);
     url = addUrlExtension(url, endpoint.extensions);
     return url;
@@ -164,7 +168,7 @@ function Snoocore(config) {
       }
     }
 
-    var apiType = (typeof endpointArgs.api_type === 'undefined') ? 
+    var apiType = (typeof endpointArgs.api_type === 'undefined') ?
 		  self._apiType : endpointArgs.api_type;
 
     // If we have an api type (not false), and the endpoint requires it
@@ -248,7 +252,7 @@ function Snoocore(config) {
     var decodeHtmlEntities = (typeof options.decodeHtmlEntities !== 'undefined') ?
 			     options.decodeHtmlEntities : self._decodeHtmlEntities;
 
-    var throttle = getThrottle();
+    var throttle = getThrottle(bypassAuth);
     var startCallTime = Date.now();
     self._throttleDelay += throttle;
 
@@ -256,7 +260,7 @@ function Snoocore(config) {
     return delay(self._throttleDelay - throttle).then(function() {
 
       var method = endpoint.method.toUpperCase();
-      var url = buildUrl(givenArgs, endpoint);
+      var url = buildUrl(givenArgs, endpoint, bypassAuth);
       var parsedUrl = urlLib.parse(url);
 
       var args = buildArgs(givenArgs, endpoint);
@@ -293,8 +297,8 @@ function Snoocore(config) {
 				     self._authData.access_token;
 	}
 	else if (isLoggedIn() && self._isNode) {
-	  // Cookie based authentication (only supported in Node.js)
-	    headers['Cookie'] = 'reddit_session=' + self._redditSession + ';';
+	  /* Cookie based authentication (only supported in Node.js) */
+	  headers['Cookie'] = 'reddit_session=' + self._redditSession + ';';
 	}
 
       }
@@ -340,12 +344,12 @@ function Snoocore(config) {
 
 	// Throw any errors that reddit may inform us about
 	var hasErrors = (data.hasOwnProperty('error') ||
-			 (data && data.json && data.json.errors && data.json.errors.length > 0))
+			 (data && data.json && data.json.errors && data.json.errors.length > 0));
 
 	if (hasErrors) {
 	  var redditResponse = typeof data === 'object' ? JSON.stringify(data, null, 2) : response._body;
 	  throw new Error('\n>>> Reddit Response:\n\n' + redditResponse
-			    + '\n\n>>> Endpoint URL: '+ url
+			  + '\n\n>>> Endpoint URL: '+ url
 			  + '\n\n>>> Endpoint method: ' + endpoint.method
 			  + '\n\n>>> Arguments: ' + JSON.stringify(args, null, 2));
 	}
