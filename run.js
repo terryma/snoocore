@@ -46,25 +46,45 @@ exports.buildStandalone = function(done) {
               });
 };
 
-exports.karmaTests = function(done) {
-  var karma = spawn(
-    path.join(__dirname, 'node_modules', 'karma', 'bin', 'karma'),
-    [ 'start' ],
-    { cwd: __dirname, stdio: 'inherit' }
-  );
-
-  karma.on('exit', function(code) {
-    return (code !== 0)
-           ? done(new Error('Karma tests failed to run'))
-			   : done();
-  });
+exports.buildBrowserTests = function(done) {
+  return exec(path.join(__dirname, 'node_modules', '.bin', 'browserify') +
+			' --exclude request/requestNode.js' +
+			' --outfile test/build/browser-tests.js' +
+			' test/browser-tests.js',
+              { cwd: __dirname },
+              function(error, stdout, stderr) {
+                return done(error);
+              });
 };
 
+exports.karmaTests = function(done) {
+  exports.buildBrowserTests(function(error) {
+
+    if (error) {
+      return done(error);
+    }
+
+    var karma = spawn(
+      path.join(__dirname, 'node_modules', 'karma', 'bin', 'karma'),
+      [ 'start', 'test/karma.conf.js'  ],
+      { cwd: __dirname, stdio: 'inherit' }
+    );
+
+    karma.on('exit', function(code) {
+      return (code !== 0)
+             ? done(new Error('Karma tests failed to run'))
+			     : done();
+    });
+  });
+};
 
 exports.mochaTests = function(done) {
   var mocha = spawn(
     path.join(__dirname, 'node_modules', '.bin', 'mocha'),
-    [ '-R', 'spec' ],
+    [
+      '-R', 'spec',
+      'test/node-tests.js'
+    ],
     { cwd: __dirname, stdio: 'inherit' }
   );
 
@@ -112,7 +132,6 @@ switch(argv[0]) {
   case 'all':
     fn = exports.all;
     break;
-  case 'browserify':
   case 'standalone':
     fn = exports.buildStandalone;
     break;

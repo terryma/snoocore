@@ -1,17 +1,21 @@
 /* global describe, it */
 
-var oauth = require('../oauth');
 var when = require('when');
 var delay = require('when/delay');
-var config = require('./testConfig');
-var testServer = require('./server/testServer');
 var chai = require('chai');
 var chaiAsPromised = require('chai-as-promised');
-
 chai.use(chaiAsPromised);
 var expect = chai.expect;
 
+var testServer = require('./testServer');
+var util = require('./util');
+var config = require('../config');
+var oauth = require('../../oauth');
+
+
 describe('OAuth Module Test', function (require) {
+
+  this.timeout(config.testTimeout);
 
   function openAndAuth(url) {
     console.log('Opening the following url in your browser:');
@@ -21,13 +25,13 @@ describe('OAuth Module Test', function (require) {
   describe('#getAuthUrl()', function() {
     it('should get a proper authorization url (WEB/INSTALLED)', function() {
       var url = oauth.getAuthUrl({
-	consumerKey: config.reddit.REDDIT_KEY_WEB,
+	consumerKey: config.reddit.web.key,
 	redirectUri: config.reddit.redirectUri,
 	state: 'foo'
       });
 
       expect(url.indexOf('https://www.reddit.com/api/v1/authorize?')).to.not.equal(-1);
-      expect(url.indexOf('client_id=' + config.reddit.REDDIT_KEY_WEB)).to.not.equal(-1);
+      expect(url.indexOf('client_id=' + config.reddit.web.key)).to.not.equal(-1);
       expect(url.indexOf('state=foo')).to.not.equal(-1);
       expect(url.indexOf('redirect_uri=' + encodeURIComponent(config.reddit.redirectUri))).to.not.equal(-1);
       expect(url.indexOf('duration=temporary')).to.not.equal(-1);
@@ -37,14 +41,14 @@ describe('OAuth Module Test', function (require) {
 
     it('should get a proper authorization url (mobile friendly) (WEB/INSTALLED)', function() {
       var url = oauth.getAuthUrl({
-	consumerKey: config.reddit.REDDIT_KEY_WEB,
+	consumerKey: config.reddit.web.key,
 	redirectUri: config.reddit.redirectUri,
 	state: 'foo',
 	mobile: true
       });
 
       expect(url.indexOf('https://www.reddit.com/api/v1/authorize.compact?')).to.not.equal(-1);
-      expect(url.indexOf('client_id=' + config.reddit.REDDIT_KEY_WEB)).to.not.equal(-1);
+      expect(url.indexOf('client_id=' + config.reddit.web.key)).to.not.equal(-1);
       expect(url.indexOf('state=foo')).to.not.equal(-1);
       expect(url.indexOf('redirect_uri=' + encodeURIComponent(config.reddit.redirectUri))).to.not.equal(-1);
       expect(url.indexOf('duration=temporary')).to.not.equal(-1);
@@ -54,14 +58,14 @@ describe('OAuth Module Test', function (require) {
 
     it('should get back a proper authorization url (multiple scopes) (WEB/INSTALLED)', function() {
       var url = oauth.getAuthUrl({
-	consumerKey: config.reddit.REDDIT_KEY_WEB,
+	consumerKey: config.reddit.web.key,
 	redirectUri: config.reddit.redirectUri,
 	state: 'foo',
 	scope: [ 'identity', 'read', 'subscribe' ]
       });
 
       expect(url.indexOf('https://www.reddit.com/api/v1/authorize?')).to.not.equal(-1);
-      expect(url.indexOf('client_id=' + config.reddit.REDDIT_KEY_WEB)).to.not.equal(-1);
+      expect(url.indexOf('client_id=' + config.reddit.web.key)).to.not.equal(-1);
       expect(url.indexOf('state=foo')).to.not.equal(-1);
       expect(url.indexOf('redirect_uri=' + encodeURIComponent(config.reddit.redirectUri))).to.not.equal(-1);
       expect(url.indexOf('duration=temporary')).to.not.equal(-1);
@@ -74,14 +78,14 @@ describe('OAuth Module Test', function (require) {
   describe('#getExplicitAuthUrl()', function() {
     it('should be the same as getAuthUrl()', function() {
       var url = oauth.getExplicitAuthUrl({
-	consumerKey: config.reddit.REDDIT_KEY_WEB,
+	consumerKey: config.reddit.web.key,
 	redirectUri: config.reddit.redirectUri,
 	state: 'foo',
 	scope: [ 'identity', 'read', 'subscribe' ]
       });
 
       expect(url.indexOf('https://www.reddit.com/api/v1/authorize?')).to.not.equal(-1);
-      expect(url.indexOf('client_id=' + config.reddit.REDDIT_KEY_WEB)).to.not.equal(-1);
+      expect(url.indexOf('client_id=' + config.reddit.web.key)).to.not.equal(-1);
       expect(url.indexOf('state=foo')).to.not.equal(-1);
       expect(url.indexOf('redirect_uri=' + encodeURIComponent(config.reddit.redirectUri))).to.not.equal(-1);
       expect(url.indexOf('duration=temporary')).to.not.equal(-1);
@@ -93,13 +97,13 @@ describe('OAuth Module Test', function (require) {
   describe('#getImplicitAuthUrl()', function() {
     it('should get back an implicit grant authorization url', function() {
       var url = oauth.getImplicitAuthUrl({
-	consumerKey: config.reddit.REDDIT_KEY_WEB,
+	consumerKey: config.reddit.installed.key,
 	redirectUri: config.reddit.redirectUri,
 	state: 'foo'
       });
 
       expect(url.indexOf('https://www.reddit.com/api/v1/authorize?')).to.not.equal(-1);
-      expect(url.indexOf('client_id=' + config.reddit.REDDIT_KEY_WEB)).to.not.equal(-1);
+      expect(url.indexOf('client_id=' + config.reddit.installed.key)).to.not.equal(-1);
       expect(url.indexOf('state=foo')).to.not.equal(-1);
       expect(url.indexOf('redirect_uri=' + encodeURIComponent(config.reddit.redirectUri))).to.not.equal(-1);
       expect(url.indexOf('response_type=token')).to.not.equal(-1);
@@ -111,10 +115,8 @@ describe('OAuth Module Test', function (require) {
 
     it('(Explicit) it should get an access token', function() {
 
-      this.timeout(30000);
-
       var url = oauth.getAuthUrl({
-	consumerKey: config.reddit.REDDIT_KEY_WEB,
+	consumerKey: config.reddit.web.key,
 	redirectUri: config.reddit.redirectUri,
 	state: 'foo'
       });
@@ -129,8 +131,8 @@ describe('OAuth Module Test', function (require) {
 	var authorizationCode = params.code;
 
 	return oauth.getAuthData('explicit', {
-	  consumerKey: config.reddit.REDDIT_KEY_WEB,
-	  consumerSecret: config.reddit.REDDIT_SECRET_WEB,
+	  consumerKey: config.reddit.web.key,
+	  consumerSecret: config.reddit.web.secret,
 	  authorizationCode: authorizationCode,
 	  redirectUri: config.reddit.redirectUri
 	});
@@ -147,13 +149,11 @@ describe('OAuth Module Test', function (require) {
 
     it('(Script) should get an access token', function() {
 
-      this.timeout(10000);
-
       return oauth.getAuthData('script', {
-        consumerKey: config.reddit.REDDIT_KEY_SCRIPT,
-        consumerSecret: config.reddit.REDDIT_SECRET_SCRIPT,
-        username: config.reddit.REDDIT_USERNAME,
-        password: config.reddit.REDDIT_PASSWORD
+        consumerKey: config.reddit.script.key,
+        consumerSecret: config.reddit.script.secret,
+        username: config.reddit.login.username,
+        password: config.reddit.login.password
       }).then(function(authData) {
         expect(authData).to.be.an('object');
 
@@ -167,13 +167,12 @@ describe('OAuth Module Test', function (require) {
     });
 
     it('(Script + 1 scope string) should get an access token', function() {
-      this.timeout(10000);
 
       return oauth.getAuthData('script', {
-        consumerKey: config.reddit.REDDIT_KEY_SCRIPT,
-        consumerSecret: config.reddit.REDDIT_SECRET_SCRIPT,
-        username: config.reddit.REDDIT_USERNAME,
-        password: config.reddit.REDDIT_PASSWORD,
+	consumerKey: config.reddit.script.key,
+        consumerSecret: config.reddit.script.secret,
+        username: config.reddit.login.username,
+        password: config.reddit.login.password,
         scope: 'flair'
       }).then(function(authData) {
         expect(authData).to.be.an('object');
@@ -188,13 +187,12 @@ describe('OAuth Module Test', function (require) {
     });
 
     it('(Script + 1 scope array) should get an access token', function() {
-      this.timeout(10000);
 
       return oauth.getAuthData('script', {
-        consumerKey: config.reddit.REDDIT_KEY_SCRIPT,
-        consumerSecret: config.reddit.REDDIT_SECRET_SCRIPT,
-        username: config.reddit.REDDIT_USERNAME,
-        password: config.reddit.REDDIT_PASSWORD,
+	consumerKey: config.reddit.script.key,
+        consumerSecret: config.reddit.script.secret,
+        username: config.reddit.login.username,
+        password: config.reddit.login.password,
         scope: [ 'flair' ]
       }).then(function(authData) {
         expect(authData).to.be.an('object');
@@ -209,13 +207,12 @@ describe('OAuth Module Test', function (require) {
     });
 
     it('(Script + multi scope array) should get an access token', function() {
-      this.timeout(10000);
 
       return oauth.getAuthData('script', {
-        consumerKey: config.reddit.REDDIT_KEY_SCRIPT,
-        consumerSecret: config.reddit.REDDIT_SECRET_SCRIPT,
-        username: config.reddit.REDDIT_USERNAME,
-        password: config.reddit.REDDIT_PASSWORD,
+	consumerKey: config.reddit.script.key,
+        consumerSecret: config.reddit.script.secret,
+        username: config.reddit.login.username,
+        password: config.reddit.login.password,
         scope: [ 'flair', 'identity' ]
       }).then(function(authData) {
         expect(authData).to.be.an('object');

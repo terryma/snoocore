@@ -1,3 +1,10 @@
+/*
+   Allows for CI - automated testing of the Node.js API
+
+   Uses PhantomJS to login, and click on the Allow / Decline
+   prompt for our OAuth tests.
+ */
+
 var when = require('when');
 var callbacks = require('when/callbacks');
 var pipeline = require('when/pipeline');
@@ -6,64 +13,65 @@ var urlLib = require('url');
 var http = require('http');
 var phantom = require('phantom');
 
-var testConfig = require('../testConfig');
+var config = require('../config');
 
-// opens the given url, and accepts the authentication
-// unless `shouldRejectAuth` is true in which the authentication
-// is rejected!
-exports.allowOrDeclineAuthUrl = function(url, shouldDecline) {
+/* GLOBALS */
+var server;
+var connections = [];
 
-  var server = http.createServer();
-  var connections = [];
+// Attempts to start the server on port 3000. If the port
+// is in use, it will wait a moment and try again for a 
+// given number of attempts
+exports.start = function() {
+
+  server = http.createServer();
 
   server.on('request', function(req, res) {
     connections.push(req.connection);
     res.end('');
   });
 
-  // Attempts to start the server on port 3000. If the port
-  // is in use, it will wait a moment and try again for a 
-  // given number of attempts
-  function startServer() {
-    return when.promise(function(resolve, reject) {
-      var attempts = 10;
+  return when.promise(function(resolve, reject) {
+    var attempts = 10;
 
-      function connect() {
-	try {
-	  server.listen('3000', '127.0.0.1');
-	} catch(e) {
-	  --attempts;
-	  console.error('trying again ' + attempts + ' left - ' + e.message);
-	  if (attempts <= 0) {
-	    return reject(e);
-	  }
-	  return setTimeout(connect, 500); // try again after 500ms
+    function connect() {
+      try {
+	server.listen(config.testServer.port, '127.0.0.1');
+      } catch(e) {
+	--attempts;
+	console.error('trying again ' + attempts + ' left - ' + e.message);
+	if (attempts <= 0) {
+	  return reject(e);
 	}
-
-	return resolve(); // we have connected!
+	return setTimeout(connect, 500); // try again after 500ms
       }
 
-      connect();
+      return resolve(); // we have connected!
+    }
+
+    connect();
+  });
+};
+
+exports.stop = function() {
+  return when.promise(function(resolve, reject) {
+    connections.forEach(function(connection) {
+      connection.end();
+      connection.destroy();
     });
-  }
 
-  function killServer() {
-    return when.promise(function(resolve, reject) {
-      connections.forEach(function(connection) {
-	connection.end();
-	connection.destroy();
-      });
+    server.close(function() {
+      return resolve();
+    });
+  }); // add a little delay to help free up the port
+}
 
-      server.close(function() {
-	return resolve();
-      });
-    }).delay(1000); // add a little delay to help free up the port
-  }
+// opens the given url, and accepts the authentication
+// unless `shouldRejectAuth` is true in which the authentication
+// is rejected!
+exports.allowOrDeclineAuthUrl = function(url, shouldDecline) {
 
-  return startServer().then(function() {
-    // callbacks.call does not work here for some reason
-    return when.promise(function(r) { phantom.create(r); });
-  }).then(function(ph) {
+  return when.promise(function(r) { phantom.create(r); }).then(function(ph) {
 
     return callbacks.call(ph.createPage).then(function(page) {
 
@@ -114,11 +122,11 @@ exports.allowOrDeclineAuthUrl = function(url, shouldDecline) {
 	},
 	function() { // login
 	  var login =  when.promise(function(resolve, reject) {
-	    page.evaluate(function(testConfig) {
-	      $('#user_login').val(testConfig.reddit.REDDIT_USERNAME);
-	      $('#passwd_login').val(testConfig.reddit.REDDIT_PASSWORD);
+	    page.evaluate(function(config) {
+	      $('#user_login').val(config.reddit.login.username);
+	      $('#passwd_login').val(config.reddit.login.password);
 	      $('#login-form').submit();
-	    }, resolve, testConfig);
+	    }, resolve, config);
 	  });
 
 	  return when.join(pageCycle(), login);
@@ -151,11 +159,9 @@ exports.allowOrDeclineAuthUrl = function(url, shouldDecline) {
 
       return pipeline(steps);
     }).then(function(url) {
-      return killServer().then(function() {
-	url = url.replace('/#', '/?'); // for implicit auth urls that use hash instead of ? for query strings
-	var parsed = urlLib.parse(url, true);
-	return parsed.query;
-      });
+      url = url.replace('/#', '/?'); // implicit auth urls use # vs. ? for query str.
+      var parsed = urlLib.parse(url, true);
+      return parsed.query;
     }).finally(function() {
       ph.exit(); // kill phantom process
     });

@@ -1,29 +1,26 @@
 /* global describe, it, beforeEach */
 
-var Snoocore = require('../Snoocore');
 var when = require('when');
 var delay = require('when/delay');
-var config = require('./testConfig');
-var testServer = require('./server/testServer');
+
 var chai = require('chai');
 var chaiAsPromised = require('chai-as-promised');
-
 chai.use(chaiAsPromised);
 var expect = chai.expect;
 
-describe.only('Snoocore OAuth Test', function () {
+var Snoocore = require('../../Snoocore');
+var config = require('../config');
+var testServer = require('./testServer');
+var util = require('./util');
 
-  this.timeout(30000);
+describe('Snoocore OAuth Test', function () {
+
+  this.timeout(config.testTimeout);
 
   describe('Unauthenticated test cases', function() {
 
-    var reddit = new Snoocore({ userAgent: 'snoocore-test-userAgent' });
-
-    beforeEach(function() {
-      return reddit.deauth();
-    });
-
     it('should get back error 403 when not authenticated', function() {
+      var reddit = util.getRawInstance();
       return reddit('/api/v1/me').get().then(function(data) {
         throw new Error('should not pass, expect to fail with error');
       }).catch(function(error) {
@@ -35,15 +32,12 @@ describe.only('Snoocore OAuth Test', function () {
 
   describe('External OAuth (using oauth.js)', function() {
 
-    var reddit = new Snoocore({ userAgent: 'snoocore-test-userAgent' });
-
     it('(Explicit) should authenticate with OAuth, and call an oauth endpoint', function() {
-      // because there is user intervention with these tests, give them
-      // two minutes before timing out!
-      this.timeout(30000);
+
+      var reddit = util.getRawInstance();
 
       var url = Snoocore.oauth.getExplicitAuthUrl({
-        consumerKey: config.reddit.REDDIT_KEY_WEB,
+        consumerKey: config.reddit.web.key,
         redirectUri: config.reddit.redirectUri,
         state: 'foo'
       });
@@ -52,8 +46,8 @@ describe.only('Snoocore OAuth Test', function () {
 
         var authorizationCode = params.code;
         return Snoocore.oauth.getAuthData('web', {
-          consumerKey: config.reddit.REDDIT_KEY_WEB,
-          consumerSecret: config.reddit.REDDIT_SECRET_WEB,
+          consumerKey: config.reddit.web.key,
+          consumerSecret: config.reddit.web.secret,
           authorizationCode: authorizationCode,
           redirectUri: config.reddit.redirectUri
         }).then(function(authData) {
@@ -69,38 +63,40 @@ describe.only('Snoocore OAuth Test', function () {
     });
 
     it('(Script) should authenticate with OAuth, and call an oauth endpoint', function() {
-      this.timeout(30000);
+
+      var reddit = util.getRawInstance();
 
       return Snoocore.oauth.getAuthData('script', {
-        consumerKey: config.reddit.REDDIT_KEY_SCRIPT,
-        consumerSecret: config.reddit.REDDIT_SECRET_SCRIPT,
-        username: config.reddit.REDDIT_USERNAME,
-        password: config.reddit.REDDIT_PASSWORD
+        consumerKey: config.reddit.script.key,
+        consumerSecret: config.reddit.script.secret,
+        username: config.reddit.login.username,
+        password: config.reddit.login.password
       }).then(function(authData) {
 	return reddit.auth(authData);
       }).then(function() {
 	return reddit('/api/v1/me').get();
       }).then(function(data) {
 	expect(data.error).to.be.undefined;
-	expect(data.name).to.equal(config.reddit.REDDIT_USERNAME);
+	expect(data.name).to.equal(config.reddit.login.username);
       });
     });
 
     it('(Script) should take a promise for authData', function() {
-      this.timeout(30000);
+
+      var reddit = util.getRawInstance();
 
       var authData = Snoocore.oauth.getAuthData('script', {
-        consumerKey: config.reddit.REDDIT_KEY_SCRIPT,
-        consumerSecret: config.reddit.REDDIT_SECRET_SCRIPT,
-        username: config.reddit.REDDIT_USERNAME,
-        password: config.reddit.REDDIT_PASSWORD
+        consumerKey: config.reddit.script.key,
+        consumerSecret: config.reddit.script.secret,
+        username: config.reddit.login.username,
+        password: config.reddit.login.password
       });
 
       return reddit.auth(authData).then(function() {
         return reddit('/api/v1/me').get();
       }).then(function(data) {
         expect(data.error).to.be.undefined;
-        expect(data.name).to.equal(config.reddit.REDDIT_USERNAME);
+        expect(data.name).to.equal(config.reddit.login.username);
       });
     });
 
@@ -108,20 +104,10 @@ describe.only('Snoocore OAuth Test', function () {
 
   describe('Internal OAuth; Explicit internal configuration (duration permanent)', function() {
 
-    var reddit = new Snoocore({
-      userAgent: 'snoocore-test-userAgent',
-      oauth: {
-        type: 'explicit',
-        duration: 'permanent',
-        consumerKey: config.reddit.REDDIT_KEY_WEB,
-        consumerSecret: config.reddit.REDDIT_SECRET_WEB,
-        redirectUri: config.reddit.redirectUri,
-        scope: [ 'identity' ]
-      }
-    });
 
     it('should auth, get refresh token, deauth, use refresh token to reauth, deauth(true) -> refresh', function() {
-      this.timeout(30000);
+
+      var reddit = util.getExplicitInstance([ 'identity' ], 'permanent');
 
       var url = reddit.getExplicitAuthUrl();
 
@@ -157,7 +143,8 @@ describe.only('Snoocore OAuth Test', function () {
     });
 
     it('should auth, deauth (simulate expired access_token), call endpoint which will request a new access_token', function() {
-      this.timeout(30000);
+
+      var reddit = util.getExplicitInstance([ 'identity' ], 'permanent');
 
       var url = reddit.getExplicitAuthUrl();
 
@@ -194,19 +181,10 @@ describe.only('Snoocore OAuth Test', function () {
 
   describe('Internal OAuth; Explicit internal configuration (duration temporary)', function() {
 
-    var reddit = new Snoocore({
-      userAgent: 'snoocore-test-userAgent',
-      oauth: {
-        type: 'explicit',
-        consumerKey: config.reddit.REDDIT_KEY_WEB,
-        consumerSecret: config.reddit.REDDIT_SECRET_WEB,
-        redirectUri: config.reddit.redirectUri,
-        scope: [ 'identity' ]
-      }
-    });
 
     it('should auth, and call an oauth endpoint', function() {
-      this.timeout(30000);
+
+      var reddit = util.getExplicitInstance([ 'identity' ]);
 
       var url = reddit.getExplicitAuthUrl();
 
@@ -222,8 +200,8 @@ describe.only('Snoocore OAuth Test', function () {
     });
 
     it('should auth, and call an oauth endpoint (check state)', function() {
-      this.timeout(30000);
 
+      var reddit = util.getExplicitInstance([ 'identity' ]);
       var state = 'foobar';
       var url = reddit.getExplicitAuthUrl(state);
 
@@ -244,50 +222,42 @@ describe.only('Snoocore OAuth Test', function () {
   });
 
   describe('Internal OAuth; Implicit internal configuration', function() {
-    var reddit = new Snoocore({
-      userAgent: 'snoocore-test-userAgent',
-      oauth: {
-        type: 'implicit',
-        consumerKey: config.reddit.REDDIT_KEY_INSTALLED,
-        redirectUri: config.reddit.redirectUri,
-        scope: [ 'identity' ]
-      }
-    });
 
     it('should auth, and call an oauth endpoint', function() {
-      this.timeout(30000);
+
+      var reddit = util.getImplicitInstance([ 'identity ']);
 
       var state = 'foobar';
       var url = reddit.getImplicitAuthUrl(state);
 
       return testServer.allowAuthUrl(url).then(function(params) {
-	
+
         expect(params.state).to.equal(state);
 
         var accessToken = params['access_token'];
 
 	// Set this auth tokens "expire" to 10 seconds.
-        return reddit.auth(accessToken, 10000).then(function() {
-          return reddit('/api/v1/me').get();
-        }).then(function(data) {
-          expect(data.error).to.be.undefined;
-          expect(data.name).to.be.a('string');
+			  return reddit.auth(accessToken, 10000).then(function() {
+			    return reddit('/api/v1/me').get();
+			  }).then(function(data) {
+			    expect(data.error).to.be.undefined;
+			    expect(data.name).to.be.a('string');
 
-	  // wait for access token to expire
-	  return when.promise(function(resolve, reject) {
-	    reddit.on('auth_token_expired', function() {
+			    // wait for access token to expire
+			    return when.promise(function(resolve, reject) {
+			      reddit.on('auth_token_expired', function() {
 
-	      // check that calling an endpoint fails with an expired token
-	      return reddit('/api/v1/me').get().done(function() {
-		reject(); // should have failed, reject this promise
-	      }, function(error) {
-		expect(error.message).to.equal('Authorization token has expired. Listen for the "auth_token_expired" event to handle this gracefully in your app.');
-		resolve();
-	      });
-	    });
-	  });
+				// check that calling an endpoint fails with an expired token
+				return reddit('/api/v1/me').get().done(function() {
+				  reject(); // should have failed, reject this promise
+				}, function(error) {
+				  expect(error.message).to.equal('Authorization token has expired. Listen for the "auth_token_expired" event to handle this gracefully in your app.');
+				  resolve();
+				});
+			      });
+			    });
 
-        });
+			  });
       });
     });
 
@@ -295,21 +265,9 @@ describe.only('Snoocore OAuth Test', function () {
 
   describe('Internal OAuth; Script internal configuration Authenticate tests', function() {
 
-    var reddit = new Snoocore({
-      userAgent: 'snoocore-test-userAgent',
-      login: {
-        username: config.reddit.REDDIT_USERNAME,
-        password: config.reddit.REDDIT_PASSWORD
-      },
-      oauth: {
-        type: 'script',
-        consumerKey: config.reddit.REDDIT_KEY_SCRIPT,
-        consumerSecret: config.reddit.REDDIT_SECRET_SCRIPT
-      }
-    });
-
     it('should authenticate with OAuth, and call an oauth endpoint', function() {
-      this.timeout(30000);
+
+      var reddit = util.getScriptInstance();
 
       return reddit.auth().then(reddit('/api/v1/me').get).then(function(data) {
         expect(data.error).to.be.undefined;
@@ -320,33 +278,21 @@ describe.only('Snoocore OAuth Test', function () {
 
   describe('General Reddit API Tests using OAuth', function() {
 
-    var reddit = new Snoocore({
-      userAgent: 'snoocore-test-userAgent',
-      login: {
-        username: config.reddit.REDDIT_USERNAME,
-        password: config.reddit.REDDIT_PASSWORD
-      },
-      oauth: {
-        type: 'script',
-        consumerKey: config.reddit.REDDIT_KEY_SCRIPT,
-        consumerSecret: config.reddit.REDDIT_SECRET_SCRIPT,
-        scope: [ 'identity', 'mysubreddits' ]
-      }
-    });
-
-    beforeEach(function() {
-      return reddit.deauth();
-    });
-
     it('should get resources when logged in', function() {
+
+      var reddit = util.getScriptInstance([ 'identity', 'mysubreddits' ]);
+
       return reddit.auth()
                    .then(reddit('/api/v1/me').get)
                    .then(function(data) {
-                     expect(data.name).to.equal(config.reddit.REDDIT_USERNAME);
+                     expect(data.name).to.equal(config.reddit.login.username);
                    });
     });
 
     it('should GET resources when logged in (respect parameters)', function() {
+
+      var reddit = util.getScriptInstance([ 'identity', 'mysubreddits' ]);
+
       return reddit.auth().then(function() {
         return reddit('/subreddits/mine/$where').get({
           $where: 'subscriber',

@@ -1,5 +1,3 @@
-// Karma configuration
-// Generated on Mon Feb 24 2014 21:49:20 GMT-0500 (EST)
 
 module.exports = function(config) {
   config.set({
@@ -14,22 +12,8 @@ module.exports = function(config) {
 
     // list of files / patterns to load in the browser
     files: [
-      'node_modules/chai/chai.js',
-      'node_modules/chai-as-promised/lib/chai-as-promised.js',
-      'dist/Snoocore-standalone.js',
-      'test/*'
+      'build/browser-tests.js'
     ],
-
-
-    // list of files to exclude
-    exclude: [
-      'test/oauth-test.js',
-      'test/snoocore-oauth-test.js',
-      'test/snoocore-error-test.js',
-      'test/snoocore-cookie-test.js',
-      'test/snoocore-behavior-test.js'
-    ],
-
 
     // test results reporter to use
     // possible values: 'dots', 'progress', 'junit', 'growl', 'coverage'

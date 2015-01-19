@@ -28,7 +28,8 @@
     "karma-safari-launcher": "^0.1.1",
     "mocha": "^2.0.1",
     "phantom": "^0.7.2",
-    "snooform": "0.1.0"
+    "snooform": "0.1.0",
+    "toml": "^2.1.1"
   },
   "directories": {
     "test": "test"
@@ -40,6 +41,6 @@
     "wrapper"
   ],
   "scripts": {
-    "test": "./run.js all"
+    "test": "./run.js mocha"
   }
 }

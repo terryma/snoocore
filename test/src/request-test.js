@@ -1,28 +1,18 @@
 /* global describe, it */
 
-var isNode = typeof require === "function" &&
-typeof exports === "object" &&
-typeof module === "object" &&
-typeof window === "undefined";
-
-if (isNode)
-{
-  var Snoocore = require('../Snoocore');
-
-  var config = require('./testConfig');
-  var chai = require('chai');
-  var chaiAsPromised = require('chai-as-promised');
-}
-
+var chai = require('chai');
+var chaiAsPromised = require('chai-as-promised');
 chai.use(chaiAsPromised);
 var expect = chai.expect;
 
+var config = require('../config');
+var Snoocore = require('../../Snoocore');
+
 describe('Request Test', function () {
 
-  this.timeout(20000);
+  this.timeout(config.testTimeout);
 
   it('should GET resources from reddit', function() {
-
     return Snoocore.request.https({
       hostname: 'www.reddit.com',
       path: '/r/askreddit/hot.json',
@@ -31,7 +21,6 @@ describe('Request Test', function () {
       var data = JSON.parse(res._body);
       expect(data.kind).to.equal('Listing');
     });
-
   });
 
 });

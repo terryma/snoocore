@@ -5,43 +5,29 @@
 // right direction. The Reddit API is a bit of a mystery when 
 // starting out.
 
-var Snoocore = require('../Snoocore');
 var when = require('when');
-var config = require('./testConfig');
+
 var chai = require('chai');
 var chaiAsPromised = require('chai-as-promised');
-
 chai.use(chaiAsPromised);
 var expect = chai.expect;
 
+var Snoocore = require('../../Snoocore');
+var config = require('../config');
+var util = require('./util');
+
 describe('Snoocore Error Test', function () {
 
-  this.timeout(20000);
-
-  function getRedditInstance(scopes) {
-    var reddit = new Snoocore({
-      userAgent: 'snoocore-test-error-userAgent',
-      login: {
-	username: config.reddit.REDDIT_USERNAME,
-	password: config.reddit.REDDIT_PASSWORD
-      },
-      oauth: {
-	type: 'script',
-	consumerKey: config.reddit.REDDIT_KEY_SCRIPT,
-	consumerSecret: config.reddit.REDDIT_SECRET_SCRIPT,
-	scope: scopes
-      }
-    });
-
-    return reddit;
-  }
+  this.timeout(config.testTimeout);
 
   it('should handle data.json.errors field', function() {
 
-    var reddit = getRedditInstance([ 'identity' ]);
+    var reddit = util.getScriptInstance([ 'identity', 'modconfig' ]);
 
-    return reddit.login().then(function() {
-      return reddit('/r/snoocoreTest/about/edit.json').get();
+    return reddit.auth().then(function() {
+      return reddit('/r/$subreddit/about/edit.json').get({
+	$subreddit: config.reddit.testSubreddit
+      });
     }).then(function(result) {
 
       var data = result.data;
@@ -56,7 +42,8 @@ describe('Snoocore Error Test', function () {
   });
 
   it('should explain what scope was missing', function() {
-    var reddit = getRedditInstance([ 'identity' ]);
+
+    var reddit = util.getScriptInstance([ 'identity' ]);
 
     return reddit.auth().then(function() {
       return reddit('/comments/$article').get({
@@ -72,7 +59,7 @@ describe('Snoocore Error Test', function () {
   });
 
   it('should spit out more information when we come to an error (url & args used)', function() {
-    var reddit = getRedditInstance([ 'identity', 'read' ]);
+    var reddit = util.getScriptInstance([ 'identity', 'read' ]);
 
     return reddit.auth().then(function() {
       return reddit('/comments/$article').get({

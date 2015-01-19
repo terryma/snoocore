@@ -1,36 +1,23 @@
 /* global describe, it, before */
 
-var isNode = typeof require === "function" &&
-typeof exports === "object" &&
-typeof module === "object" &&
-typeof window === "undefined";
+var path = require('path');
 
-if (isNode)
-{
-  var path = require('path');
-  var Snoocore = require('../Snoocore');
-  var config = require('./testConfig');
-  var chai = require('chai');
-  var chaiAsPromised = require('chai-as-promised');
-}
-
+var chai = require('chai');
+var chaiAsPromised = require('chai-as-promised');
 chai.use(chaiAsPromised);
 var expect = chai.expect;
 
+var Snoocore = require('../../Snoocore');
+var config = require('../config');
+var util = require('./util');
+
 describe('Snoocore Listings Test', function () {
 
-  this.timeout(20000);
-
-  var reddit;
-
-  before(function() {
-    reddit = new Snoocore({
-      userAgent: 'snoocore-test-userAgent',
-      browser: !isNode
-    });
-  });
+  this.timeout(config.testTimeout);
 
   it('should get the front page listing and nav through it (basic)', function() {
+
+    var reddit = util.getRawInstance();
 
     // or reddit('/hot').listing
     return reddit('/hot').listing().then(function(slice) {
@@ -59,6 +46,9 @@ describe('Snoocore Listings Test', function () {
   });
 
   it('should handle empty listings', function() {
+
+    var reddit = util.getRawInstance();
+
     return reddit('/user/$username/$where').listing({
       $username: 'emptyListing', // an account with no comments
       $where: 'comments'
@@ -68,6 +58,8 @@ describe('Snoocore Listings Test', function () {
   });
 
   it('should requery a listing after changes have been made', function() {
+
+    var reddit = util.getRawInstance();
 
     // @TODO we need a better way to test this (without using captcha's)
     // as of now it is requerying empty comments of a user which runs the
@@ -86,11 +78,15 @@ describe('Snoocore Listings Test', function () {
   });
 
   it('should work with reddit.raw', function() {
+    
+    var reddit = util.getRawInstance();
+
     return reddit.raw('https://www.reddit.com/domain/$domain/hot.json').listing({
       $domain: 'google.com'
-    }).done(function(slice) {
+    }).then(function(slice) {
       expect(slice.get.kind).to.equal('Listing');
     });
+
   });
 
 });
