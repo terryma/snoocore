@@ -345,6 +345,7 @@ function Snoocore(config) {
 
 	// Throw any errors that reddit may inform us about
 	var hasErrors = (data.hasOwnProperty('error') ||
+			 data.hasOwnProperty('errors') ||
 			 (data && data.json && data.json.errors && data.json.errors.length > 0));
 
 	if (hasErrors) {

@@ -41,6 +41,23 @@ describe('Snoocore Error Test', function () {
     });
   });
 
+  it.only('should handle data.errors field', function() {
+    var reddit = util.getScriptInstance([ 'modconfig' ]);
+
+    return reddit.auth().then(function() {
+      return reddit('/r/$subreddit/api/upload_sr_img').post({
+	$subreddit: config.reddit.testSubreddit,
+	file: 'fakeimage',
+	header: 0,
+	img_type: 'png',
+	name: 'test'
+      });
+    }).catch(function(error) {
+      expect(error.message.indexOf('IMAGE_ERROR')).to.not.equal(-1);
+    });
+
+  });
+
   it('should explain what scope was missing', function() {
 
     var reddit = util.getScriptInstance([ 'identity' ]);

@@ -37,16 +37,22 @@ describe('Snoocore Behavior Test', function () {
     });
   });
 
-  it.skip('should be able to upload files', function() {
+  it.skip('should be able to upload files in Node', function() {
     var reddit = util.getScriptInstance([ 'modconfig' ]);
     var appIcon = path.join(__dirname, 'img', 'appicon.png');
 
+    console.log(path.join(__dirname, 'img', 'appicon.png'));
+
     return reddit.auth().then(function() {
-      return reddit('/r/$subreddit/api/upload_sr_image').post({
-	/* @TODO */
+      return reddit('/r/$subreddit/api/upload_sr_img').post({
+	$subreddit: config.reddit.testSubreddit,
+	file: path.join(__dirname, 'img', 'appicon.png'),
+	header: 0,
+	img_type: 'png',
+	name: 'test'
       });
     }).then(function(result) {
-      // @TODO
+      console.log(result);
     });
   });
 
