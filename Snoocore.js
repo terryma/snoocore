@@ -1,7 +1,6 @@
 "use strict";
 
 var urlLib = require('url');
-var querystring = require('querystring');
 var events = require('events');
 var util = require('util');
 
@@ -309,7 +308,7 @@ function Snoocore(config) {
 	hostname: parsedUrl.hostname,
 	path: parsedUrl.path,
 	headers: headers
-      }, querystring.stringify(args)).then(function(response) {
+      }, args).then(function(response) {
 
 	// Forbidden. Try to get a new access_token if we have
 	// a refresh token
@@ -345,7 +344,7 @@ function Snoocore(config) {
 
 	// Throw any errors that reddit may inform us about
 	var hasErrors = (data.hasOwnProperty('error') ||
-			 data.hasOwnProperty('errors') ||
+			 (data.hasOwnProperty('errors') && data.errors.length > 0) ||
 			 (data && data.json && data.json.errors && data.json.errors.length > 0));
 
 	if (hasErrors) {
@@ -393,7 +392,7 @@ function Snoocore(config) {
 	slice.count = count;
 
 	slice.get = result || {};
- 
+
 	slice.before = slice.get.data.before || null;
 	slice.after = slice.get.data.after || null;
 	slice.allChildren = slice.get.data.children || [];
@@ -636,6 +635,8 @@ function Snoocore(config) {
 
       var defer = when.defer();
 
+      var args = { uh: modhash };
+
       return Snoocore.request.https({
 	method: 'POST',
 	hostname: 'www.reddit.com',
@@ -643,9 +644,7 @@ function Snoocore(config) {
 	headers: {
 	  'X-Modhash': modhash
 	}
-      }, querystring.stringify({
-	uh: modhash
-      })).then(function(response) {
+      }, args).then(function(response) {
 	self._modhash = '';
 	self._redditSession = '';
       });

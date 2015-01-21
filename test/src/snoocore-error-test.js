@@ -41,7 +41,7 @@ describe('Snoocore Error Test', function () {
     });
   });
 
-  it.only('should handle data.errors field', function() {
+  it('should handle data.errors field', function() {
     var reddit = util.getScriptInstance([ 'modconfig' ]);
 
     return reddit.auth().then(function() {
