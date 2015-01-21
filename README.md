@@ -1,6 +1,7 @@
 # Snoocore
 
 [![Build Status](https://travis-ci.org/trevorsenior/snoocore.svg?branch=master)](https://travis-ci.org/trevorsenior/snoocore)
+[![npm version](https://badge.fury.io/js/snoocore.svg)](http://badge.fury.io/js/snoocore)
 
 A minimal and complete JavaScript driver for the Reddit API.
 
