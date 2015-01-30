@@ -5,7 +5,7 @@ layout: default
 
 # Promises
 
-Snoocore uses [When.js promises](https://github.com/cujojs/when) which follows the [Promises/A+](http://promises-aplus.github.io/promises-spec/) specification.
+Snoocore follows the [Promises/A+](http://promises-aplus.github.io/promises-spec/) specification.
 
 ## Beginner Basics
 
@@ -27,18 +27,10 @@ reddit('/api/v1/me').get().then(function(data) {
 });
 ```
 
-or use When.js helpers `.otherwise` or `.catch`:
+## Promise Libraries
 
-```javascript
-reddit('/api/v1/me').get().then(function(data) {
-  // data contains our request data!
-}).catch(function(error) {
-  // something went wrong
-});
-```
+There are *many* libraries that help when working with promises:
 
-## But I don't like promises!
-
-Promises aren't for everyone. Snoocore may support node callbacks as well as promises in the future if there is enough demand.
-
-Follow the above guidelines on how to integrate promises into your callback based code for the time being.
+ - [bluebird](https://github.com/petkaantonov/bluebird)
+ - [when](https://github.com/cujojs/when)
+ - [many more...](https://github.com/promises-aplus/promises-spec/blob/master/implementations.md)

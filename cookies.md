@@ -12,7 +12,7 @@ Snoocore provides a login function that can be used:
 ```javascript
 var loginPromise = reddit.login({
     username: 'yourUsername',
-    password: 'yourPasswd'
+    password: 'yourPassword'
 });
 ```
 
@@ -48,7 +48,7 @@ var loginPromise = reddit.login({
 });
 ```
 
-You can get the modhash and cookie when logging in with the username and password:
+It is possible to get the modhash and cookie when logging in with the username and password:
 
 ```javascript
 var loginPromise = reddit.login({
@@ -60,13 +60,9 @@ var loginPromise = reddit.login({
 });
 ```
 
-Or get the modhash and the `reddit_session` cookie value from an existing session elsewhere (browser, etc.)
-
-
-
 ## Raw API call
 
-If you are feeling pure, it is possible to use the reddit API directly as well.
+Feeling pure? It is also possible to use the reddit API directly as well.
 
 Simply apply the basic usage guidelines and make a call to [`POST /api/login`](http://www.reddit.com/dev/api#POST_api_login):
 

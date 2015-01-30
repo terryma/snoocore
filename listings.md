@@ -9,7 +9,7 @@ From the reddit documentation
 
 > Many endpoints on reddit use the same protocol for controlling pagination and filtering. These endpoints are called Listings and share five common parameters: after / before, limit, count, and show.
 
-Along side the basic HTTP verbs that you can use to call reddit endpoints (See [Basic Usage](basicUsage.html)). The listing helper can also be used for endpoints that are listings.
+Along side the basic HTTP verbs to call the reddit API (See [Basic Usage](basicUsage.html)), there is a `.listing` helper for endpoints that return listings.
 
 Quick Example ([GET /r/hot](http://www.reddit.com/dev/api#GET_hot)):
 

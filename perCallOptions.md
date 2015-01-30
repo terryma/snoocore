@@ -5,7 +5,7 @@ layout: default
 
 # Per call options
 
-These are non-global options that you can make on a per-call basis. The values are passed in as a *second* object and change how a specific call behaves.
+These are non-global options that work on a per-call basis. The values are passed in as a *second* object and change how a specific call behaves.
 
 ```javascript
 var perCallOptions = {/* ... */}; // per call options

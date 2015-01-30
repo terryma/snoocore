@@ -5,14 +5,15 @@ layout: default
 
 # Authenticating with Script OAuth
 
-See an example [here](https://github.com/trevorsenior/snoocore-examples/blob/master/node/oauth-script.js).
+See an example A full example [here](https://github.com/trevorsenior/snoocore-examples/blob/master/node/oauth-script.js).
 
-Script based authentication is the easiest way to authenticate using OAuth with the Reddit API in Node.js
+Script based authentication is the easiest way to authenticate using OAuth with the Reddit API in Node.js. The only caveat is that this method can only authenticate users listed as developers for the given application. Because of this, it makes it a great choice for bots.
 
 ## Supported Apps
 
-Explicit based OAuth will only work if you app is a `web` or `installed` application.
+Script based OAuth will only work if the app is a `script` application.
 
+## Usage
 
 ```javascript
 var Snoocore = require('snoocore');
@@ -38,5 +39,3 @@ return reddit.auth().then(function() {
 });
 
 ```
-
-The only caveat is that this method can only authenticate users listed as developers for the given application. Because of this, it makes it a great choice for bots.

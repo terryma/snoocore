@@ -7,7 +7,7 @@ layout: default
 
 ## Fixed in v2.2.0
 
-The `api_type` parameter will now *default* to the string "json". This error should no longer occur. If anyone runs into this error please open a new issue on GitHub and explain how it was recreated
+The `api_type` parameter will now *default* to the string "json". This error should no longer occur. If anyone runs into this error please open a new issue on GitHub and explain how it was recreated.
 
 ## For older versions...
 

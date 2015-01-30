@@ -52,10 +52,9 @@ Adjust the following default options as necessary when initializing Snoocore. On
 }
 ```
 
-## Identifying your app with Reddit
+## Identifying an app with Reddit
 
-Reddit has a [set of API rules](https://github.com/reddit/reddit/wiki/API#wiki-rules) that outline how to identify your app using a `User-Agent` string. To set your `User-Agent`, make sure to include it when initializing Snoocore:
-
+Reddit has a [set of API rules](https://github.com/reddit/reddit/wiki/API#wiki-rules) that outline how to identify an app using a `User-Agent` string. Make sure to set the `User-Agent` in the initial configuration:
 
 ```javascript
 var reddit = new Snoocore({ userAgent: 'myAppsName@0.0.5 by username' });

@@ -5,13 +5,13 @@ layout: default
 
 # Basic Usage
 
-This page assumes that you have [installed and included](install.html) Snoocore in your environment.
+This page assumes that Snoocore is [installed and included](install.html).
 
-## Making your first call
+## Making the first call
 
 ### Set up an instance
 
-We will first need to get a new Snoocore instance. Each instance can be thought of as an account. In the documentation, we will usually assign a new Snoocore instance to the variable `reddit`:
+First make a new Snoocore instance. Each instance can be thought of as an account. This documentation will usually assign a `new Snoocore` instance to the variable `reddit`:
 
 ```javascript
 var reddit = new Snoocore({
@@ -29,15 +29,15 @@ To use the endpoint ([link](https://www.reddit.com/dev/api#GET_r_{subreddit}_abo
 
 ![GET /r/$subreddit/about.json](http://i.imgur.com/dlGStrB.png)
 
-We can use the following code:
+Use the following code:
 
 ```javascript
 var promise = reddit('/r/netsec/about.json').get();
 ```
 
-We can determine what to call based on the path (in this case `/r/$subreddit/about.json`) and the HTTP verb that is uses (in this case `GET`). Note that italics in the documentation are *url parameters* - these are discussed further down this page.
+It is possible to determine what to call based on the path (in this case `/r/$subreddit/about.json`) and the HTTP verb that is uses (in this case `GET`). Note that italics in the documentation are *url parameters* - these are discussed further down this page.
 
-<sub>If you are new to promises or want a quick overview on how they work with snoocore take a look [here](promises.html). The rest of this readme assumes basic knowledge on how they work.</sub>
+<sub>If you are new to promises or want a quick overview on how they work with Snoocore take a look [here](promises.html). The rest of this documentation assumes basic knowledge on how they work.</sub>
 
 ### Final result
 
@@ -74,7 +74,7 @@ Some endpoints ([link](http://www.reddit.com/dev/api#POST_api_multi_{multipath}_
 
 ![`POST /api/multi/$multipath/rename`](http://i.imgur.com/XrB6qp6.png)
 
-It is possible (since version 2.0.0) to embed the url parameters value into the path as we did in the first example:
+It is possible (since version 2.0.0) to embed the url parameters value into the path:
 
 ```javascript
 var promise = reddit('/api/multi/<insert value here>/rename').post({
@@ -97,4 +97,4 @@ The above two implementations will return the exact same thing.
 
 # Advanced Usage
 
-The above should be enough to get you through most scenarios. Check out the advanced usage section for more obscure details.
+The above should be enough to get through most scenarios. Check out the advanced usage section for more obscure details.

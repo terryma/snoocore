@@ -15,7 +15,7 @@ Implicit based OAuth will only work if you app is an `installed` application.
 
 ### Initial Config
 
-In your initial config, give it the OAuth settings for your application:
+In the initial config, give it the OAuth settings for the application:
 
 ```javascript
 var Snoocore = require('snoocore');
@@ -34,7 +34,7 @@ var reddit = new Snoocore({
 
 #### `oauth.mobile` 
 
-Optional. Set mobile to true if you want to send the user to the mobile reddit website for authentication.
+Optional. Set mobile to true to send users to the mobile reddit website for authentication.
 
 ### Getting the authentication URL
 
@@ -43,23 +43,23 @@ var state = 'foobar';
 var authUrl = reddit.getImplicitAuthUrl(state);
 ```
 
-For CSRF prevention, you should set a `state`. This field is optional if you don't want to perform this check. Read more on this below.
+For CSRF prevention set a `state`. This field is optional. Read more on this below.
 
 ### Handling the response
 
-After the user visits the URL that `reddit.getImplicitAuthUrl` generates, they will be presented with the option to Allow or Deny the app. After they allow (or disallow) your application, Reddit will redirect the user back to the given `redirectUri` (set in the initial config)  with the following parameters after the hash tag (You can use `window.location.hash` to pull the values out after the `#` in the URL):
+After the user visits the URL that `reddit.getImplicitAuthUrl` generates, they will be presented with the option to Allow or Deny the app. After they allow (or disallow) the application, reddit will redirect the user back to the given `redirectUri` (set in the initial config)  with the following parameters after the hash tag (It is possible to use `window.location.hash` to pull the values out after the `#` in the URL):
 
- - **access_token**	- Your `accessToken` (used below)
+ - **access_token**	- The `accessToken` (used below)
  - **token_type** - The string "bearer".
  - **expires_in** - Seconds until the token expires.
  - **scope** - The scope of the token.
  - **state** - should be the same string that was  set in the `reddit.getImplicitAuthUrl` function (if it was set).
 
-For CSRF prevention, you should check that the `state` in the url parameters is the same as the `state` specified when generating the authentication url in `reddit.getImplicitAuthUrl`.
+For CSRF prevention, check that the `state` in the url parameters is the same as the `state` specified when generating the authentication url in `reddit.getImplicitAuthUrl`.
 
 ### Authenticating with the returned code
 
-Now that we have our `accessToken`, we can now authenticate with reddit and start making calls on behalf of a user.
+Once the `accessToken` is pulled from the url `accessToken`, authenticate with reddit and start making calls on behalf of a user.
 
 ```javascript
 var ACCESS_TOKEN = '??'; /* url parameter "access_token", see above */
@@ -81,7 +81,7 @@ reddit.auth(ACCESS_TOKEN).then(function() {
 });
 ```
 
-After this, we are able to use the OAuth API calls that Reddit offers.
+Snoocore is now successfully authenticated with OAuth.
 
 ### De-Authenticating
 
@@ -91,8 +91,9 @@ A function `reddit.deauth` is provided which will revoke the `access_token` for 
 var deauthPromise = reddit.deauth();
 ```
 
-Generally it is a good idea to call this everytime you are finished using the users data.
+Generally it is a good idea to call this everytime the application is finished using the users data.
 
 ### Renewing authentication
 
-Implicit auth does not have a refresh token. You will have to listen for an event and have the user re-authenticate with your application. For more information on this view the [Snoocore Events](events.html) documentation.
+Implicit auth does not have a refresh token. It is possible to listen for an event and have the user re-authenticate with the application. For more information on this view the [Snoocore Events](events.html) documentation.
+
