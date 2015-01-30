@@ -232,33 +232,43 @@ describe('Snoocore OAuth Test', function () {
 
       return testServer.allowAuthUrl(url).then(function(params) {
 
-        expect(params.state).to.equal(state);
+	expect(params.state).to.equal(state);
 
-        var accessToken = params['access_token'];
+	var accessToken = params['access_token'];
 
-	// Set this auth tokens "expire" to 10 seconds.
-			  return reddit.auth(accessToken, 10000).then(function() {
-			    return reddit('/api/v1/me').get();
-			  }).then(function(data) {
-			    expect(data.error).to.be.undefined;
-			    expect(data.name).to.be.a('string');
 
-			    // wait for access token to expire
-			    return when.promise(function(resolve, reject) {
-			      reddit.on('auth_token_expired', function() {
+	/* Set this auth tokens "expire" to 10 seconds. */
+	return reddit.auth(accessToken, 10000).then(function() {
+	  return reddit('/api/v1/me').get();
+	}).then(function(data) {
+	  expect(data.error).to.be.undefined;
+	  expect(data.name).to.be.a('string');
 
-				// check that calling an endpoint fails with an expired token
-				return reddit('/api/v1/me').get().done(function() {
-				  reject(); // should have failed, reject this promise
-				}, function(error) {
-				  expect(error.message).to.equal('Authorization token has expired. Listen for the "auth_token_expired" event to handle this gracefully in your app.');
-				  resolve();
-				});
-			      });
-			    });
+	  // wait for access token to expire
+	  return when.resolve().delay(11000).then(function() {
 
-			  });
+	    return when.promise(function(resolve, reject) {
+
+	      var i = 2;
+
+	      reddit.on('auth_token_expired', function() {
+		--i; if (i === 0) { resolve(); }
+	      });
+
+	      reddit('/api/v1/me').get().done(function() {
+		reject(); // should have failed, reject this promise if it didn't
+	      }, function(error) {
+		--i; if (i === 0) { return resolve(); }
+		expect(error.message).to.equal('Authorization token has expired. Listen for the "access_token_expired" event to handle this gracefully in your app.');
+		resolve();
+	      });
+
+	    });
+
+	  });
+	});
       });
+
     });
 
   });
