@@ -7,7 +7,7 @@ layout: default
 
 Snoocore has several events that an application can listen for
 
-## Expired Access Tokens (`access_token_expired`)
+## `access_token_expired`
 
 When OAuth without a refresh token (Implicit Auth flow, or `duration: 'temporary'`) it is possible listen for this event to have the user re-authenticate with reddit.
 
