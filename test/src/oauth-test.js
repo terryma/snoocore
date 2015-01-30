@@ -17,11 +17,6 @@ describe('OAuth Module Test', function (require) {
 
   this.timeout(config.testTimeout);
 
-  function openAndAuth(url) {
-    console.log('Opening the following url in your browser:');
-    open(url);
-  }
-
   describe('#getAuthUrl()', function() {
     it('should get a proper authorization url (WEB/INSTALLED)', function() {
       var url = oauth.getAuthUrl({
