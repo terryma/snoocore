@@ -9,6 +9,7 @@ describe('Snoocore Node Tests', function() {
   });
 
   after(function() {
+    this.timeout(20000);
     return testServer.stop();
   });
 

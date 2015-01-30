@@ -52,7 +52,6 @@ function Snoocore(config) {
   self._redditSession = ''; // The current cookie (reddit_session)
   self._authData = {}; // Set if user has authenticated with OAuth
   self._access_token_expires_at = 0; // The unix time (ms) when the auth token expires
-  self._access_token_expires_timeout = void 0; // the timeout handle for token_expires
 
   self._refreshToken = ''; // Set when calling `refresh` and when duration:'permanent'
 
@@ -240,11 +239,12 @@ function Snoocore(config) {
 
     // If we are authenticated, do not have a refresh token, and we have 
     // passed the time that the token expires, we should throw an error
-    // and inform the user to listen for the event 'auth_token_expired'
+    // and inform the user to listen for the event 'access_token_expired'
 
     if (isAuthenticated() && !hasRefreshToken() && hasAccessTokenExpired()) {
+      self.emit('access_token_expired');
       return when.reject(new Error('Authorization token has expired. Listen for ' +
-				   'the "auth_token_expired" event to handle ' +
+				   'the "access_token_expired" event to handle ' +
 				   'this gracefully in your app.'));
     }
 
@@ -699,9 +699,6 @@ function Snoocore(config) {
     // Set the expire time for this token
     tokenExpiresInMs = tokenExpiresInMs || (3600 * 1000);
     self._access_token_expires_at = Date.now() + tokenExpiresInMs;
-    self._access_token_expires_timeout = setTimeout(function() {
-      self.emit('auth_token_expired');
-    }, tokenExpiresInMs);
 
     switch(self._oauth.type) {
       case 'script':

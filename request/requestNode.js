@@ -12,7 +12,6 @@ var form = require('./form');
    Form data can be a raw string, or an object containing key/value pairs
  */
 exports.https = function(options, formData) {
-
   // console.log('\n\n\n\n');
   // console.log('>>> request');
   // console.log(options.method + ': ' + options.hostname + options.path);
@@ -25,13 +24,16 @@ exports.https = function(options, formData) {
   var data = form.getData(formData);
 
   options.headers['Content-Type'] = data.contentType;
-  options.headers['Content-Length'] = data.contentLength;
+
+  if (options.method !== 'GET') {
+    options.headers['Content-Length'] = data.contentLength;
+  }
 
   // console.log('\n>>> headers\n', options.headers);
 
   // stick the data at the end of the path. It is going to b
   if (options.method === 'GET') {
-    options.path += '?' + data[0];
+    options.path += '?' + data.buffer.toString();
   }
 
   return when.promise(function(resolve, reject) {
