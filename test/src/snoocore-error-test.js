@@ -47,7 +47,7 @@ describe('Snoocore Error Test', function () {
     return reddit.auth().then(function() {
       return reddit('/r/$subreddit/api/upload_sr_img').post({
 	$subreddit: config.reddit.testSubreddit,
-	file: 'fakeimage',
+	file: Snoocore.file('fakename', 'image/png', 'fake image data'),
 	header: 0,
 	img_type: 'png',
 	name: 'test'

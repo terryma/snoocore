@@ -4,10 +4,16 @@
 
 var when = require('when');
 
+var form = require('./form');
+
 exports.https = function(options, formData) {
 
   options = options || {};
   options.headers = options.headers || {};
+
+  var data = form.getData(formData);
+
+  options.headers['Content-Type'] = data.contentType;
 
   return when.promise(function(resolve, reject) {
 
@@ -19,12 +25,10 @@ exports.https = function(options, formData) {
 
       // append the form data to the end of the url
       if (options.method === 'GET') {
-	url += '?' + formData;
+	url += '?' + data.buffer.toString();
       }
 
       x.open(options.method, url, true);
-
-      x.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
 
       Object.keys(options.headers).forEach(function(headerKey) {
 	x.setRequestHeader(headerKey, options.headers[headerKey]);
@@ -40,7 +44,7 @@ exports.https = function(options, formData) {
 	}
       };
 
-      x.send(options.method === 'GET' ? null : formData);
+      x.send(options.method === 'GET' ? null : data.buffer.toString());
 
     } catch (e) {
       return reject(e);

@@ -61,7 +61,8 @@ exports.stop = function() {
     });
 
     server.close(function() {
-      return resolve();
+      // wait 2 seconds, then resolve.
+      setTimeout(resolve, 2000);
     });
   }); // add a little delay to help free up the port
 }
@@ -157,7 +158,7 @@ exports.allowOrDeclineAuthUrl = function(url, shouldDecline) {
 
       return pipeline(steps);
     }).then(function(url) {
-      console.log(url);
+      // console.log(url);
       url = url.replace('/#', '/?'); // implicit auth urls use # vs. ? for query str.
       var parsed = urlLib.parse(url, true);
       return parsed.query;
