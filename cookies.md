@@ -16,7 +16,7 @@ var loginPromise = reddit.login({
 });
 ```
 
-If you specify the login options in the initial config, it can be used without options:
+`reddit.login()` can be used without options if the information is specified in the initial config:
 
 ```javascript
 var reddit = new Snoocore({
