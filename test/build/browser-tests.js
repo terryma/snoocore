@@ -14,7 +14,7 @@ var utils = require('./utils');
 
 module.exports = Snoocore;
 
-Snoocore.version = '2.4.0';
+Snoocore.version = '2.4.1';
 
 Snoocore.oauth = require('./oauth');
 Snoocore.request = require('./request');
@@ -12389,7 +12389,7 @@ oauth.getAuthData = function(type, options) {
       params.password = options.password;
       break;
     case 'web': // web & installed for backwards compatability
-    case 'insalled':
+    case 'installed':
     case 'explicit':
       params.grant_type = 'authorization_code';
       params.client_id = options.consumerKey;
