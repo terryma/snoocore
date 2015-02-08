@@ -21,16 +21,34 @@ exports.installModules = function(done) {
 };
 
 exports.buildRedditApi = function(done) {
+
+  var filePath = path.join(__dirname, 'build', 'api.json');
+  var oldApi = require(filePath);
+
+  // A map containing the old endpoints, that will be replaced
+  // by the new endpoints / updates
+  var newMap = oldApi.reduce(function(prev, curr) {
+    prev[curr.method + '_' + curr.path] = curr;
+    return prev;
+  }, {});
+
   // build the reddit api without the endpoint descriptions or the
   // argument descriptions to cut down on the final library size
-  build.nodeApi({
+  build.jsonApi({
     skipDescription: true,
     skipArgsDescription: true,
     skipUrls: true
-  }).done(function(output) {
-    // overwrite the reddit-api-generator dist with this new one
-    var filePath = path.join(__dirname, 'build', 'api.js');
-    fs.writeFile(filePath, output, done);
+  }).done(function(json) {
+    // replace the previous endpoints with updated endpoints
+    JSON.parse(json).forEach(function(endpoint) {
+      newMap[endpoint.method + '_' + endpoint.path] = endpoint;
+    });
+
+    var newEndpoints = Object.keys(newMap).map(function(key) {
+      return newMap[key];
+    });
+
+    fs.writeFile(filePath, JSON.stringify(newEndpoints, null, 2), done);
   }, done);
 };
 
