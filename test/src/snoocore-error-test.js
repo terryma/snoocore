@@ -15,7 +15,6 @@ var expect = chai.expect;
 var Snoocore = require('../../Snoocore');
 var config = require('../config');
 var util = require('./util');
-var testServer = require('./testServer');
 
 describe('Snoocore Error Test', function () {
 
