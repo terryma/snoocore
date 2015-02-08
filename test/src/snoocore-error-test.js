@@ -15,6 +15,7 @@ var expect = chai.expect;
 var Snoocore = require('../../Snoocore');
 var config = require('../config');
 var util = require('./util');
+var testServer = require('./testServer');
 
 describe('Snoocore Error Test', function () {
 
@@ -93,5 +94,108 @@ describe('Snoocore Error Test', function () {
       expect(error.message.indexOf('Arguments')).to.not.equal(-1);
     });
   });
+
+  it('should retry an endpoint on HTTP 5xx', function() {
+    var reddit = util.getScriptInstance([ 'identity', 'read' ]);
+
+    // create a reference to the actual reddit servers
+    var redditServers = {
+      oauth: 'https://oauth.reddit.com',
+      www: 'https://www.reddit.com',
+      ssl: 'https://ssl.reddit.com'
+    };
+
+    return reddit.auth().then(function() {
+
+      // Switch servers to use error test server (returns 500 errors every time)
+      reddit._server = {
+	oauth: 'https://localhost:' + config.testServer.serverErrorPort,
+	www: 'https://localhost:' + config.testServer.serverErrorPort,
+	ssl: 'https://localhost:' + config.testServer.serverErrorPort
+      };
+
+      return when.promise(function(resolve, reject) {
+	var hotPromise;
+
+	// resolve once we get the server error instance
+	reddit.on('server_error', function(error) {
+
+	  expect(error instanceof Error);
+	  expect(error.retryAttemptsLeft).to.equal(9);
+	  expect(error.status).to.equal(500);
+	  expect(error.url).to.equal('https://localhost:3001/hot.json');
+	  expect(error.args).to.eql({});
+	  expect(error.body).to.equal('');
+
+	  // don't allow self signed certs again
+	  delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+
+	  // switch to the proper reddit servers
+	  reddit._server = redditServers;
+	  expect(reddit._server).to.eql(redditServers);
+
+	  // this should resolve now that the servers are correct
+	  hotPromise.done(resolve);
+	});
+
+	process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0; // allow self signed certs
+	hotPromise = reddit('/hot').get();
+      });
+
+    });
+  });
+
+
+  it('should retry an endpoint 3 times then fail', function() {
+
+    // allow self signed certs for our test server
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
+
+    var reddit = util.getScriptInstance([ 'identity', 'read' ]);
+
+    return reddit.auth().then(function() {
+
+      // Switch servers to use error test server (returns 500 errors every time)
+      reddit._server = {
+	oauth: 'https://localhost:' + config.testServer.serverErrorPort,
+	www: 'https://localhost:' + config.testServer.serverErrorPort,
+	ssl: 'https://localhost:' + config.testServer.serverErrorPort
+      };
+
+      var retryAttempts = 3; // let's only retry 3 times to keep it short
+
+      return when.promise(function(resolve, reject) {
+	var hotPromise;
+
+	// resolve once we get the server error instance
+	reddit.on('server_error', function(error) {
+
+	  expect(error instanceof Error);
+	  expect(error.retryAttemptsLeft).to.equal(--retryAttempts);
+	  expect(error.status).to.equal(500);
+	  expect(error.url).to.equal('https://localhost:3001/hot.json');
+	  expect(error.args).to.eql({});
+	  expect(error.body).to.equal('');
+
+	  // resolve once we have reached our retry attempt and get an error
+	  // we should not resolve this promise! We expect it to fail!!
+	  hotPromise.done(reject, resolve);
+	});
+
+	hotPromise = reddit('/hot').get(void 0, { 
+	  retryAttempts: retryAttempts,
+	  retryDelay: 500 // no need to make this take longer than necessary
+	});
+      });
+
+    }).then(function(error) {
+      expect(error.message).to.eql('Failed to access the reddit servers (HTTP 5xx)');
+    }).finally(function() {
+      // don't allow self signed certs again
+      delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    });
+
+  });
+
 
 });

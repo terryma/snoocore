@@ -25,13 +25,16 @@ module.exports = {
 
   testServer: {
     // Must match your redirect uri's port
-    port: process.env.REDDIT_TEST_SERVER_PORT || 3000 
+    standardPort: process.env.REDDIT_TEST_SERVER_PORT || 3000,
+    // No need to change this one - internally used to test
+    // HTTP 500 error codes
+    serverErrorPort: process.env.REDDIT_ERROR_SERVER_PORT || 3001
   },
 
   reddit: {
     // Must have same port as testServer
     // All app-types *must* use the same redirect uri
-    redirectUri: process.env.REDDIT_REDIRECT_URI || "http://localhost:3000", 
+    redirectUri: process.env.REDDIT_REDIRECT_URI || "https://localhost:3000", 
 
     // What subreddit to run our test cases in when needed
     testSubreddit: 'snoocoreTest', // feel free to use 'snoocoreTest' for this

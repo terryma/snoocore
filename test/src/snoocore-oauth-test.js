@@ -10,7 +10,7 @@ var expect = chai.expect;
 
 var Snoocore = require('../../Snoocore');
 var config = require('../config');
-var testServer = require('./testServer');
+var tsi = require('./testServerInstance');
 var util = require('./util');
 
 describe('Snoocore OAuth Test', function () {
@@ -42,7 +42,7 @@ describe('Snoocore OAuth Test', function () {
         state: 'foo'
       });
 
-      return testServer.allowAuthUrl(url).then(function(params) {
+      return tsi.standardServer.allowAuthUrl(url).then(function(params) {
 
         var authorizationCode = params.code;
         return Snoocore.oauth.getAuthData('web', {
@@ -111,7 +111,7 @@ describe('Snoocore OAuth Test', function () {
 
       var url = reddit.getExplicitAuthUrl();
 
-      return testServer.allowAuthUrl(url).then(function(params) {
+      return tsi.standardServer.allowAuthUrl(url).then(function(params) {
         var authorizationCode = params.code;
         return reddit.auth(authorizationCode).then(function(refreshToken) {
 
@@ -148,7 +148,7 @@ describe('Snoocore OAuth Test', function () {
 
       var url = reddit.getExplicitAuthUrl();
 
-      return testServer.allowAuthUrl(url).then(function(params) {
+      return tsi.standardServer.allowAuthUrl(url).then(function(params) {
         var authorizationCode = params.code;
         return reddit.auth(authorizationCode).then(function(refreshToken) {
 
@@ -188,7 +188,7 @@ describe('Snoocore OAuth Test', function () {
 
       var url = reddit.getExplicitAuthUrl();
 
-      return testServer.allowAuthUrl(url).then(function(params) {
+      return tsi.standardServer.allowAuthUrl(url).then(function(params) {
         var authorizationCode = params.code;
         return reddit.auth(authorizationCode).then(function() {
           return reddit('/api/v1/me').get();
@@ -205,7 +205,7 @@ describe('Snoocore OAuth Test', function () {
       var state = 'foobar';
       var url = reddit.getExplicitAuthUrl(state);
 
-      return testServer.allowAuthUrl(url).then(function(params) {
+      return tsi.standardServer.allowAuthUrl(url).then(function(params) {
 
         expect(params.state).to.equal(state);
 
@@ -230,7 +230,7 @@ describe('Snoocore OAuth Test', function () {
       var state = 'foobar';
       var url = reddit.getImplicitAuthUrl(state);
 
-      return testServer.allowAuthUrl(url).then(function(params) {
+      return tsi.standardServer.allowAuthUrl(url).then(function(params) {
 
 	expect(params.state).to.equal(state);
 

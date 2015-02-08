@@ -7,7 +7,7 @@ var chaiAsPromised = require('chai-as-promised');
 chai.use(chaiAsPromised);
 var expect = chai.expect;
 
-var testServer = require('./testServer');
+var tsi = require('./testServerInstance');
 var util = require('./util');
 var config = require('../config');
 var oauth = require('../../oauth');
@@ -116,7 +116,7 @@ describe('OAuth Module Test', function (require) {
 	state: 'foo'
       });
 
-      return testServer.allowAuthUrl(url).then(function(params) {
+      return tsi.standardServer.allowAuthUrl(url).then(function(params) {
 
 	if (params.error) { throw new Error(params.error); }
 

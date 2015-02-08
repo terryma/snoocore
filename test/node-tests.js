@@ -1,16 +1,30 @@
 // Files that will be tested in Node.js 
 
-var testServer = require('./src/testServer');
+var when = require('when');
+
+var config = require('./config');
+var tsi = require('./src/testServerInstance');
 
 describe('Snoocore Node Tests', function() {
 
+  this.timeout(config.testTimeout);
+
   before(function() {
-    return testServer.start();
+    return when.all([
+      tsi.standardServer.start(),
+      tsi.errorServer.start()
+    ]).then(function(result) {
+      console.log('started servers', result);
+    });
   });
 
   after(function() {
-    this.timeout(20000);
-    return testServer.stop();
+    return when.all([
+      tsi.standardServer.stop(),
+      tsi.errorServer.stop()
+    ]).then(function(result) {
+      console.log('stopped servers', result);
+    });
   });
 
   require('./src/oauth-test');

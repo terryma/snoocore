@@ -48,6 +48,11 @@ function Snoocore(config) {
 
   self._decodeHtmlEntities = config.decodeHtmlEntities || false;
 
+  self._retryAttempts = (typeof config.retryAttempts === 'undefined') ?
+			10 : config.retryAttempts;
+  self._retryDelay = (typeof config.retryDelay === 'undefined') ?
+		     3000 : config.retryDelay;
+
   self._modhash = ''; // The current mod hash of whatever user we have
   self._redditSession = ''; // The current cookie (reddit_session)
   self._authData = {}; // Set if user has authenticated with OAuth
@@ -240,7 +245,6 @@ function Snoocore(config) {
     // If we are authenticated, do not have a refresh token, and we have 
     // passed the time that the token expires, we should throw an error
     // and inform the user to listen for the event 'access_token_expired'
-
     if (isAuthenticated() && !hasRefreshToken() && hasAccessTokenExpired()) {
       self.emit('access_token_expired');
       return when.reject(new Error('Authorization token has expired. Listen for ' +
@@ -250,9 +254,15 @@ function Snoocore(config) {
 
     // Options that will change the way this call behaves
     options = options || {};
+
     var bypassAuth = options.bypassAuth || false;
     var decodeHtmlEntities = (typeof options.decodeHtmlEntities !== 'undefined') ?
 			     options.decodeHtmlEntities : self._decodeHtmlEntities;
+    var retryAttemptsLeft = (typeof options.retryAttempts !== 'undefined') ?
+			    options.retryAttempts : self._retryAttempts;
+    var retryDelay = (typeof options.retryDelay !== 'undefined') ?
+		     options.retryDelay : self._retryDelay;
+
 
     var throttle = getThrottle(bypassAuth);
     var startCallTime = Date.now();
@@ -305,12 +315,44 @@ function Snoocore(config) {
 
       }
 
-      return Snoocore.request.https({
+      var requestOptions = {
 	method: method,
 	hostname: parsedUrl.hostname,
 	path: parsedUrl.path,
-	headers: headers
-      }, args).then(function(response) {
+ 	headers: headers
+      };
+
+      if (parsedUrl.port) {
+	requestOptions.port = parsedUrl.port;
+      }
+
+      return Snoocore.request.https(requestOptions, args).then(function(response) {
+
+	// HTTP 5xx status
+
+	if (String(response._status).substring(0, 1) === '5') {
+
+	  --retryAttemptsLeft;
+
+	  var serverError = new Error('Reddit has come back with an HTTP status of ' + response._status);
+
+	  serverError.retryAttemptsLeft = retryAttemptsLeft;
+	  serverError.status = response._status;
+	  serverError.url = url;
+	  serverError.args = args;
+	  serverError.body = response._body;
+
+	  self.emit('server_error', serverError);
+
+	  if (retryAttemptsLeft <= 0) {
+	    throw new Error('Failed to access the reddit servers (HTTP 5xx)');
+	  }
+
+	  return delay(retryDelay).then(function() {
+	    options.retryAttempts = retryAttemptsLeft;
+	    return callRedditApi(endpoint, givenArgs, options);
+	  });
+	}
 
 	// Forbidden. Try to get a new access_token if we have
 	// a refresh token
@@ -323,7 +365,8 @@ function Snoocore(config) {
 	  // attempt to refresh the access token if we have a refresh token
 	  return self.refresh(self._refreshToken).then(function() {
 	    // make the call again and flag to fail if it happens again
-	    return callRedditApi(endpoint, givenArgs, { _refreshTokenFail: true });
+	    options._refreshTokenFail = true;
+	    return callRedditApi(endpoint, givenArgs, options);
 	  });
 	}
 
@@ -374,6 +417,7 @@ function Snoocore(config) {
     });
 
   }
+
 
   function getListing(endpoint, givenArgs, options) {
 
@@ -580,6 +624,7 @@ function Snoocore(config) {
     if (typeof leaf._endpoints === 'undefined') {
       throw new Error('Invalid path provided. Check that this is a valid path.\n' + path);
     }
+
 
     return buildCall(leaf._endpoints, buildCallOptions);
   };
