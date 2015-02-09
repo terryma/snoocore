@@ -598,8 +598,10 @@ function Snoocore(config) {
     // Travel down the endpoint tree until we get to the endpoint that we want
     for (var i = 0, len = sections.length; i < len; ++i) {
 
-      // The next section of the url path provided
+      // The section of the url path provided
       var providedSection = sections[i];
+      var nextSection = sections[i + 1];
+
       // The *real* section should the provided section not exist
       var actualSection = providedSection;
 
@@ -614,7 +616,14 @@ function Snoocore(config) {
 	  // Return the section that represents a placeholder
 	  if (leafKeys[j].substring(0, 1) === '$') {
 	    actualSection = leafKeys[j]; // The actual value, e.g. '$subreddit'
-	    break;
+
+	    // If this section is the actual section, the next section of 
+	    // this path should be valid as well if we have a next session
+	    if (nextSection && leaf[actualSection][nextSection]) {
+	      break;
+	    }
+
+	    // continue until we find a valid section
 	  }
 	}
 

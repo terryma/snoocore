@@ -9,7 +9,7 @@ var Snoocore = require('../../Snoocore');
 var config = require('../config');
 var util = require('./util');
 
-describe('Snoocore Internal Tests', function () {
+describe.only('Snoocore Internal Tests', function () {
 
   this.timeout(config.testTimeout);
 
@@ -214,21 +214,21 @@ describe('Snoocore Internal Tests', function () {
     it('should allow a "path" syntax', function() {
       var reddit = util.getRawInstance();
       return reddit
-		   .path('/r/$subreddit/hot')
-		   .get({ $subreddit: 'aww' })
-		   .then(function(result) {
-		     expect(result).to.haveOwnProperty('kind', 'Listing');
-		   });
+		       .path('/r/$subreddit/hot')
+		       .get({ $subreddit: 'aww' })
+		       .then(function(result) {
+			 expect(result).to.haveOwnProperty('kind', 'Listing');
+		       });
     });
 
     it('should tolerate a missing beginning slash', function() {
       var reddit = util.getRawInstance();
       return reddit
-		   .path('r/$subreddit/hot')
-		   .get({ $subreddit: 'aww' })
-		   .then(function(result) {
-		     expect(result).to.haveOwnProperty('kind', 'Listing');
-		   });
+		       .path('r/$subreddit/hot')
+		       .get({ $subreddit: 'aww' })
+		       .then(function(result) {
+			 expect(result).to.haveOwnProperty('kind', 'Listing');
+		       });
     });
 
     it('should crash if an invalid endpoint is provided', function() {
@@ -241,10 +241,10 @@ describe('Snoocore Internal Tests', function () {
     it('should allow a "path" syntax (where reddit === path fn)', function() {
       var reddit = util.getRawInstance();
       return reddit('/r/$subreddit/hot')
-           .get({ $subreddit: 'aww' })
-           .then(function(result) {
-             expect(result).to.haveOwnProperty('kind', 'Listing');
-           });
+		       .get({ $subreddit: 'aww' })
+		       .then(function(result) {
+			 expect(result).to.haveOwnProperty('kind', 'Listing');
+		       });
     });
 
     it('should allow for alternate placeholder names', function() {
@@ -267,6 +267,20 @@ describe('Snoocore Internal Tests', function () {
 	sort: 'new'
       }).then(function(result) {
 	expect(result).to.haveOwnProperty('empty', false);
+      });
+    });
+
+    it('should allow a variable at the beginning of a path', function() {
+      var reddit = util.getRawInstance();
+      return reddit('/$article/duplicates').get({
+	$article: '2uukmq'
+      }).then(function(result) {
+      });
+    });
+
+    it('should allow an embedded variable at the beginning of a path', function() {
+      var reddit = util.getRawInstance();
+      return reddit('/2uukmq/duplicates').get().then(function(result) {
       });
     });
 
