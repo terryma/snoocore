@@ -30,7 +30,7 @@ Adjust the following default options as necessary when initializing Snoocore. On
 
   Globally decode html entities from reddits response.
   */
-  decodeHtmlEntities: false
+  decodeHtmlEntities: false,
 
   /*
   OPTIONAL - <default: "json">
@@ -38,7 +38,22 @@ Adjust the following default options as necessary when initializing Snoocore. On
   Auto fill the `api_type` parameter with this value.
   Set to `false` to not auto-fill this parameter.
   */
-  apiType: "json"
+  apiType: "json",
+
+  /*
+  OPTIONAL - <default: 10>
+
+  Number of times to retry an endpoint when reddit's
+  servers error on a call.
+  */
+  retryAttempts: 10,
+
+  /*
+  OPTIONAL - <default: 3000>
+
+  Number of milliseconds to wait between each retry attempt
+  */
+  retryDelay: 3000,
 
   /*
   See the cookie login section for more information

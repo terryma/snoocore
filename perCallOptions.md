@@ -38,3 +38,6 @@ reddit('/about/edit.json').get(
 ).then(/* */)
 ```
 
+## Retry Attempts & Retry Delay
+
+If an endpoint fails, it will attempt to retry the endpoint based on the `retryAttempts` and `retryDelay` set in the initial config. These values can also be adjusted on a per call basis.
