@@ -362,9 +362,8 @@ function Snoocore(config) {
 
 	// Forbidden. Try to get a new access_token if we have
 	// a refresh token
-
-	var canReauth = (String(response._status).substring(0, 1) === '4' &&
-			 hasAccessToken() &&
+	var canReauth = (hasAccessToken() &&
+			 (response._status === 403 || response._status === 401) &&
 			 (hasRefreshToken() || self._oauth.type === 'script'));
 
 	if (canReauth) {
@@ -378,10 +377,7 @@ function Snoocore(config) {
 	  var reauth;
 
 	  if (hasRefreshToken()) { reauth = self.refresh(self._refreshToken); }
-	  if (self._oauth.type === 'script') { 
-	    console.log('script reauth');
-	    reauth = self.auth(); 
-	  }
+	  if (self._oauth.type === 'script') { reauth = self.auth(); }
 
 	  return reauth.then(function() {
 	    return callRedditApi(endpoint, givenArgs, options);
