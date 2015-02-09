@@ -97,6 +97,10 @@ function Snoocore(config) {
     return self._refreshToken !== '';
   }
 
+  function hasAccessToken() {
+    return self._authData && self._authData.access_token;
+  }
+
   function hasAccessTokenExpired() {
     return Date.now() >= self._access_token_expires_at;
   }
@@ -262,6 +266,8 @@ function Snoocore(config) {
 			    options.retryAttempts : self._retryAttempts;
     var retryDelay = (typeof options.retryDelay !== 'undefined') ?
 		     options.retryDelay : self._retryDelay;
+    var reauthAttemptsLeft = (typeof options.reauthAttemptsLeft !== 'undefined') ?
+			     options.reauthAttemptsLeft : retryAttemptsLeft;
 
 
     var throttle = getThrottle(bypassAuth);
@@ -356,16 +362,28 @@ function Snoocore(config) {
 
 	// Forbidden. Try to get a new access_token if we have
 	// a refresh token
-	if (response._status === 403 && hasRefreshToken()) {
 
-	  if (options._refreshTokenFail) { // fail if the refresh fail flag was set.
+	var canReauth = (String(response._status).substring(0, 1) === '4' &&
+			 hasAccessToken() &&
+			 (hasRefreshToken() || self._oauth.type === 'script'));
+
+	if (canReauth) {
+	  --reauthAttemptsLeft;
+	  options.reauthAttemptsLeft = reauthAttemptsLeft;
+
+	  if (reauthAttemptsLeft <= 0) {
 	    throw new Error('Unable to refresh the access_token.');
 	  }
 
-	  // attempt to refresh the access token if we have a refresh token
-	  return self.refresh(self._refreshToken).then(function() {
-	    // make the call again and flag to fail if it happens again
-	    options._refreshTokenFail = true;
+	  var reauth;
+
+	  if (hasRefreshToken()) { reauth = self.refresh(self._refreshToken); }
+	  if (self._oauth.type === 'script') { 
+	    console.log('script reauth');
+	    reauth = self.auth(); 
+	  }
+
+	  return reauth.then(function() {
 	    return callRedditApi(endpoint, givenArgs, options);
 	  });
 	}

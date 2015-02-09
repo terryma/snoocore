@@ -177,6 +177,44 @@ describe('Snoocore OAuth Test', function () {
       });
     });
 
+
+    it('auth (script), expire access token (simulated), then reauth', function() {
+      var reddit = util.getScriptInstance([ 'identity' ]);
+      var authTokenA;
+      var authTokenB;
+
+      return reddit.auth().then(function() {
+	return reddit('/api/v1/me').get();
+      }).then(function(data) {
+	expect(data.name).to.be.a('string');
+	authTokenA = reddit._authData.access_token;
+	console.log(1, authTokenA);
+	// "timeout" - simulate expired access token
+	reddit._authData.access_token = 'invalidToken';
+      }).then(function() {
+	return reddit('/api/v1/me').get();
+      }).then(function(data) {
+	expect(data.name).to.be.a('string');
+	authTokenB = reddit._authData.access_token;
+	expect(authTokenA === authTokenB).to.equal(false);
+      });
+    });
+
+    it('should auth (script), deauth, and not reauth', function() {
+      var reddit = util.getScriptInstance([ 'identity' ]);
+
+      return reddit.auth().then(function() {
+	return reddit('/api/v1/me').get();
+      }).then(function(data) {
+	expect(data.name).to.be.a('string');
+	return reddit.deauth();
+      }).then(function() {
+	return reddit('/api/v1/me').get();
+      }).catch(function(error) {
+	expect(error.message.indexOf('403')).to.not.equal(-1);
+      });
+    });
+
   });
 
   describe('Internal OAuth; Explicit internal configuration (duration temporary)', function() {
