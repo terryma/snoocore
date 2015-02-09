@@ -5,6 +5,15 @@ layout: default
 
 # Authenticating with Cookies
 
+**This will no longer be supported on _August 3, 2015_**
+
+For more information, please read [this thread](https://www.reddit.com/r/redditdev/comments/2ujhkr/important_api_licensing_terms_clarified/).
+
+It is suggested to use [OAuth](oauth.html) - it isn't hard to setup!
+
+- - -
+
+
 ## Pretty Login
 
 Snoocore provides a login function that can be used:
