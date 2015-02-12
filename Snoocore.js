@@ -31,8 +31,8 @@ function Snoocore(config) {
   self._userAgent = config.userAgent || 'snoocore-default-User-Agent';
 
   self._isNode = typeof config.browser !== 'undefined'
-               ? !config.browser
-               : utils.isNode();
+					 ? !config.browser
+					 : utils.isNode();
 
   self._server = {
     oauth: 'https://oauth.reddit.com',
@@ -98,7 +98,8 @@ function Snoocore(config) {
   }
 
   function hasAccessToken() {
-    return self._authData && self._authData.access_token;
+    return (typeof self._authData !== 'undefined' &&
+      typeof self._authData.access_token !== 'undefined');
   }
 
   function hasAccessTokenExpired() {
@@ -137,7 +138,7 @@ function Snoocore(config) {
     if (endpointExtensions.indexOf('.json') === -1) {
       throw new Error(
         'Invalid extension types specified, unable to use ' +
-                      'this endpoint!');
+        'this endpoint!');
     }
 
     endpointUrl += '.json';
@@ -152,8 +153,8 @@ function Snoocore(config) {
     }
     // else, decide if we want to use www vs. ssl
     return endpoint.method === 'GET'
-			   ? self._server.www + endpoint.path
-			   : self._server.ssl + endpoint.path;
+			     ? self._server.www + endpoint.path
+			     : self._server.ssl + endpoint.path;
   }
 
   // Builds the URL that we will query taking into account any
@@ -189,7 +190,7 @@ function Snoocore(config) {
     return args;
   }
 
-  // Returns an object containing the restful verb that is needed to 
+  // Returns an object containing the restful verb that is needed to
   // call the reddit API. That verb is a function call to `callRedditApi`
   // with the necessary normalization modifications setup in options.
   function buildCall(endpoints, options) {
@@ -246,7 +247,7 @@ function Snoocore(config) {
   // Call the reddit api
   function callRedditApi(endpoint, givenArgs, options) {
 
-    // If we are authenticated, do not have a refresh token, and we have 
+    // If we are authenticated, do not have a refresh token, and we have
     // passed the time that the token expires, we should throw an error
     // and inform the user to listen for the event 'access_token_expired'
     if (isAuthenticated() && !hasRefreshToken() && hasAccessTokenExpired()) {
@@ -362,11 +363,13 @@ function Snoocore(config) {
 
 	// Forbidden. Try to get a new access_token if we have
 	// a refresh token
-	var canReauth = (hasAccessToken() &&
-			 (response._status === 403 || response._status === 401) &&
-			 (hasRefreshToken() || self._oauth.type === 'script'));
 
-	if (canReauth) {
+	var shouldReauth = (hasAccessToken() &&
+	  (response._status === 403 || response._status === 401) &&
+	  (hasRefreshToken() || self._oauth.type === 'script'));
+
+	if (shouldReauth) {
+
 	  --reauthAttemptsLeft;
 	  options.reauthAttemptsLeft = reauthAttemptsLeft;
 
@@ -409,9 +412,9 @@ function Snoocore(config) {
 	if (hasErrors) {
 	  var redditResponse = typeof data === 'object' ? JSON.stringify(data, null, 2) : response._body;
 	  throw new Error('\n>>> Reddit Response:\n\n' + redditResponse
-			  + '\n\n>>> Endpoint URL: '+ url
-			  + '\n\n>>> Endpoint method: ' + endpoint.method
-			  + '\n\n>>> Arguments: ' + JSON.stringify(args, null, 2));
+			+ '\n\n>>> Endpoint URL: '+ url
+			+ '\n\n>>> Endpoint method: ' + endpoint.method
+			+ '\n\n>>> Arguments: ' + JSON.stringify(args, null, 2));
 	}
 
 	return data;
@@ -613,7 +616,7 @@ function Snoocore(config) {
 	  if (leafKeys[j].substring(0, 1) === '$') {
 	    actualSection = leafKeys[j]; // The actual value, e.g. '$subreddit'
 
-	    // If this section is the actual section, the next section of 
+	    // If this section is the actual section, the next section of
 	    // this path should be valid as well if we have a next session
 	    if (nextSection && leaf[actualSection][nextSection]) {
 	      break;
@@ -665,7 +668,7 @@ function Snoocore(config) {
     if (!hasUserPass && !hasCookieModhash) {
       return when.reject(new Error(
 	'login expects either a username/password, or a ' +
-				   'cookie/modhash'));
+	'cookie/modhash'));
     }
 
     if (hasCookieModhash) {
@@ -675,12 +678,12 @@ function Snoocore(config) {
     }
 
     var rem = typeof options.rem !== 'undefined'
-	    ? options.rem
-	    : true;
+				   ? options.rem
+				   : true;
 
     var api_type = typeof options.api_type !== 'undefined'
-		 ? options.api_type
-		 : 'json';
+					     ? options.api_type
+					     : 'json';
 
     return self.path('/api/login').post({
       user: options.username,
@@ -695,9 +698,9 @@ function Snoocore(config) {
   self.logout = function() {
     var getModhash = self._modhash
 		   ? when.resolve(self._modhash)
-				 : self.path('/api/me.json').get().then(function(result) {
-				   return result.data ? result.data.modhash : void 0;
-				 });
+      : self.path('/api/me.json').get().then(function(result) {
+	return result.data ? result.data.modhash : void 0;
+      });
 
     return getModhash.then(function(modhash) {
       // If we don't have a modhash, there is no need to logout
@@ -752,7 +755,7 @@ function Snoocore(config) {
   };
 
   // Sets the auth data from the oauth module to allow OAuth calls.
-  // 
+  //
   // This function can authenticate with:
   //
   // - Script based OAuth (no parameter)
@@ -856,7 +859,7 @@ function Snoocore(config) {
   };
 
 
-  // Make self.path the primary function that we return, but 
+  // Make self.path the primary function that we return, but
   // still allow access to the objects defined on self
   var key;
   for (key in self) {
