@@ -154,8 +154,8 @@ describe('Snoocore OAuth Test', function () {
 
           return reddit('/api/v1/me').get().then(function(data) {
             expect(data.name).to.be.a('string');
-            // deauthenticae with the current access token (e.g. "logoff")
-            return reddit.deauth();
+            // invalidate the current access token (as if it expired)
+            reddit._authData.access_token = 'invalidToken';
           }).then(function() {
             // by calling this, it will automatically request a new refresh token
             // if the one we were using has expired. The call will take a bit
@@ -188,7 +188,6 @@ describe('Snoocore OAuth Test', function () {
       }).then(function(data) {
 	expect(data.name).to.be.a('string');
 	authTokenA = reddit._authData.access_token;
-	console.log(1, authTokenA);
 	// "timeout" - simulate expired access token
 	reddit._authData.access_token = 'invalidToken';
       }).then(function() {
