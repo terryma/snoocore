@@ -3796,5 +3796,44 @@
     "method": "GET",
     "args": {},
     "isListing": false
+  },
+  {
+    "path": "/duplicates/$article",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [
+      ".json",
+      ".xml"
+    ],
+    "method": "GET",
+    "args": {
+      "after": {},
+      "article": {},
+      "before": {},
+      "count": {},
+      "limit": {},
+      "show": {}
+    },
+    "isListing": true
+  },
+  {
+    "path": "/subreddits/employee",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [
+      ".json",
+      ".xml"
+    ],
+    "method": "GET",
+    "args": {
+      "after": {},
+      "before": {},
+      "count": {},
+      "limit": {},
+      "show": {}
+    },
+    "isListing": true
   }
 ]
