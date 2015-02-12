@@ -49,9 +49,9 @@ function Snoocore(config) {
   self._decodeHtmlEntities = config.decodeHtmlEntities || false;
 
   self._retryAttempts = (typeof config.retryAttempts === 'undefined') ?
-			10 : config.retryAttempts;
+			60 : config.retryAttempts;
   self._retryDelay = (typeof config.retryDelay === 'undefined') ?
-		     3000 : config.retryDelay;
+		     5000 : config.retryDelay;
 
   self._modhash = ''; // The current mod hash of whatever user we have
   self._redditSession = ''; // The current cookie (reddit_session)
@@ -352,7 +352,9 @@ function Snoocore(config) {
 	  self.emit('server_error', serverError);
 
 	  if (retryAttemptsLeft <= 0) {
-	    throw new Error('Failed to access the reddit servers (HTTP 5xx)');
+	    throw new Error(
+	      'All retry attempts exhausted. Failed to access the reddit servers' +
+	      ' (HTTP ' + response._status + ').');
 	  }
 
 	  return delay(retryDelay).then(function() {

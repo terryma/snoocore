@@ -188,7 +188,8 @@ describe('Snoocore Error Test', function () {
       });
 
     }).then(function(error) {
-      expect(error.message).to.eql('Failed to access the reddit servers (HTTP 5xx)');
+      expect(error.message).to.eql(
+	'All retry attempts exhausted. Failed to access the reddit servers (HTTP 500).');
     }).finally(function() {
       // don't allow self signed certs again
       delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
