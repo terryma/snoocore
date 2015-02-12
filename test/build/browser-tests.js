@@ -17137,7 +17137,7 @@ describe('Snoocore Internal Tests', function () {
       });
     });
 
-    it.only('should allow a variable at the beginning of a path', function() {
+    it('should allow a variable at the beginning of a path', function() {
       var reddit = util.getRawInstance();
       return reddit('/$sort').get({
 	$sort: 'top'

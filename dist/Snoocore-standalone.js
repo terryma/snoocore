@@ -14,7 +14,7 @@ var utils = require('./utils');
 
 module.exports = Snoocore;
 
-Snoocore.version = '2.5.0';
+Snoocore.version = '2.6.0';
 
 Snoocore.oauth = require('./oauth');
 Snoocore.request = require('./request');
