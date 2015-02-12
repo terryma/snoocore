@@ -173,7 +173,7 @@ describe('Snoocore Internal Tests', function () {
     it('should NOT add in the default api type', function() {
       var reddit = util.getRawInstance();
       // By setting apiType to false / '' / anything else falsy, we
-      // will get the default reddit behavior. This is generally 
+      // will get the default reddit behavior. This is generally
       // what most users want to avoid.
       reddit = new Snoocore({
 	apiType: false
@@ -271,13 +271,11 @@ describe('Snoocore Internal Tests', function () {
     });
 
     it('should allow a variable at the beginning of a path', function() {
-      var reddit = util.getScriptInstance([ 'read' ]);
-      return reddit.auth().then(function() {
-	return reddit('/$sort').get({
-	  $sort: 'top'
-	}).then(function(result) {
-	  expect(result).to.haveOwnProperty('kind', 'Listing');
-	});
+      var reddit = util.getRawInstance();
+      return reddit('/$sort').get({
+	$sort: 'top'
+      }).then(function(result) {
+	expect(result).to.haveOwnProperty('kind', 'Listing');
       });
     });
 

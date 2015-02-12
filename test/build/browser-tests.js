@@ -14,7 +14,7 @@ var utils = require('./utils');
 
 module.exports = Snoocore;
 
-Snoocore.version = '2.4.1';
+Snoocore.version = '2.5.0';
 
 Snoocore.oauth = require('./oauth');
 Snoocore.request = require('./request');
@@ -32,8 +32,8 @@ function Snoocore(config) {
   self._userAgent = config.userAgent || 'snoocore-default-User-Agent';
 
   self._isNode = typeof config.browser !== 'undefined'
-               ? !config.browser
-               : utils.isNode();
+					 ? !config.browser
+					 : utils.isNode();
 
   self._server = {
     oauth: 'https://oauth.reddit.com',
@@ -50,9 +50,9 @@ function Snoocore(config) {
   self._decodeHtmlEntities = config.decodeHtmlEntities || false;
 
   self._retryAttempts = (typeof config.retryAttempts === 'undefined') ?
-			10 : config.retryAttempts;
+			60 : config.retryAttempts;
   self._retryDelay = (typeof config.retryDelay === 'undefined') ?
-		     3000 : config.retryDelay;
+		     5000 : config.retryDelay;
 
   self._modhash = ''; // The current mod hash of whatever user we have
   self._redditSession = ''; // The current cookie (reddit_session)
@@ -98,6 +98,11 @@ function Snoocore(config) {
     return self._refreshToken !== '';
   }
 
+  function hasAccessToken() {
+    return (typeof self._authData !== 'undefined' &&
+      typeof self._authData.access_token !== 'undefined');
+  }
+
   function hasAccessTokenExpired() {
     return Date.now() >= self._access_token_expires_at;
   }
@@ -134,7 +139,7 @@ function Snoocore(config) {
     if (endpointExtensions.indexOf('.json') === -1) {
       throw new Error(
         'Invalid extension types specified, unable to use ' +
-                      'this endpoint!');
+        'this endpoint!');
     }
 
     endpointUrl += '.json';
@@ -149,8 +154,8 @@ function Snoocore(config) {
     }
     // else, decide if we want to use www vs. ssl
     return endpoint.method === 'GET'
-			   ? self._server.www + endpoint.path
-			   : self._server.ssl + endpoint.path;
+			     ? self._server.www + endpoint.path
+			     : self._server.ssl + endpoint.path;
   }
 
   // Builds the URL that we will query taking into account any
@@ -186,7 +191,7 @@ function Snoocore(config) {
     return args;
   }
 
-  // Returns an object containing the restful verb that is needed to 
+  // Returns an object containing the restful verb that is needed to
   // call the reddit API. That verb is a function call to `callRedditApi`
   // with the necessary normalization modifications setup in options.
   function buildCall(endpoints, options) {
@@ -243,7 +248,7 @@ function Snoocore(config) {
   // Call the reddit api
   function callRedditApi(endpoint, givenArgs, options) {
 
-    // If we are authenticated, do not have a refresh token, and we have 
+    // If we are authenticated, do not have a refresh token, and we have
     // passed the time that the token expires, we should throw an error
     // and inform the user to listen for the event 'access_token_expired'
     if (isAuthenticated() && !hasRefreshToken() && hasAccessTokenExpired()) {
@@ -263,6 +268,8 @@ function Snoocore(config) {
 			    options.retryAttempts : self._retryAttempts;
     var retryDelay = (typeof options.retryDelay !== 'undefined') ?
 		     options.retryDelay : self._retryDelay;
+    var reauthAttemptsLeft = (typeof options.reauthAttemptsLeft !== 'undefined') ?
+			     options.reauthAttemptsLeft : retryAttemptsLeft;
 
 
     var throttle = getThrottle(bypassAuth);
@@ -346,7 +353,9 @@ function Snoocore(config) {
 	  self.emit('server_error', serverError);
 
 	  if (retryAttemptsLeft <= 0) {
-	    throw new Error('Failed to access the reddit servers (HTTP 5xx)');
+	    throw new Error(
+	      'All retry attempts exhausted. Failed to access the reddit servers' +
+	      ' (HTTP ' + response._status + ').');
 	  }
 
 	  return delay(retryDelay).then(function() {
@@ -357,16 +366,26 @@ function Snoocore(config) {
 
 	// Forbidden. Try to get a new access_token if we have
 	// a refresh token
-	if (response._status === 403 && hasRefreshToken()) {
 
-	  if (options._refreshTokenFail) { // fail if the refresh fail flag was set.
+	var shouldReauth = (hasAccessToken() &&
+	  (response._status === 403 || response._status === 401) &&
+	  (hasRefreshToken() || self._oauth.type === 'script'));
+
+	if (shouldReauth) {
+
+	  --reauthAttemptsLeft;
+	  options.reauthAttemptsLeft = reauthAttemptsLeft;
+
+	  if (reauthAttemptsLeft <= 0) {
 	    throw new Error('Unable to refresh the access_token.');
 	  }
 
-	  // attempt to refresh the access token if we have a refresh token
-	  return self.refresh(self._refreshToken).then(function() {
-	    // make the call again and flag to fail if it happens again
-	    options._refreshTokenFail = true;
+	  var reauth;
+
+	  if (hasRefreshToken()) { reauth = self.refresh(self._refreshToken); }
+	  if (self._oauth.type === 'script') { reauth = self.auth(); }
+
+	  return reauth.then(function() {
 	    return callRedditApi(endpoint, givenArgs, options);
 	  });
 	}
@@ -396,9 +415,9 @@ function Snoocore(config) {
 	if (hasErrors) {
 	  var redditResponse = typeof data === 'object' ? JSON.stringify(data, null, 2) : response._body;
 	  throw new Error('\n>>> Reddit Response:\n\n' + redditResponse
-			  + '\n\n>>> Endpoint URL: '+ url
-			  + '\n\n>>> Endpoint method: ' + endpoint.method
-			  + '\n\n>>> Arguments: ' + JSON.stringify(args, null, 2));
+			+ '\n\n>>> Endpoint URL: '+ url
+			+ '\n\n>>> Endpoint method: ' + endpoint.method
+			+ '\n\n>>> Arguments: ' + JSON.stringify(args, null, 2));
 	}
 
 	return data;
@@ -581,8 +600,10 @@ function Snoocore(config) {
     // Travel down the endpoint tree until we get to the endpoint that we want
     for (var i = 0, len = sections.length; i < len; ++i) {
 
-      // The next section of the url path provided
+      // The section of the url path provided
       var providedSection = sections[i];
+      var nextSection = sections[i + 1];
+
       // The *real* section should the provided section not exist
       var actualSection = providedSection;
 
@@ -597,7 +618,14 @@ function Snoocore(config) {
 	  // Return the section that represents a placeholder
 	  if (leafKeys[j].substring(0, 1) === '$') {
 	    actualSection = leafKeys[j]; // The actual value, e.g. '$subreddit'
-	    break;
+
+	    // If this section is the actual section, the next section of
+	    // this path should be valid as well if we have a next session
+	    if (nextSection && leaf[actualSection][nextSection]) {
+	      break;
+	    }
+
+	    // continue until we find a valid section
 	  }
 	}
 
@@ -643,7 +671,7 @@ function Snoocore(config) {
     if (!hasUserPass && !hasCookieModhash) {
       return when.reject(new Error(
 	'login expects either a username/password, or a ' +
-				   'cookie/modhash'));
+	'cookie/modhash'));
     }
 
     if (hasCookieModhash) {
@@ -653,12 +681,12 @@ function Snoocore(config) {
     }
 
     var rem = typeof options.rem !== 'undefined'
-	    ? options.rem
-	    : true;
+				   ? options.rem
+				   : true;
 
     var api_type = typeof options.api_type !== 'undefined'
-		 ? options.api_type
-		 : 'json';
+					     ? options.api_type
+					     : 'json';
 
     return self.path('/api/login').post({
       user: options.username,
@@ -673,9 +701,9 @@ function Snoocore(config) {
   self.logout = function() {
     var getModhash = self._modhash
 		   ? when.resolve(self._modhash)
-				 : self.path('/api/me.json').get().then(function(result) {
-				   return result.data ? result.data.modhash : void 0;
-				 });
+      : self.path('/api/me.json').get().then(function(result) {
+	return result.data ? result.data.modhash : void 0;
+      });
 
     return getModhash.then(function(modhash) {
       // If we don't have a modhash, there is no need to logout
@@ -730,7 +758,7 @@ function Snoocore(config) {
   };
 
   // Sets the auth data from the oauth module to allow OAuth calls.
-  // 
+  //
   // This function can authenticate with:
   //
   // - Script based OAuth (no parameter)
@@ -834,7 +862,7 @@ function Snoocore(config) {
   };
 
 
-  // Make self.path the primary function that we return, but 
+  // Make self.path the primary function that we return, but
   // still allow access to the objects defined on self
   var key;
   for (key in self) {
@@ -845,7 +873,7 @@ function Snoocore(config) {
   return self;
 }
 
-},{"./build/api":2,"./oauth":70,"./request":73,"./request/file":71,"./utils":82,"events":7,"he":51,"url":15,"util":17,"when":69,"when/delay":52}],2:[function(require,module,exports){
+},{"./build/api":2,"./oauth":71,"./request":74,"./request/file":72,"./utils":83,"events":7,"he":51,"url":15,"util":17,"when":70,"when/delay":52}],2:[function(require,module,exports){
 module.exports=[
   {
     "path": "/api/clear_sessions",
@@ -4644,6 +4672,45 @@ module.exports=[
     "method": "GET",
     "args": {},
     "isListing": false
+  },
+  {
+    "path": "/duplicates/$article",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [
+      ".json",
+      ".xml"
+    ],
+    "method": "GET",
+    "args": {
+      "after": {},
+      "article": {},
+      "before": {},
+      "count": {},
+      "limit": {},
+      "show": {}
+    },
+    "isListing": true
+  },
+  {
+    "path": "/subreddits/employee",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [
+      ".json",
+      ".xml"
+    ],
+    "method": "GET",
+    "args": {
+      "after": {},
+      "before": {},
+      "count": {},
+      "limit": {},
+      "show": {}
+    },
+    "isListing": true
   }
 ]
 },{}],3:[function(require,module,exports){
@@ -4998,7 +5065,7 @@ function base64Write (buf, string, offset, length) {
 }
 
 function utf16leWrite (buf, string, offset, length) {
-  var charsWritten = blitBuffer(utf16leToBytes(string), buf, offset, length)
+  var charsWritten = blitBuffer(utf16leToBytes(string), buf, offset, length, 2)
   return charsWritten
 }
 
@@ -5682,7 +5749,8 @@ function base64ToBytes (str) {
   return base64.toByteArray(str)
 }
 
-function blitBuffer (src, dst, offset, length) {
+function blitBuffer (src, dst, offset, length, unitSize) {
+  if (unitSize) length -= length % unitSize;
   for (var i = 0; i < length; i++) {
     if ((i + offset >= dst.length) || (i >= src.length))
       break
@@ -13913,7 +13981,7 @@ define(function(require) {
 
 
 
-},{"./when":69}],53:[function(require,module,exports){
+},{"./when":70}],53:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -13932,7 +14000,7 @@ define(function (require) {
 });
 })(typeof define === 'function' && define.amd ? define : function (factory) { module.exports = factory(require); });
 
-},{"./Scheduler":54,"./env":66,"./makePromise":67}],54:[function(require,module,exports){
+},{"./Scheduler":54,"./env":66,"./makePromise":68}],54:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -13952,9 +14020,9 @@ define(function() {
 		this._async = async;
 		this._running = false;
 
-		this._queue = new Array(1<<16);
+		this._queue = this;
 		this._queueLen = 0;
-		this._afterQueue = new Array(1<<4);
+		this._afterQueue = {};
 		this._afterQueueLen = 0;
 
 		var self = this;
@@ -14342,8 +14410,12 @@ define(function(require) {
 
 		function settleOne(p) {
 			var h = Promise._handler(p);
-			return h.state() === 0 ? toPromise(p).then(state.fulfilled, state.rejected)
-					: state.inspect(h);
+			if(h.state() === 0) {
+				return toPromise(p).then(state.fulfilled, state.rejected);
+			}
+
+			h._unreport();
+			return state.inspect(h);
 		}
 
 		/**
@@ -14386,7 +14458,7 @@ define(function(require) {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(require); }));
 
-},{"../apply":56,"../state":68}],58:[function(require,module,exports){
+},{"../apply":56,"../state":69}],58:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -14599,7 +14671,7 @@ define(function(require) {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(require); }));
 
-},{"../state":68}],61:[function(require,module,exports){
+},{"../state":69}],61:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -14781,8 +14853,10 @@ define(function(require) {
 define(function(require) {
 
 	var setTimer = require('../env').setTimer;
+	var format = require('../format');
 
 	return function unhandledRejection(Promise) {
+
 		var logError = noop;
 		var logInfo = noop;
 		var localConsole;
@@ -14820,7 +14894,7 @@ define(function(require) {
 		function report(r) {
 			if(!r.handled) {
 				reported.push(r);
-				logError('Potentially unhandled rejection [' + r.id + '] ' + formatError(r.value));
+				logError('Potentially unhandled rejection [' + r.id + '] ' + format.formatError(r.value));
 			}
 		}
 
@@ -14828,7 +14902,7 @@ define(function(require) {
 			var i = reported.indexOf(r);
 			if(i >= 0) {
 				reported.splice(i, 1);
-				logInfo('Handled previous rejection [' + r.id + '] ' + formatObject(r.value));
+				logInfo('Handled previous rejection [' + r.id + '] ' + format.formatObject(r.value));
 			}
 		}
 
@@ -14849,28 +14923,6 @@ define(function(require) {
 		return Promise;
 	};
 
-	function formatError(e) {
-		var s = typeof e === 'object' && e.stack ? e.stack : formatObject(e);
-		return e instanceof Error ? s : s + ' (WARNING: non-Error used)';
-	}
-
-	function formatObject(o) {
-		var s = String(o);
-		if(s === '[object Object]' && typeof JSON !== 'undefined') {
-			s = tryStringify(o, s);
-		}
-		return s;
-	}
-
-	function tryStringify(e, defaultValue) {
-		try {
-			return JSON.stringify(e);
-		} catch(e) {
-			// Ignore. Cannot JSON.stringify e, stick with String(e)
-			return defaultValue;
-		}
-	}
-
 	function throwit(e) {
 		throw e;
 	}
@@ -14880,7 +14932,7 @@ define(function(require) {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(require); }));
 
-},{"../env":66}],65:[function(require,module,exports){
+},{"../env":66,"../format":67}],65:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -15005,9 +15057,69 @@ define(function(require) {
 (function(define) { 'use strict';
 define(function() {
 
+	return {
+		formatError: formatError,
+		formatObject: formatObject,
+		tryStringify: tryStringify
+	};
+
+	/**
+	 * Format an error into a string.  If e is an Error and has a stack property,
+	 * it's returned.  Otherwise, e is formatted using formatObject, with a
+	 * warning added about e not being a proper Error.
+	 * @param {*} e
+	 * @returns {String} formatted string, suitable for output to developers
+	 */
+	function formatError(e) {
+		var s = typeof e === 'object' && e !== null && e.stack ? e.stack : formatObject(e);
+		return e instanceof Error ? s : s + ' (WARNING: non-Error used)';
+	}
+
+	/**
+	 * Format an object, detecting "plain" objects and running them through
+	 * JSON.stringify if possible.
+	 * @param {Object} o
+	 * @returns {string}
+	 */
+	function formatObject(o) {
+		var s = String(o);
+		if(s === '[object Object]' && typeof JSON !== 'undefined') {
+			s = tryStringify(o, s);
+		}
+		return s;
+	}
+
+	/**
+	 * Try to return the result of JSON.stringify(x).  If that fails, return
+	 * defaultValue
+	 * @param {*} x
+	 * @param {*} defaultValue
+	 * @returns {String|*} JSON.stringify(x) or defaultValue
+	 */
+	function tryStringify(x, defaultValue) {
+		try {
+			return JSON.stringify(x);
+		} catch(e) {
+			return defaultValue;
+		}
+	}
+
+});
+}(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
+
+},{}],68:[function(require,module,exports){
+(function (process){
+/** @license MIT License (c) copyright 2010-2014 original author or authors */
+/** @author Brian Cavalier */
+/** @author John Hann */
+
+(function(define) { 'use strict';
+define(function() {
+
 	return function makePromise(environment) {
 
 		var tasks = environment.scheduler;
+		var emitRejection = initEmitRejection();
 
 		var objectCreate = Object.create ||
 			function(proto) {
@@ -15474,7 +15586,8 @@ define(function() {
 
 		Pending.prototype.run = function() {
 			var q = this.consumers;
-			var handler = this.join();
+			var handler = this.handler;
+			this.handler = this.handler.join();
 			this.consumers = void 0;
 
 			for (var i = 0; i < q.length; ++i) {
@@ -15636,6 +15749,8 @@ define(function() {
 		};
 
 		Rejected.prototype.fail = function(context) {
+			this.reported = true;
+			emitRejection('unhandledRejection', this);
 			Promise.onFatalRejection(this, context === void 0 ? this.context : context);
 		};
 
@@ -15645,9 +15760,10 @@ define(function() {
 		}
 
 		ReportTask.prototype.run = function() {
-			if(!this.rejection.handled) {
+			if(!this.rejection.handled && !this.rejection.reported) {
 				this.rejection.reported = true;
-				Promise.onPotentiallyUnhandledRejection(this.rejection, this.context);
+				emitRejection('unhandledRejection', this.rejection) ||
+					Promise.onPotentiallyUnhandledRejection(this.rejection, this.context);
 			}
 		};
 
@@ -15657,14 +15773,14 @@ define(function() {
 
 		UnreportTask.prototype.run = function() {
 			if(this.rejection.reported) {
-				Promise.onPotentiallyUnhandledRejectionHandled(this.rejection);
+				emitRejection('rejectionHandled', this.rejection) ||
+					Promise.onPotentiallyUnhandledRejectionHandled(this.rejection);
 			}
 		};
 
 		// Unhandled rejection hooks
 		// By default, everything is a noop
 
-		// TODO: Better names: "annotate"?
 		Promise.createContext
 			= Promise.enterContext
 			= Promise.exitContext
@@ -15877,12 +15993,52 @@ define(function() {
 
 		function noop() {}
 
+		function initEmitRejection() {
+			/*global process, self, CustomEvent*/
+			if(typeof process !== 'undefined' && process !== null
+				&& typeof process.emit === 'function') {
+				// Returning falsy here means to call the default
+				// onPotentiallyUnhandledRejection API.  This is safe even in
+				// browserify since process.emit always returns falsy in browserify:
+				// https://github.com/defunctzombie/node-process/blob/master/browser.js#L40-L46
+				return function(type, rejection) {
+					return type === 'unhandledRejection'
+						? process.emit(type, rejection.value, rejection)
+						: process.emit(type, rejection);
+				};
+			} else if(typeof self !== 'undefined' && typeof CustomEvent === 'function') {
+				return (function(noop, self, CustomEvent) {
+					var hasCustomEvent = false;
+					try {
+						var ev = new CustomEvent('unhandledRejection');
+						hasCustomEvent = ev instanceof CustomEvent;
+					} catch (e) {}
+
+					return !hasCustomEvent ? noop : function(type, rejection) {
+						var ev = new CustomEvent(type, {
+							detail: {
+								reason: rejection.value,
+								key: rejection
+							},
+							bubbles: false,
+							cancelable: true
+						});
+
+						return !self.dispatchEvent(ev);
+					};
+				}(noop, self, CustomEvent));
+			}
+
+			return noop;
+		}
+
 		return Promise;
 	};
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],68:[function(require,module,exports){
+}).call(this,require('_process'))
+},{"_process":10}],69:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -15919,7 +16075,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],69:[function(require,module,exports){
+},{}],70:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 
 /**
@@ -15927,7 +16083,7 @@ define(function() {
  * when is part of the cujoJS family of libraries (http://cujojs.com/)
  * @author Brian Cavalier
  * @author John Hann
- * @version 3.6.3
+ * @version 3.7.2
  */
 (function(define) { 'use strict';
 define(function (require) {
@@ -16150,7 +16306,7 @@ define(function (require) {
 });
 })(typeof define === 'function' && define.amd ? define : function (factory) { module.exports = factory(require); });
 
-},{"./lib/Promise":53,"./lib/TimeoutError":55,"./lib/apply":56,"./lib/decorators/array":57,"./lib/decorators/flow":58,"./lib/decorators/fold":59,"./lib/decorators/inspect":60,"./lib/decorators/iterate":61,"./lib/decorators/progress":62,"./lib/decorators/timed":63,"./lib/decorators/unhandledRejection":64,"./lib/decorators/with":65}],70:[function(require,module,exports){
+},{"./lib/Promise":53,"./lib/TimeoutError":55,"./lib/apply":56,"./lib/decorators/array":57,"./lib/decorators/flow":58,"./lib/decorators/fold":59,"./lib/decorators/inspect":60,"./lib/decorators/iterate":61,"./lib/decorators/progress":62,"./lib/decorators/timed":63,"./lib/decorators/unhandledRejection":64,"./lib/decorators/with":65}],71:[function(require,module,exports){
 (function (Buffer){
 "use strict";
 
@@ -16299,7 +16455,7 @@ oauth.revokeToken = function(token, isRefreshToken, options) {
 module.exports = oauth;
 
 }).call(this,require("buffer").Buffer)
-},{"./request":73,"./utils":82,"buffer":3,"querystring":14,"util":17,"when":69}],71:[function(require,module,exports){
+},{"./request":74,"./utils":83,"buffer":3,"querystring":14,"util":17,"when":70}],72:[function(require,module,exports){
 (function (Buffer){
 /*
 Represents a file that we wish to upload to reddit.
@@ -16321,7 +16477,7 @@ module.exports = function(name, mimeType, data) {
 };
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":3}],72:[function(require,module,exports){
+},{"buffer":3}],73:[function(require,module,exports){
 (function (Buffer){
 
 
@@ -16463,12 +16619,12 @@ exports.getData = function(formData) {
 };
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":3,"querystring":14,"when":69}],73:[function(require,module,exports){
+},{"buffer":3,"querystring":14,"when":70}],74:[function(require,module,exports){
 var utils = require('../utils');
 
 module.exports = utils.isNode() ? require('./requestNode') : require('./requestBrowser');
 
-},{"../utils":82,"./requestBrowser":74,"./requestNode":undefined}],74:[function(require,module,exports){
+},{"../utils":83,"./requestBrowser":75,"./requestNode":undefined}],75:[function(require,module,exports){
 //
 // Browser requests, mirrors the syntax of the node requests
 //
@@ -16525,7 +16681,7 @@ exports.https = function(options, formData) {
 
 };
 
-},{"./form":72,"when":69}],75:[function(require,module,exports){
+},{"./form":73,"when":70}],76:[function(require,module,exports){
 // Files that will be tested on the browser
 
 describe('Snoocore Browser Tests', function() {
@@ -16535,7 +16691,7 @@ describe('Snoocore Browser Tests', function() {
   require('./src/snoocore-listings-test');
 });
 
-},{"./src/request-test":77,"./src/snoocore-behavior-noauth-test":78,"./src/snoocore-internal-test":79,"./src/snoocore-listings-test":80}],76:[function(require,module,exports){
+},{"./src/request-test":78,"./src/snoocore-behavior-noauth-test":79,"./src/snoocore-internal-test":80,"./src/snoocore-listings-test":81}],77:[function(require,module,exports){
 (function (process){
 
 // By default it will read from the environment 
@@ -16606,7 +16762,7 @@ module.exports = {
 
 
 }).call(this,require('_process'))
-},{"_process":10}],77:[function(require,module,exports){
+},{"_process":10}],78:[function(require,module,exports){
 /* global describe, it */
 
 var chai = require('chai');
@@ -16634,7 +16790,7 @@ describe('Request Test', function () {
 
 });
 
-},{"../../Snoocore":1,"../config":76,"chai":19,"chai-as-promised":18}],78:[function(require,module,exports){
+},{"../../Snoocore":1,"../config":77,"chai":19,"chai-as-promised":18}],79:[function(require,module,exports){
 /* global describe, it, before, beforeEach */
 
 var path = require('path');
@@ -16708,7 +16864,7 @@ describe('Snoocore Behavior Test (noauth)', function () {
 
 });
 
-},{"../../Snoocore":1,"../config":76,"./util":81,"chai":19,"chai-as-promised":18,"path":9,"when":69,"when/delay":52}],79:[function(require,module,exports){
+},{"../../Snoocore":1,"../config":77,"./util":82,"chai":19,"chai-as-promised":18,"path":9,"when":70,"when/delay":52}],80:[function(require,module,exports){
 /* describe, it, afterEach, beforeEach */
 
 var chai = require('chai');
@@ -16884,7 +17040,7 @@ describe('Snoocore Internal Tests', function () {
     it('should NOT add in the default api type', function() {
       var reddit = util.getRawInstance();
       // By setting apiType to false / '' / anything else falsy, we
-      // will get the default reddit behavior. This is generally 
+      // will get the default reddit behavior. This is generally
       // what most users want to avoid.
       reddit = new Snoocore({
 	apiType: false
@@ -16925,21 +17081,21 @@ describe('Snoocore Internal Tests', function () {
     it('should allow a "path" syntax', function() {
       var reddit = util.getRawInstance();
       return reddit
-		   .path('/r/$subreddit/hot')
-		   .get({ $subreddit: 'aww' })
-		   .then(function(result) {
-		     expect(result).to.haveOwnProperty('kind', 'Listing');
-		   });
+		       .path('/r/$subreddit/hot')
+		       .get({ $subreddit: 'aww' })
+		       .then(function(result) {
+			 expect(result).to.haveOwnProperty('kind', 'Listing');
+		       });
     });
 
     it('should tolerate a missing beginning slash', function() {
       var reddit = util.getRawInstance();
       return reddit
-		   .path('r/$subreddit/hot')
-		   .get({ $subreddit: 'aww' })
-		   .then(function(result) {
-		     expect(result).to.haveOwnProperty('kind', 'Listing');
-		   });
+		       .path('r/$subreddit/hot')
+		       .get({ $subreddit: 'aww' })
+		       .then(function(result) {
+			 expect(result).to.haveOwnProperty('kind', 'Listing');
+		       });
     });
 
     it('should crash if an invalid endpoint is provided', function() {
@@ -16952,10 +17108,10 @@ describe('Snoocore Internal Tests', function () {
     it('should allow a "path" syntax (where reddit === path fn)', function() {
       var reddit = util.getRawInstance();
       return reddit('/r/$subreddit/hot')
-           .get({ $subreddit: 'aww' })
-           .then(function(result) {
-             expect(result).to.haveOwnProperty('kind', 'Listing');
-           });
+		       .get({ $subreddit: 'aww' })
+		       .then(function(result) {
+			 expect(result).to.haveOwnProperty('kind', 'Listing');
+		       });
     });
 
     it('should allow for alternate placeholder names', function() {
@@ -16981,11 +17137,19 @@ describe('Snoocore Internal Tests', function () {
       });
     });
 
-  });
+    it.only('should allow a variable at the beginning of a path', function() {
+      var reddit = util.getRawInstance();
+      return reddit('/$sort').get({
+	$sort: 'top'
+      }).then(function(result) {
+	expect(result).to.haveOwnProperty('kind', 'Listing');
+      });
+    });
 
+  });
 });
 
-},{"../../Snoocore":1,"../config":76,"./util":81,"chai":19,"chai-as-promised":18}],80:[function(require,module,exports){
+},{"../../Snoocore":1,"../config":77,"./util":82,"chai":19,"chai-as-promised":18}],81:[function(require,module,exports){
 /* global describe, it, before */
 
 var path = require('path');
@@ -17079,7 +17243,7 @@ describe('Snoocore Listings Test', function () {
 
 });
 
-},{"../../Snoocore":1,"../config":76,"./util":81,"chai":19,"chai-as-promised":18,"path":9}],81:[function(require,module,exports){
+},{"../../Snoocore":1,"../config":77,"./util":82,"chai":19,"chai-as-promised":18,"path":9}],82:[function(require,module,exports){
 
 var Snoocore = require('../../Snoocore');
 var config = require('../config');
@@ -17145,7 +17309,7 @@ exports.getScriptInstance = function(scopes) {
   });
 };
 
-},{"../../Snoocore":1,"../config":76}],82:[function(require,module,exports){
+},{"../../Snoocore":1,"../config":77}],83:[function(require,module,exports){
 "use strict";
 
 // checks basic globals to help determine which environment we are in
@@ -17156,4 +17320,4 @@ exports.isNode = function() {
         typeof window === "undefined";
 };
 
-},{}]},{},[75]);
+},{}]},{},[76]);
