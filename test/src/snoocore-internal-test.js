@@ -273,19 +273,13 @@ describe('Snoocore Internal Tests', function () {
     it('should allow a variable at the beginning of a path', function() {
       var reddit = util.getScriptInstance([ 'read' ]);
       return reddit.auth().then(function() {
-	return reddit('/$article/duplicates').get({
-	  $article: '2uukmq'
+	return reddit('/$sort').get({
+	  $sort: 'top'
 	}).then(function(result) {
 	  expect(result).to.haveOwnProperty('kind', 'Listing');
 	});
       });
     });
 
-    it('should allow an embedded variable at the beginning of a path', function() {
-      var reddit = util.getRawInstance();
-      return reddit('/2uukmq/duplicates').get().then(function(result) {
-	expect(result).to.haveOwnProperty('kind', 'Listing');
-      });
-    });
-
   });
+});
