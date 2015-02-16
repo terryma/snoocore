@@ -323,6 +323,32 @@ describe('Snoocore OAuth Test', function () {
     });
   });
 
+  describe.only('Application only OAuth', function() {
+
+    it('(implicit client) Application only OAuth', function() {
+      var reddit = util.getImplicitInstance([ 'read' ]);
+
+      // OAuth only endpoint.
+      return reddit('/api/v1/user/$username/trophies').get({
+	$username: 'tsenior'
+      }).then(function(result) {
+	console.log(result);
+      });
+    });
+
+    it('(explicit/script client) Application only OAuth', function() {
+      var reddit = util.getScriptInstance([ 'read' ]);
+
+      // OAuth only endpoint.
+      return reddit('/api/v1/user/$username/trophies').get({
+	$username: 'tsenior'
+      }).then(function(result) {
+	console.log(result);
+      });
+    });
+
+  });
+
   describe('General Reddit API Tests using OAuth', function() {
 
     it('should get resources when logged in', function() {
@@ -351,5 +377,6 @@ describe('Snoocore OAuth Test', function () {
     });
 
   });
+
 
 });

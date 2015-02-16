@@ -221,6 +221,39 @@ describe('OAuth Module Test', function (require) {
       });
     });
 
+    it('(Application only implicit) should get Application only access token', function() {
+      return oauth.getAuthData('implicit', {
+	consumerKey: config.reddit.installed.key,
+	applicationOnly: true
+      }).then(function(authData) {
+	expect(authData).to.be.an('object');
+
+	if (authData.error) { throw new Error(authData.error); }
+
+	expect(authData.access_token).to.be.a('string');
+	expect(authData.token_type).to.equal('bearer');
+        expect(authData.expires_in).to.equal(3600);
+        expect(authData.scope).to.equal('identity');
+      });
+    });
+
+    it('(Application only script/web) should get Application only access token', function() {
+      return oauth.getAuthData('script', {
+	consumerKey: config.reddit.script.key,
+	consumerSecret: config.reddit.script.secret,
+	applicationOnly: true
+      }).then(function(authData) {
+	expect(authData).to.be.an('object');
+
+	if (authData.error) { throw new Error(authData.error); }
+
+	expect(authData.access_token).to.be.a('string');
+	expect(authData.token_type).to.equal('bearer');
+        expect(authData.expires_in).to.equal(3600);
+        expect(authData.scope).to.equal('identity');
+      });
+    });
+
   });
 
 });

@@ -21,7 +21,7 @@ function normalizeScope(scope) {
 }
 
 // keep backwards compatability
-oauth.getAuthUrl = 
+oauth.getAuthUrl =
 oauth.getExplicitAuthUrl = function(options) {
   var query = {};
 
@@ -66,42 +66,64 @@ oauth.getImplicitAuthUrl = function(options) {
  */
 oauth.getAuthData = function(type, options) {
 
+  // parameters to send to reddit when requesting the access_token
   var params = {};
-
+  
   params.scope = normalizeScope(options.scope);
-
-  switch (type) {
-    case 'script':
-      params.grant_type = 'password';
-      params.username = options.username;
-      params.password = options.password;
-      break;
-    case 'web': // web & installed for backwards compatability
-    case 'installed':
-    case 'explicit':
-      params.grant_type = 'authorization_code';
-      params.client_id = options.consumerKey;
-      params.redirect_uri = options.redirectUri;
-      params.code = options.authorizationCode;
-      break;
-    case 'refresh':
-      params.grant_type = 'refresh_token';
-      params.refresh_token = options.refreshToken;
-      break;
-    default:
-      return when.reject(new Error('invalid type specified'));
+  
+  // This AuthData is for a logged out user
+  if (options.applicationOnly) {
+    switch(type) {
+      case 'script':
+      case 'installed': // web & installed for backwards compatability
+      case 'web':
+      case 'explicit':
+	params.grant_type = 'client_credentials';
+	break
+      case 'implicit':
+	params.grant_type = 'https://oauth.reddit.com/grants/installed_client';
+	params.device_id = options.deviceId || 'DO_NOT_TRACK_THIS_DEVICE';
+	break;
+      default:
+	return when.reject(new Error('Invalid OAuth type specified (Application only OAuth).'));
+    }
   }
+  // This AuthData is for an actual logged in user
+  else {  
+    switch (type) {
+      case 'script':
+	params.grant_type = 'password';
+	params.username = options.username;
+	params.password = options.password;
+	break;
+      case 'web': // web & installed for backwards compatability
+      case 'installed':
+      case 'explicit':
+	params.grant_type = 'authorization_code';
+	params.client_id = options.consumerKey;
+	params.redirect_uri = options.redirectUri;
+	params.code = options.authorizationCode;
+	break;
+      case 'refresh':
+	params.grant_type = 'refresh_token';
+	params.refresh_token = options.refreshToken;
+	break;
+      default:
+	return when.reject(new Error('Invalid OAuth type specified (Authenticated OAuth).'));
+    }
+  }
+
+  var headers = {};
 
   var buff = new Buffer(options.consumerKey + ':' + options.consumerSecret);
   var auth = 'Basic ' + (buff).toString('base64');
+  headers['Authorization'] = auth;
 
   return request.https({
     method: 'POST',
-    hostname: 'ssl.reddit.com',
+    hostname: 'www.reddit.com',
     path: '/api/v1/access_token',
-    headers: {
-      'Authorization': auth
-    }
+    headers: headers
   }, querystring.stringify(params)).then(function(response) {
     var data;
 

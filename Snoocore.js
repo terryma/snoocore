@@ -55,14 +55,17 @@ function Snoocore(config) {
 
   self._modhash = ''; // The current mod hash of whatever user we have
   self._redditSession = ''; // The current cookie (reddit_session)
+
+  self._authTypes = { APPLICATION_ONLY: 1, AUTHENTICATED: 2 };
+  self._authType = self._authTypes.APPLICATION_ONLY; // application only until `auth()` is called
   self._authData = {}; // Set if user has authenticated with OAuth
-  self._access_token_expires_at = 0; // The unix time (ms) when the auth token expires
 
   self._refreshToken = ''; // Set when calling `refresh` and when duration:'permanent'
 
   self._login = config.login || {};
   self._oauth = config.oauth || {};
   self._oauth.scope = self._oauth.scope || [ 'identity' ]; // Default scope for reddit
+  self._oauth.deviceId = self._oauth.deviceId || 'DO_NOT_TRACK_THIS_DEVICE';
 
   // Structure the raw reddit api into a tree format
   // @TODO move this into a build step in ./run.js, no need to build
@@ -108,6 +111,16 @@ function Snoocore(config) {
 
   function isLoggedIn() {
     return self._modhash;
+  }
+
+  function isApplicationOnly() {
+    return self._authType === self._authTypes.APPLICATION_ONLY;
+  }
+
+  function canRenewAccessToken() {
+    return (isApplicationOnly() || // application only oauth
+	    hasRefreshToken() || // web type permanent with refresh token
+	    self._oauth.type === 'script'); // or a script type
   }
 
   function replaceUrlParams(endpointUrl, givenArgs) {
@@ -247,16 +260,6 @@ function Snoocore(config) {
   // Call the reddit api
   function callRedditApi(endpoint, givenArgs, options) {
 
-    // If we are authenticated, do not have a refresh token, and we have
-    // passed the time that the token expires, we should throw an error
-    // and inform the user to listen for the event 'access_token_expired'
-    if (isAuthenticated() && !hasRefreshToken() && hasAccessTokenExpired()) {
-      self.emit('access_token_expired');
-      return when.reject(new Error('Authorization token has expired. Listen for ' +
-				   'the "access_token_expired" event to handle ' +
-				   'this gracefully in your app.'));
-    }
-
     // Options that will change the way this call behaves
     options = options || {};
 
@@ -365,12 +368,19 @@ function Snoocore(config) {
 
 	// Forbidden. Try to get a new access_token if we have
 	// a refresh token
-
-	var shouldReauth = (hasAccessToken() &&
-	  (response._status === 403 || response._status === 401) &&
-	  (hasRefreshToken() || self._oauth.type === 'script'));
+	var shouldReauth = response._status === 403 || response._status === 401;
 
 	if (shouldReauth) {
+
+	  // If we can't renew the access token, we can stop trying to reauth
+	  // and let the user know that the access token has expired
+	  if (!canRenewAccessToken()) {
+	    self.emit('access_token_expired');
+	    return when.reject(new Error('Access token has expired. Listen for ' +
+					 'the "access_token_expired" event to handle ' +
+					 'this gracefully in your app.'));
+
+	  }
 
 	  --reauthAttemptsLeft;
 	  options.reauthAttemptsLeft = reauthAttemptsLeft;
@@ -381,8 +391,14 @@ function Snoocore(config) {
 
 	  var reauth;
 
-	  if (hasRefreshToken()) { reauth = self.refresh(self._refreshToken); }
-	  if (self._oauth.type === 'script') { reauth = self.auth(); }
+	  if (isApplicationOnly()) {
+	    reauth = self.applicationOnlyAuth();
+	  } else {
+	    // If we have been authenticated with a permanent refresh token
+	    if (hasRefreshToken()) { reauth = self.refresh(self._refreshToken); }
+	    // If we are OAuth type script and not implicit authenticated
+	    if (self._oauth.type === 'script') { reauth = self.auth(); }
+	  }
 
 	  return reauth.then(function() {
 	    return callRedditApi(endpoint, givenArgs, options);
@@ -765,13 +781,9 @@ function Snoocore(config) {
   // - Authorization Code (request_type = "code")
   // - Access Token (request_type = "token") / Implicit OAuth
   //
-  self.auth = function(authDataOrAuthCodeOrAccessToken, tokenExpiresInMs) {
+  self.auth = function(authDataOrAuthCodeOrAccessToken, isApplicationOnly) {
 
     var authData;
-
-    // Set the expire time for this token
-    tokenExpiresInMs = tokenExpiresInMs || (3600 * 1000);
-    self._access_token_expires_at = Date.now() + tokenExpiresInMs;
 
     switch(self._oauth.type) {
       case 'script':
@@ -780,7 +792,8 @@ function Snoocore(config) {
 	  consumerSecret: self._oauth.consumerSecret,
 	  scope: self._oauth.scope,
 	  username: self._login.username,
-	  password: self._login.password
+	  password: self._login.password,
+	  applicationOnly: isApplicationOnly
 	});
 	break;
 
@@ -792,17 +805,28 @@ function Snoocore(config) {
 	  consumerKey: self._oauth.consumerKey,
 	  consumerSecret: self._oauth.consumerSecret || '',
 	  redirectUri: self._oauth.redirectUri,
-	  scope: self._oauth.scope
+	  scope: self._oauth.scope,
+	  applicationOnly: isApplicationOnly
 	});
 	break;
 
       case 'implicit':
-	authData = {
-	  access_token: authDataOrAuthCodeOrAccessToken, // access token in this case
-	  token_type: 'bearer',
-	  expires_in: 3600,
-	  scope: self._oauth.scope
-	};
+	if (isApplicationOnly) {
+	  authData = Snoocore.oauth.getAuthData(self._oauth.type, {
+	    consumerKey: self._oauth.consumerKey,
+	    scope: self._oauth.scope,
+	    applicationOnly: true
+	  });
+	} else {
+	  // Set the access token, no need to make another call to reddit
+	  // using the `Snoocore.oauth.getAuthData` call
+	  authData = {
+	    access_token: authDataOrAuthCodeOrAccessToken, // access token in this case
+	    token_type: 'bearer',
+	    expires_in: 3600,
+	    scope: self._oauth.scope
+	  };
+	}
 	break;
 
       default:
@@ -811,6 +835,12 @@ function Snoocore(config) {
     }
 
     return when(authData).then(function(authDataResult) {
+
+      if (!isApplicationOnly) {
+	self._authType = self._authTypes.AUTHENTICATED;
+      } else {
+	self._authType = self._authTypes.APPLICATION_ONLY;
+      }
 
       self._authData = authDataResult;
 
@@ -824,6 +854,11 @@ function Snoocore(config) {
 	return authDataResult.refresh_token;
       }
     });
+  };
+
+  // Only authenticates with Application Only OAuth
+  self.applicationOnlyAuth = function() {
+    return self.auth(void 0, true);
   };
 
   // Clears any authentication data & removes OAuth authentication
@@ -844,8 +879,8 @@ function Snoocore(config) {
       consumerKey: self._oauth.consumerKey,
       consumerSecret: self._oauth.consumerSecret
     }).then(function() {
+      self._authType = self._authTypes.APPLICATION_ONLY; // set this back to application only oauth
       self._authData = {}; // clear internal auth data
-      clearTimeout(self._access_token_expires_timeout); // clear the expires timeout
     });
   };
 
