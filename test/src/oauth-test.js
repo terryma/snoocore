@@ -20,7 +20,7 @@ describe('OAuth Module Test', function (require) {
   describe('#getAuthUrl()', function() {
     it('should get a proper authorization url (WEB/INSTALLED)', function() {
       var url = oauth.getAuthUrl({
-	consumerKey: config.reddit.web.key,
+	key: config.reddit.web.key,
 	redirectUri: config.reddit.redirectUri,
 	state: 'foo'
       });
@@ -36,7 +36,7 @@ describe('OAuth Module Test', function (require) {
 
     it('should get a proper authorization url (mobile friendly) (WEB/INSTALLED)', function() {
       var url = oauth.getAuthUrl({
-	consumerKey: config.reddit.web.key,
+	key: config.reddit.web.key,
 	redirectUri: config.reddit.redirectUri,
 	state: 'foo',
 	mobile: true
@@ -53,7 +53,7 @@ describe('OAuth Module Test', function (require) {
 
     it('should get back a proper authorization url (multiple scopes) (WEB/INSTALLED)', function() {
       var url = oauth.getAuthUrl({
-	consumerKey: config.reddit.web.key,
+	key: config.reddit.web.key,
 	redirectUri: config.reddit.redirectUri,
 	state: 'foo',
 	scope: [ 'identity', 'read', 'subscribe' ]
@@ -73,7 +73,7 @@ describe('OAuth Module Test', function (require) {
   describe('#getExplicitAuthUrl()', function() {
     it('should be the same as getAuthUrl()', function() {
       var url = oauth.getExplicitAuthUrl({
-	consumerKey: config.reddit.web.key,
+	key: config.reddit.web.key,
 	redirectUri: config.reddit.redirectUri,
 	state: 'foo',
 	scope: [ 'identity', 'read', 'subscribe' ]
@@ -92,7 +92,7 @@ describe('OAuth Module Test', function (require) {
   describe('#getImplicitAuthUrl()', function() {
     it('should get back an implicit grant authorization url', function() {
       var url = oauth.getImplicitAuthUrl({
-	consumerKey: config.reddit.installed.key,
+	key: config.reddit.installed.key,
 	redirectUri: config.reddit.redirectUri,
 	state: 'foo'
       });
@@ -111,7 +111,7 @@ describe('OAuth Module Test', function (require) {
     it('(Explicit) it should get an access token', function() {
 
       var url = oauth.getAuthUrl({
-	consumerKey: config.reddit.web.key,
+	key: config.reddit.web.key,
 	redirectUri: config.reddit.redirectUri,
 	state: 'foo'
       });
@@ -126,8 +126,8 @@ describe('OAuth Module Test', function (require) {
 	var authorizationCode = params.code;
 
 	return oauth.getAuthData('explicit', {
-	  consumerKey: config.reddit.web.key,
-	  consumerSecret: config.reddit.web.secret,
+	  key: config.reddit.web.key,
+	  secret: config.reddit.web.secret,
 	  authorizationCode: authorizationCode,
 	  redirectUri: config.reddit.redirectUri
 	});
@@ -145,8 +145,8 @@ describe('OAuth Module Test', function (require) {
     it('(Script) should get an access token', function() {
 
       return oauth.getAuthData('script', {
-        consumerKey: config.reddit.script.key,
-        consumerSecret: config.reddit.script.secret,
+        key: config.reddit.script.key,
+        secret: config.reddit.script.secret,
         username: config.reddit.login.username,
         password: config.reddit.login.password
       }).then(function(authData) {
@@ -164,8 +164,8 @@ describe('OAuth Module Test', function (require) {
     it('(Script + 1 scope string) should get an access token', function() {
 
       return oauth.getAuthData('script', {
-	consumerKey: config.reddit.script.key,
-        consumerSecret: config.reddit.script.secret,
+	key: config.reddit.script.key,
+        secret: config.reddit.script.secret,
         username: config.reddit.login.username,
         password: config.reddit.login.password,
         scope: 'flair'
@@ -184,8 +184,8 @@ describe('OAuth Module Test', function (require) {
     it('(Script + 1 scope array) should get an access token', function() {
 
       return oauth.getAuthData('script', {
-	consumerKey: config.reddit.script.key,
-        consumerSecret: config.reddit.script.secret,
+	key: config.reddit.script.key,
+        secret: config.reddit.script.secret,
         username: config.reddit.login.username,
         password: config.reddit.login.password,
         scope: [ 'flair' ]
@@ -204,8 +204,8 @@ describe('OAuth Module Test', function (require) {
     it('(Script + multi scope array) should get an access token', function() {
 
       return oauth.getAuthData('script', {
-	consumerKey: config.reddit.script.key,
-        consumerSecret: config.reddit.script.secret,
+	key: config.reddit.script.key,
+        secret: config.reddit.script.secret,
         username: config.reddit.login.username,
         password: config.reddit.login.password,
         scope: [ 'flair', 'identity' ]
@@ -223,7 +223,7 @@ describe('OAuth Module Test', function (require) {
 
     it('(Application only implicit) should get Application only access token', function() {
       return oauth.getAuthData('implicit', {
-	consumerKey: config.reddit.installed.key,
+	key: config.reddit.installed.key,
 	applicationOnly: true
       }).then(function(authData) {
 	expect(authData).to.be.an('object');
@@ -239,8 +239,8 @@ describe('OAuth Module Test', function (require) {
 
     it('(Application only script/web) should get Application only access token', function() {
       return oauth.getAuthData('script', {
-	consumerKey: config.reddit.script.key,
-	consumerSecret: config.reddit.script.secret,
+	key: config.reddit.script.key,
+	secret: config.reddit.script.secret,
 	applicationOnly: true
       }).then(function(authData) {
 	expect(authData).to.be.an('object');

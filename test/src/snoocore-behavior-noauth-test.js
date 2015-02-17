@@ -19,7 +19,7 @@ describe('Snoocore Behavior Test (noauth)', function () {
 
   it('should GET resources while not logged in', function() {
 
-    var reddit = util.getRawInstance();
+    var reddit = util.getScriptInstance([ 'read' ]);
 
     return reddit('/r/$subreddit/new').get({
       $subreddit: 'pcmasterrace'
@@ -29,22 +29,15 @@ describe('Snoocore Behavior Test (noauth)', function () {
     });
   });
 
-  it('should not get resources when not logged in', function() {
-    var reddit = util.getRawInstance();
-    return reddit('/api/me.json').get().then(function(data) {
-      return expect(data).to.eql({});
-    });
-  });
-
   it('should not decode html', function() {
-    var reddit = util.getRawInstance();
+    var reddit = util.getScriptInstance([ 'read' ]);
     return reddit('/r/snoocoreTest/about.json').get().then(function(result) {
       expect(result.data.description_html.indexOf('&lt;/p&gt;')).to.not.equal(-1);
     });
   });
 
   it('should decode html on a per call basis', function() {
-    var reddit = util.getRawInstance();
+    var reddit = util.getScriptInstance([ 'read' ]);
     return reddit('/r/snoocoreTest/about.json').get(null, {
       decodeHtmlEntities: true
     }).then(function(result) {
@@ -54,9 +47,17 @@ describe('Snoocore Behavior Test (noauth)', function () {
 
   it('should decode html globally & respect per call override', function() {
 
-    var reddit = util.getRawInstance();
+    var reddit = util.getScriptInstance([ 'read' ]);
+
     var secondReddit = new Snoocore({
-      decodeHtmlEntities: true
+      userAgent: 'foobar',
+      decodeHtmlEntities: true,
+      oauth: {
+	type: 'implicit',
+	key: config.reddit.installed.key,
+	redirectUri: '_',
+	scope: [ 'read' ]
+      }
     });
 
     return secondReddit('/r/snoocoreTest/about.json').get().then(function(result) {

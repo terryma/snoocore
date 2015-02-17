@@ -25,7 +25,7 @@ oauth.getAuthUrl =
 oauth.getExplicitAuthUrl = function(options) {
   var query = {};
 
-  query.client_id = options.consumerKey;
+  query.client_id = options.key;
   query.state = options.state;
   query.redirect_uri = options.redirectUri;
   query.duration = options.duration || 'temporary';
@@ -44,7 +44,7 @@ oauth.getExplicitAuthUrl = function(options) {
 oauth.getImplicitAuthUrl = function(options) {
   var query = {};
 
-  query.client_id = options.consumerKey;
+  query.client_id = options.key;
   query.state = options.state;
   query.redirect_uri = options.redirectUri;
   query.response_type = 'token';
@@ -68,18 +68,23 @@ oauth.getAuthData = function(type, options) {
 
   // parameters to send to reddit when requesting the access_token
   var params = {};
-  
+
   params.scope = normalizeScope(options.scope);
-  
+
+  // A refresh token request for AuthData
+  if (type == 'refresh') {
+    params.grant_type = 'refresh_token';
+    params.refresh_token = options.refreshToken;
+  }
   // This AuthData is for a logged out user
-  if (options.applicationOnly) {
+  else if (options.applicationOnly) {
     switch(type) {
       case 'script':
       case 'installed': // web & installed for backwards compatability
       case 'web':
       case 'explicit':
 	params.grant_type = 'client_credentials';
-	break
+	break;
       case 'implicit':
 	params.grant_type = 'https://oauth.reddit.com/grants/installed_client';
 	params.device_id = options.deviceId || 'DO_NOT_TRACK_THIS_DEVICE';
@@ -89,7 +94,7 @@ oauth.getAuthData = function(type, options) {
     }
   }
   // This AuthData is for an actual logged in user
-  else {  
+  else {
     switch (type) {
       case 'script':
 	params.grant_type = 'password';
@@ -100,13 +105,11 @@ oauth.getAuthData = function(type, options) {
       case 'installed':
       case 'explicit':
 	params.grant_type = 'authorization_code';
-	params.client_id = options.consumerKey;
+	params.client_id = options.key;
 	params.redirect_uri = options.redirectUri;
 	params.code = options.authorizationCode;
 	break;
       case 'refresh':
-	params.grant_type = 'refresh_token';
-	params.refresh_token = options.refreshToken;
 	break;
       default:
 	return when.reject(new Error('Invalid OAuth type specified (Authenticated OAuth).'));
@@ -115,7 +118,7 @@ oauth.getAuthData = function(type, options) {
 
   var headers = {};
 
-  var buff = new Buffer(options.consumerKey + ':' + options.consumerSecret);
+  var buff = new Buffer(options.key + ':' + options.secret);
   var auth = 'Basic ' + (buff).toString('base64');
   headers['Authorization'] = auth;
 
@@ -148,7 +151,7 @@ oauth.revokeToken = function(token, isRefreshToken, options) {
   var params = { token: token, token_type_hint: tokenTypeHint };
 
   var auth = 'Basic ' + (new Buffer(
-    options.consumerKey + ':' + options.consumerSecret)).toString('base64');
+    options.key + ':' + options.secret)).toString('base64');
 
   return request.https({
     method: 'POST',

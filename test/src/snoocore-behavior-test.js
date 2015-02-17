@@ -116,7 +116,6 @@ describe('Snoocore Behavior Test', function () {
 	$subreddit: config.reddit.testSubreddit
       });
     }).then(function(response) {
-
       var subName = response.data.name;
       var isSubbed = response.data.user_is_subscriber;
 

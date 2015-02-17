@@ -14,7 +14,6 @@ describe('Snoocore Node Tests', function() {
       tsi.standardServer.start(),
       tsi.errorServer.start()
     ]).then(function(result) {
-      console.log('started servers', result);
     });
   });
 
@@ -23,7 +22,6 @@ describe('Snoocore Node Tests', function() {
       tsi.standardServer.stop(),
       tsi.errorServer.stop()
     ]).then(function(result) {
-      console.log('stopped servers', result);
     });
   });
 
@@ -31,7 +29,6 @@ describe('Snoocore Node Tests', function() {
   require('./src/request-test');
   require('./src/snoocore-behavior-noauth-test');
   require('./src/snoocore-behavior-test');
-  require('./src/snoocore-cookie-test');
   require('./src/snoocore-error-test');
   require('./src/snoocore-internal-test');
   require('./src/snoocore-listings-test');

@@ -17,7 +17,7 @@ describe('Snoocore Listings Test', function () {
 
   it('should get the front page listing and nav through it (basic)', function() {
 
-    var reddit = util.getRawInstance();
+    var reddit = util.getScriptInstance([ 'read' ]);
 
     // or reddit('/hot').listing
     return reddit('/hot').listing().then(function(slice) {
@@ -47,7 +47,7 @@ describe('Snoocore Listings Test', function () {
 
   it('should handle empty listings', function() {
 
-    var reddit = util.getRawInstance();
+    var reddit = util.getScriptInstance([ 'read', 'history' ]);
 
     return reddit('/user/$username/$where').listing({
       $username: 'emptyListing', // an account with no comments
@@ -59,7 +59,7 @@ describe('Snoocore Listings Test', function () {
 
   it('should requery a listing after changes have been made', function() {
 
-    var reddit = util.getRawInstance();
+    var reddit = util.getScriptInstance([ 'read', 'history' ]);
 
     // @TODO we need a better way to test this (without using captcha's)
     // as of now it is requerying empty comments of a user which runs the
@@ -79,7 +79,7 @@ describe('Snoocore Listings Test', function () {
 
   it('should work with reddit.raw', function() {
     
-    var reddit = util.getRawInstance();
+    var reddit = util.getScriptInstance([ 'read' ]);
 
     return reddit.raw('https://www.reddit.com/domain/$domain/hot.json').listing({
       $domain: 'google.com'

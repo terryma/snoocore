@@ -170,6 +170,9 @@ describe('Snoocore Error Test', function () {
 	reddit.on('server_error', function(error) {
 
 	  expect(error instanceof Error);
+
+	  console.log('ral', error.retryAttemptsLeft);
+	  
 	  expect(error.retryAttemptsLeft).to.equal(--retryAttempts);
 	  expect(error.status).to.equal(500);
 	  expect(error.url).to.equal('https://localhost:3001/hot.json');
