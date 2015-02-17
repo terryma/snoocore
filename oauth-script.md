@@ -39,3 +39,13 @@ return reddit.auth().then(function() {
 });
 
 ```
+
+### De-Authenticating
+
+A function `reddit.deauth` is provided which will revoke the `access_token` for the current authenticated user.
+
+```javascript
+var deauthPromise = reddit.deauth();
+```
+
+Generally it is a good idea to call this everytime the application is finished using the users data.
