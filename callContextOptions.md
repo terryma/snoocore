@@ -24,6 +24,7 @@ Call context options will *always* override values set in the global [configurat
  - [Decode HTML entities](#decodeHtml)
  - [Retry attempts](#retryAttempts)
  - [Retry delay](#retryDelay)
+ - [Listing Index](#listingIndex)
 
 
 <a name="bypassAuth"></a>
@@ -47,3 +48,8 @@ Call context version of the global setting `retryAttempts` ([Link](config.html#r
 ### Retry Delay
 
 Call context version of the global setting `retryDelay` ([Link](config.html#retryDelay)).
+
+<a name="listingIndex"></a>
+### Listing Index
+
+An integer that specifies which listing to use when an endpoint returns multiple listings. Required when a listing endpoint returns multiple listings.

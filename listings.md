@@ -100,3 +100,18 @@ Get a promise for the first slice in a listing. Useful for going back to the beg
 Get a promise for the same slice. Useful if you've modified (removed, edited, etc.) some content from a listing and need to requery for the slice of data.
 
 
+## Multiple listings
+
+Some endpoints return multiple listings. Use the [call context option](callContextOptions.html#listingIndex) `listingIndex` to specify which listing to actually use in the returned result:
+
+
+```javascript
+reddit('duplicates/$article').listing({ 
+  limit: 100, 
+  $article: '13wml3'
+}, { listingIndex: 1 }).then(function(slice) {
+ // slice is now the second listing in the given array from the duplicates endpoint
+});
+```
+
+
