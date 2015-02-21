@@ -47,6 +47,8 @@ exports.https = function(options, formData) {
       res.on('error', function(error) { return reject(error); });
       res.on('data', function(chunk) { body += chunk; });
       res.on('end', function() {
+	// console.log('>>> res.body', body);
+	// console.log('>>> res.status', res.statusCode);
 	res._body = body; // attach the response body to the object
 	res._status = res.statusCode;
 	return resolve(res);
@@ -55,6 +57,7 @@ exports.https = function(options, formData) {
 
     if (options.method !== 'GET') {
       req.write(data.buffer);
+      // console.log(data.buffer.toString());
     }
 
     req.end();

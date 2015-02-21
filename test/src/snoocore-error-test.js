@@ -41,7 +41,10 @@ describe('Snoocore Error Test', function () {
     });
   });
 
-  it('should handle data.errors field', function() {
+  // Reddit no longer throws an 'IMAGE_ERROR', so this test
+  // no longer works properly. We need to find another instance
+  // of the data.errors or remove this test completly
+  it.skip('should handle data.errors field', function() {
     var reddit = util.getScriptInstance([ 'modconfig' ]);
 
     return reddit.auth().then(function() {
