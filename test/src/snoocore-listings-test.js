@@ -78,7 +78,7 @@ describe('Snoocore Listings Test', function () {
   });
 
   it('should work with reddit.raw', function() {
-    
+
     var reddit = util.getRawInstance();
 
     return reddit.raw('https://www.reddit.com/domain/$domain/hot.json').listing({
@@ -87,6 +87,52 @@ describe('Snoocore Listings Test', function () {
       expect(slice.get.kind).to.equal('Listing');
     });
 
+  });
+
+  it('should handle listings with multiple listings', function() {
+
+    var reddit = util.getRawInstance();
+    
+    // just get the data back to compare it with the listing
+    return reddit('duplicates/$article').get({
+      limit: 2,
+      $article: '13wml3'
+    }).then(function(getResult) {
+      // check that the first result matches what we get back
+      return reddit('duplicates/$article').listing({
+	limit: 2,
+	$article: '13wml3'
+      }, { listingIndex: 0 }).then(function(slice) {
+	// slice.get should equal the getResult
+	expect(slice.get).to.eql(getResult);
+
+	// should equal the first listings children
+	expect(slice.allChildren).to.eql(getResult[0].data.children);
+
+	// check the second index
+	return reddit('duplicates/$article').listing({
+	  limit: 2,
+	  $article: '13wml3'
+	}, { listingIndex: 1 }).then(function(slice) {
+	  // slice.get should equal the getResult
+	  expect(slice.get).to.eql(getResult);
+
+	  // should equal the first listings children
+	  expect(slice.allChildren).to.eql(getResult[1].data.children);
+	})
+      });
+    });
+
+  });
+
+  it.only('throw error - listing has multiple listings w/o specifying index', function() {
+
+    var reddit = util.getRawInstance();
+    
+    return expect(reddit('duplicates/$article').listing({
+      limit: 2,
+      $article: '13wml3'
+    })).to.eventually.be.rejectedWith('Must specify a `listingIndex` for this listing.');
   });
 
 });
