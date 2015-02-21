@@ -2653,12 +2653,14 @@
     "args": {
       "allow_top": {},
       "api_type": {},
+      "captcha": {},
       "collapse_deleted_comments": {},
       "comment_score_hide_mins": {},
       "css_on_cname": {},
       "description": {},
       "exclude_banned_modqueue": {},
       "header-title": {},
+      "iden": {},
       "lang": {},
       "link_type": {},
       "name": {},
@@ -2774,7 +2776,8 @@
       "header": {},
       "img_type": {},
       "name": {},
-      "uh": {}
+      "uh": {},
+      "upload_type": {}
     },
     "isListing": false
   },
@@ -2791,7 +2794,8 @@
       "header": {},
       "img_type": {},
       "name": {},
-      "uh": {}
+      "uh": {},
+      "upload_type": {}
     },
     "isListing": false
   },
@@ -3835,5 +3839,74 @@
       "show": {}
     },
     "isListing": true
+  },
+  {
+    "path": "/related/$article",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "after": {},
+      "article": {},
+      "before": {},
+      "count": {},
+      "limit": {},
+      "show": {}
+    },
+    "isListing": true
+  },
+  {
+    "path": "/api/delete_sr_banner",
+    "oauth": [
+      "modconfig"
+    ],
+    "extensions": [],
+    "method": "POST",
+    "args": {
+      "api_type": {},
+      "uh": {}
+    },
+    "isListing": false
+  },
+  {
+    "path": "/r/$subreddit/api/delete_sr_banner",
+    "oauth": [
+      "modconfig"
+    ],
+    "extensions": [],
+    "method": "POST",
+    "args": {
+      "api_type": {},
+      "uh": {}
+    },
+    "isListing": false
+  },
+  {
+    "path": "/api/delete_sr_icon",
+    "oauth": [
+      "modconfig"
+    ],
+    "extensions": [],
+    "method": "POST",
+    "args": {
+      "api_type": {},
+      "uh": {}
+    },
+    "isListing": false
+  },
+  {
+    "path": "/r/$subreddit/api/delete_sr_icon",
+    "oauth": [
+      "modconfig"
+    ],
+    "extensions": [],
+    "method": "POST",
+    "args": {
+      "api_type": {},
+      "uh": {}
+    },
+    "isListing": false
   }
 ]
