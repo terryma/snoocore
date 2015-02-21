@@ -125,14 +125,17 @@ describe('Snoocore Listings Test', function () {
 
   });
 
-  it.only('throw error - listing has multiple listings w/o specifying index', function() {
-
+  it('throw error - listing has multiple listings w/o specifying index', function() {
     var reddit = util.getRawInstance();
     
-    return expect(reddit('duplicates/$article').listing({
+    return reddit('duplicates/$article').listing({
       limit: 2,
       $article: '13wml3'
-    })).to.eventually.be.rejectedWith('Must specify a `listingIndex` for this listing.');
+    }).then(function() {
+      throw new Error('this should have failed');
+    }).catch(function(error) {
+      expect(error.message).to.equal('Must specify a `listingIndex` for this listing.');
+    });
   });
 
 });

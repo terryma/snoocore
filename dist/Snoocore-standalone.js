@@ -442,6 +442,7 @@ function Snoocore(config) {
   function getListing(endpoint, givenArgs, options) {
 
     givenArgs = givenArgs || {};
+    options = options || {};
 
     // number of results that we have loaded so far. It will
     // increase / decrease when calling next / previous.
@@ -454,14 +455,23 @@ function Snoocore(config) {
       return callRedditApi(endpoint, givenArgs, options).then(function(result) {
 
 	var slice = {};
+	var listing = result || {};
+
+	slice.get = result || {};
+	
+	if (result instanceof Array) {
+	  if (typeof options.listingIndex === 'undefined') {
+	    throw new Error('Must specify a `listingIndex` for this listing.');
+	  }
+
+	  listing = result[options.listingIndex];
+	}
 
 	slice.count = count;
 
-	slice.get = result || {};
-
-	slice.before = slice.get.data.before || null;
-	slice.after = slice.get.data.after || null;
-	slice.allChildren = slice.get.data.children || [];
+	slice.before = listing.data.before || null;
+	slice.after = listing.data.after || null;
+	slice.allChildren = listing.data.children || [];
 
 	slice.empty = slice.allChildren.length === 0;
 

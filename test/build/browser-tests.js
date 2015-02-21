@@ -14,7 +14,7 @@ var utils = require('./utils');
 
 module.exports = Snoocore;
 
-Snoocore.version = '2.5.0';
+Snoocore.version = '2.6.0';
 
 Snoocore.oauth = require('./oauth');
 Snoocore.request = require('./request');
@@ -442,6 +442,7 @@ function Snoocore(config) {
   function getListing(endpoint, givenArgs, options) {
 
     givenArgs = givenArgs || {};
+    options = options || {};
 
     // number of results that we have loaded so far. It will
     // increase / decrease when calling next / previous.
@@ -454,14 +455,23 @@ function Snoocore(config) {
       return callRedditApi(endpoint, givenArgs, options).then(function(result) {
 
 	var slice = {};
+	var listing = result || {};
+
+	slice.get = result || {};
+	
+	if (result instanceof Array) {
+	  if (typeof options.listingIndex === 'undefined') {
+	    throw new Error('Must specify a `listingIndex` for this listing.');
+	  }
+
+	  listing = result[options.listingIndex];
+	}
 
 	slice.count = count;
 
-	slice.get = result || {};
-
-	slice.before = slice.get.data.before || null;
-	slice.after = slice.get.data.after || null;
-	slice.allChildren = slice.get.data.children || [];
+	slice.before = listing.data.before || null;
+	slice.after = listing.data.after || null;
+	slice.allChildren = listing.data.children || [];
 
 	slice.empty = slice.allChildren.length === 0;
 
@@ -8656,6 +8666,7 @@ function hasOwnProperty(obj, prop) {
 
     // Module systems magic dance.
 
+    /* istanbul ignore else */
     if (typeof require === "function" && typeof exports === "object" && typeof module === "object") {
         // NodeJS
         module.exports = chaiAsPromised;
@@ -17230,7 +17241,7 @@ describe('Snoocore Listings Test', function () {
   });
 
   it('should work with reddit.raw', function() {
-    
+
     var reddit = util.getRawInstance();
 
     return reddit.raw('https://www.reddit.com/domain/$domain/hot.json').listing({
@@ -17239,6 +17250,55 @@ describe('Snoocore Listings Test', function () {
       expect(slice.get.kind).to.equal('Listing');
     });
 
+  });
+
+  it('should handle listings with multiple listings', function() {
+
+    var reddit = util.getRawInstance();
+    
+    // just get the data back to compare it with the listing
+    return reddit('duplicates/$article').get({
+      limit: 2,
+      $article: '13wml3'
+    }).then(function(getResult) {
+      // check that the first result matches what we get back
+      return reddit('duplicates/$article').listing({
+	limit: 2,
+	$article: '13wml3'
+      }, { listingIndex: 0 }).then(function(slice) {
+	// slice.get should equal the getResult
+	expect(slice.get).to.eql(getResult);
+
+	// should equal the first listings children
+	expect(slice.allChildren).to.eql(getResult[0].data.children);
+
+	// check the second index
+	return reddit('duplicates/$article').listing({
+	  limit: 2,
+	  $article: '13wml3'
+	}, { listingIndex: 1 }).then(function(slice) {
+	  // slice.get should equal the getResult
+	  expect(slice.get).to.eql(getResult);
+
+	  // should equal the first listings children
+	  expect(slice.allChildren).to.eql(getResult[1].data.children);
+	})
+      });
+    });
+
+  });
+
+  it('throw error - listing has multiple listings w/o specifying index', function() {
+    var reddit = util.getRawInstance();
+    
+    return reddit('duplicates/$article').listing({
+      limit: 2,
+      $article: '13wml3'
+    }).then(function() {
+      throw new Error('this should have failed');
+    }).catch(function(error) {
+      expect(error.message).to.equal('Must specify a `listingIndex` for this listing.');
+    });
   });
 
 });
