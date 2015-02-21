@@ -14,7 +14,7 @@ var utils = require('./utils');
 
 module.exports = Snoocore;
 
-Snoocore.version = '2.6.0';
+Snoocore.version = '2.7.0';
 
 Snoocore.oauth = require('./oauth');
 Snoocore.request = require('./request');
@@ -3539,12 +3539,14 @@ module.exports=[
     "args": {
       "allow_top": {},
       "api_type": {},
+      "captcha": {},
       "collapse_deleted_comments": {},
       "comment_score_hide_mins": {},
       "css_on_cname": {},
       "description": {},
       "exclude_banned_modqueue": {},
       "header-title": {},
+      "iden": {},
       "lang": {},
       "link_type": {},
       "name": {},
@@ -3660,7 +3662,8 @@ module.exports=[
       "header": {},
       "img_type": {},
       "name": {},
-      "uh": {}
+      "uh": {},
+      "upload_type": {}
     },
     "isListing": false
   },
@@ -3677,7 +3680,8 @@ module.exports=[
       "header": {},
       "img_type": {},
       "name": {},
-      "uh": {}
+      "uh": {},
+      "upload_type": {}
     },
     "isListing": false
   },
@@ -4721,6 +4725,75 @@ module.exports=[
       "show": {}
     },
     "isListing": true
+  },
+  {
+    "path": "/related/$article",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "after": {},
+      "article": {},
+      "before": {},
+      "count": {},
+      "limit": {},
+      "show": {}
+    },
+    "isListing": true
+  },
+  {
+    "path": "/api/delete_sr_banner",
+    "oauth": [
+      "modconfig"
+    ],
+    "extensions": [],
+    "method": "POST",
+    "args": {
+      "api_type": {},
+      "uh": {}
+    },
+    "isListing": false
+  },
+  {
+    "path": "/r/$subreddit/api/delete_sr_banner",
+    "oauth": [
+      "modconfig"
+    ],
+    "extensions": [],
+    "method": "POST",
+    "args": {
+      "api_type": {},
+      "uh": {}
+    },
+    "isListing": false
+  },
+  {
+    "path": "/api/delete_sr_icon",
+    "oauth": [
+      "modconfig"
+    ],
+    "extensions": [],
+    "method": "POST",
+    "args": {
+      "api_type": {},
+      "uh": {}
+    },
+    "isListing": false
+  },
+  {
+    "path": "/r/$subreddit/api/delete_sr_icon",
+    "oauth": [
+      "modconfig"
+    ],
+    "extensions": [],
+    "method": "POST",
+    "args": {
+      "api_type": {},
+      "uh": {}
+    },
+    "isListing": false
   }
 ]
 },{}],3:[function(require,module,exports){
