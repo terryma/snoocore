@@ -42,9 +42,9 @@ describe('Snoocore OAuth Test', function () {
       return tsi.standardServer.allowAuthUrl(url).then(function(params) {
         var authorizationCode = params.code;
         return reddit.auth(authorizationCode).then(function(refreshToken) {
-
+	 
           return reddit('/api/v1/me').get().then(function(data) {
-
+	    
             expect(data.name).to.be.a('string');
 
             // deauthenticae with the current access token (e.g. "logoff")
@@ -114,16 +114,13 @@ describe('Snoocore OAuth Test', function () {
       return reddit.auth().then(function() {
 	return reddit('/api/v1/me').get();
       }).then(function(data) {
-	console.log(1);
 	expect(data.name).to.be.a('string');
 	authTokenA = reddit._authenticatedAuthData.access_token;
 	// "timeout" - simulate expired access token
 	reddit._authenticatedAuthData.access_token = 'invalidToken';
       }).then(function() {
-	console.log(2);
 	return reddit('/api/v1/me').get();
       }).then(function(data) {
-	console.log(3);
 	expect(data.name).to.be.a('string');
 	authTokenB = reddit._authenticatedAuthData.access_token;
 	expect(authTokenA === authTokenB).to.equal(false);

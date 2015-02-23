@@ -183,7 +183,7 @@ describe('Snoocore Internal Tests', function () {
 
     it('should build an url', function() {
       var reddit = util.getScriptInstance();
-      
+
       var url = reddit._test.buildUrl({
         extensions: [],
         user: 'foo',
@@ -192,6 +192,44 @@ describe('Snoocore Internal Tests', function () {
       }, endpoint);
 
       expect(url).to.equal('https://oauth.reddit.com/something/bar');
+    });
+
+    it('should build an url with a custom hostname (global)', function() {
+      var reddit = new Snoocore({
+	userAgent: util.USER_AGENT,
+	serverOAuth: 'foo.bar.com',
+	oauth: {
+	  type: 'implicit',
+	  key: config.reddit.installed.key,
+	  redirectUri: config.reddit.redirectUri,
+	  scope: []
+	}
+      });
+
+      var url = reddit._test.buildUrl({
+        extensions: [],
+        user: 'foo',
+        passwd: 'foo',
+        $urlparam: 'something'
+      }, endpoint);
+
+      expect(url).to.equal('https://foo.bar.com/something/bar');
+    });
+
+
+    it('should build an url with a custom hostname (local)', function() {
+      var reddit = util.getScriptInstance();
+
+      var url = reddit._test.buildUrl({
+        extensions: [],
+        user: 'foo',
+        passwd: 'foo',
+        $urlparam: 'something'
+      }, endpoint, {
+	serverOAuth: 'foo.bar.com'
+      });
+
+      expect(url).to.equal('https://foo.bar.com/something/bar');
     });
   });
 

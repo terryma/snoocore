@@ -22,7 +22,8 @@ describe('OAuth Module Test', function (require) {
       var url = oauth.getAuthUrl({
 	key: config.reddit.web.key,
 	redirectUri: config.reddit.redirectUri,
-	state: 'foo'
+	state: 'foo',
+	serverWWW: 'www.reddit.com'
       });
 
       expect(url.indexOf('https://www.reddit.com/api/v1/authorize?')).to.not.equal(-1);
@@ -39,7 +40,8 @@ describe('OAuth Module Test', function (require) {
 	key: config.reddit.web.key,
 	redirectUri: config.reddit.redirectUri,
 	state: 'foo',
-	mobile: true
+	mobile: true,
+	serverWWW: 'www.reddit.com'
       });
 
       expect(url.indexOf('https://www.reddit.com/api/v1/authorize.compact?')).to.not.equal(-1);
@@ -56,7 +58,8 @@ describe('OAuth Module Test', function (require) {
 	key: config.reddit.web.key,
 	redirectUri: config.reddit.redirectUri,
 	state: 'foo',
-	scope: [ 'identity', 'read', 'subscribe' ]
+	scope: [ 'identity', 'read', 'subscribe' ],
+	serverWWW: 'www.reddit.com'
       });
 
       expect(url.indexOf('https://www.reddit.com/api/v1/authorize?')).to.not.equal(-1);
@@ -76,7 +79,8 @@ describe('OAuth Module Test', function (require) {
 	key: config.reddit.web.key,
 	redirectUri: config.reddit.redirectUri,
 	state: 'foo',
-	scope: [ 'identity', 'read', 'subscribe' ]
+	scope: [ 'identity', 'read', 'subscribe' ],
+	serverWWW: 'www.reddit.com'
       });
 
       expect(url.indexOf('https://www.reddit.com/api/v1/authorize?')).to.not.equal(-1);
@@ -94,7 +98,8 @@ describe('OAuth Module Test', function (require) {
       var url = oauth.getImplicitAuthUrl({
 	key: config.reddit.installed.key,
 	redirectUri: config.reddit.redirectUri,
-	state: 'foo'
+	state: 'foo',
+	serverWWW: 'www.reddit.com'
       });
 
       expect(url.indexOf('https://www.reddit.com/api/v1/authorize?')).to.not.equal(-1);
@@ -113,7 +118,8 @@ describe('OAuth Module Test', function (require) {
       var url = oauth.getAuthUrl({
 	key: config.reddit.web.key,
 	redirectUri: config.reddit.redirectUri,
-	state: 'foo'
+	state: 'foo',
+	serverWWW: 'www.reddit.com'
       });
 
       return tsi.standardServer.allowAuthUrl(url).then(function(params) {
@@ -129,7 +135,8 @@ describe('OAuth Module Test', function (require) {
 	  key: config.reddit.web.key,
 	  secret: config.reddit.web.secret,
 	  authorizationCode: authorizationCode,
-	  redirectUri: config.reddit.redirectUri
+	  redirectUri: config.reddit.redirectUri,
+	  serverWWW: 'www.reddit.com'
 	});
       }).then(function(authData) {
 	expect(authData).to.be.an('object');
@@ -148,7 +155,8 @@ describe('OAuth Module Test', function (require) {
         key: config.reddit.script.key,
         secret: config.reddit.script.secret,
         username: config.reddit.login.username,
-        password: config.reddit.login.password
+        password: config.reddit.login.password,
+	serverWWW: 'www.reddit.com'
       }).then(function(authData) {
         expect(authData).to.be.an('object');
 
@@ -168,7 +176,8 @@ describe('OAuth Module Test', function (require) {
         secret: config.reddit.script.secret,
         username: config.reddit.login.username,
         password: config.reddit.login.password,
-        scope: 'flair'
+        scope: 'flair',
+	serverWWW: 'www.reddit.com'
       }).then(function(authData) {
         expect(authData).to.be.an('object');
 
@@ -188,7 +197,8 @@ describe('OAuth Module Test', function (require) {
         secret: config.reddit.script.secret,
         username: config.reddit.login.username,
         password: config.reddit.login.password,
-        scope: [ 'flair' ]
+        scope: [ 'flair' ],
+	serverWWW: 'www.reddit.com'
       }).then(function(authData) {
         expect(authData).to.be.an('object');
 
@@ -208,7 +218,8 @@ describe('OAuth Module Test', function (require) {
         secret: config.reddit.script.secret,
         username: config.reddit.login.username,
         password: config.reddit.login.password,
-        scope: [ 'flair', 'identity' ]
+        scope: [ 'flair', 'identity' ],
+	serverWWW: 'www.reddit.com'
       }).then(function(authData) {
         expect(authData).to.be.an('object');
 
@@ -224,7 +235,8 @@ describe('OAuth Module Test', function (require) {
     it('(Application only implicit) should get Application only access token', function() {
       return oauth.getAuthData('implicit', {
 	key: config.reddit.installed.key,
-	applicationOnly: true
+	applicationOnly: true,
+	serverWWW: 'www.reddit.com'
       }).then(function(authData) {
 	expect(authData).to.be.an('object');
 
@@ -241,7 +253,8 @@ describe('OAuth Module Test', function (require) {
       return oauth.getAuthData('script', {
 	key: config.reddit.script.key,
 	secret: config.reddit.script.secret,
-	applicationOnly: true
+	applicationOnly: true,
+	serverWWW: 'www.reddit.com'
       }).then(function(authData) {
 	expect(authData).to.be.an('object');
 

@@ -2,15 +2,15 @@
 var Snoocore = require('../../Snoocore');
 var config = require('../config');
 
-var USER_AGENT = 'Snoocore v.' + Snoocore.version +
-		 ' /u/' + config.reddit.login.username +
-		 ' << AUTOMATED TEST SUITE >>';
+var USER_AGENT = exports.USER_AGENT = 'Snoocore v.' + Snoocore.version +
+				      ' /u/' + config.reddit.login.username +
+				      ' << AUTOMATED TEST SUITE >>';
 
 exports.isNode = function() {
   return (typeof require === 'function' &&
-	  typeof exports === 'object' &&
-	  typeof module === 'object' &&
-	  typeof window === 'undefined');
+    typeof exports === 'object' &&
+    typeof module === 'object' &&
+    typeof window === 'undefined');
 }
 
 exports.getExplicitInstance = function(scopes, duration) {

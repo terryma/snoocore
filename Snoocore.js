@@ -32,11 +32,8 @@ function Snoocore(config) {
 
   self._test = {}; // expose internal functions for testing
 
-  self._server = {
-    oauth: 'https://oauth.reddit.com',
-    www: 'https://www.reddit.com',
-    ssl: 'https://ssl.reddit.com'
-  };
+  self._serverOAuth = thisOrThat(config.serverOAuth, 'oauth.reddit.com');
+  self._serverWWW = thisOrThat(config.serverWWW, 'www.reddit.com');
 
   var missingMsg = 'Missing required config value ';
 
@@ -263,8 +260,10 @@ function Snoocore(config) {
      Builds the URL that we will query reddit with.
    */
   self._test.buildUrl = buildUrl;
-  function buildUrl(givenArgs, endpoint) {
-    var url = self._server.oauth + endpoint.path;
+  function buildUrl(givenArgs, endpoint, options) {
+    options = options || {};
+    var serverOAuth = thisOrThat(options.serverOAuth, self._serverOAuth);
+    var url = 'https://' + serverOAuth + endpoint.path;
     url = replaceUrlParams(url, givenArgs);
     url = addUrlExtension(url, endpoint.extensions);
     return url;
@@ -395,7 +394,7 @@ function Snoocore(config) {
 
     var serverError = new Error('Reddit has come back with an HTTP status of ' + response._status);
     var args = buildArgs(givenArgs, endpoint);
-    var url = buildUrl(givenArgs, endpoint);
+    var url = buildUrl(givenArgs, endpoint, callContextOptions);
 
     serverError.retryAttemptsLeft = callContextOptions.retryAttemptsLeft;
     serverError.status = response._status;
@@ -429,7 +428,7 @@ function Snoocore(config) {
   function handleClientErrorResponse(response, endpoint, givenArgs, callContextOptions) {
 
     var args = buildArgs(givenArgs, endpoint);
-    var url = buildUrl(givenArgs, endpoint);
+    var url = buildUrl(givenArgs, endpoint, callContextOptions);
 
     // If we are *not* application only oauth and can't renew the access token
     // then we should throw an error
@@ -494,7 +493,7 @@ function Snoocore(config) {
   function handleSuccessResponse(response, endpoint, givenArgs, callContextOptions) {
     var data = response._body || {};
     var args = buildArgs(givenArgs, endpoint);
-    var url = buildUrl(givenArgs, endpoint);
+    var url = buildUrl(givenArgs, endpoint, callContextOptions);
 
     if (callContextOptions.decodeHtmlEntities) {
       data = he.decode(data);
@@ -558,7 +557,7 @@ function Snoocore(config) {
     callContextOptions = normalizeCallContextOptions(callContextOptions);
 
     var args = buildArgs(givenArgs, endpoint);
-    var url = buildUrl(givenArgs, endpoint);
+    var url = buildUrl(givenArgs, endpoint, callContextOptions);
     var parsedUrl = urlLib.parse(url);
 
     var requestOptions = {
@@ -618,7 +617,7 @@ function Snoocore(config) {
 	var listing = result || {};
 
 	slice.get = result || {};
-	
+
 	if (result instanceof Array) {
 	  if (typeof options.listingIndex === 'undefined') {
 	    throw new Error('Must specify a `listingIndex` for this listing.');
@@ -685,7 +684,7 @@ function Snoocore(config) {
     return getSlice(givenArgs);
   }
 
-  
+
   /*
      Structures the reddit api endpoints into a tree
      that we can use later for traversing
@@ -837,31 +836,37 @@ function Snoocore(config) {
      Get the Explicit Auth Url
    */
   self.getAuthUrl =   // keep backwards compatability
-  self.getExplicitAuthUrl = function(state) {
+  self.getExplicitAuthUrl = function(state, options) {
     var options = self._oauth;
     options.state = state || Math.ceil(Math.random() * 1000);
+    options.serverWWW = thisOrThat(options.serverWWW, self._serverWWW);
     return Snoocore.oauth.getExplicitAuthUrl(options);
   };
 
   /*
      Get the Implicit Auth Url
    */
-  self.getImplicitAuthUrl = function(state) {
+  self.getImplicitAuthUrl = function(state, options) {
     var options = self._oauth;
     options.state = state || Math.ceil(Math.random() * 1000);
+    options.serverWWW = thisOrThat(options.serverWWW, self._serverWWW);
     return Snoocore.oauth.getImplicitAuthUrl(options);
   };
 
   /*
      Authenticate with a refresh token
    */
-  self.refresh = function(refreshToken) {
+  self.refresh = function(refreshToken, options) {
+    options = options || {};
+    var serverWWW = thisOrThat(options.serverWWW, self._serverWWW);
+
     return Snoocore.oauth.getAuthData('refresh', {
       refreshToken: refreshToken,
       key: self._oauth.key,
       secret: self._oauth.secret,
       redirectUri: self._oauth.redirectUri,
-      scope: self._oauth.scope
+      scope: self._oauth.scope,
+      serverWWW: serverWWW
     }).then(function(authDataResult) {
       // only set the internal refresh token if reddit
       // agrees that it was OK and sends back authData
@@ -882,7 +887,10 @@ function Snoocore(config) {
      - Access Token (request_type = "token") / Implicit OAuth
      - Application Only. (void 0, true);
    */
-  self.auth = function(authDataOrAuthCodeOrAccessToken, isApplicationOnly) {
+  self.auth = function(authDataOrAuthCodeOrAccessToken, isApplicationOnly, options) {
+
+    options = options || {};
+    var serverWWW = thisOrThat(options.serverWWW, self._serverWWW);
 
     var authData;
 
@@ -894,7 +902,8 @@ function Snoocore(config) {
 	  scope: self._oauth.scope,
 	  username: self._oauth.username,
 	  password: self._oauth.password,
-	  applicationOnly: isApplicationOnly
+	  applicationOnly: isApplicationOnly,
+	  serverWWW: serverWWW
 	});
 	break;
 
@@ -907,7 +916,8 @@ function Snoocore(config) {
 	  secret: self._oauth.secret,
 	  redirectUri: self._oauth.redirectUri,
 	  scope: self._oauth.scope,
-	  applicationOnly: isApplicationOnly
+	  applicationOnly: isApplicationOnly,
+	  serverWWW: serverWWW
 	});
 	break;
 
@@ -916,7 +926,8 @@ function Snoocore(config) {
 	  authData = Snoocore.oauth.getAuthData(self._oauth.type, {
 	    key: self._oauth.key,
 	    scope: self._oauth.scope,
-	    applicationOnly: true
+	    applicationOnly: true,
+	    serverWWW: serverWWW
 	  });
 	} else {
 	  // Set the access token, no need to make another call to reddit
@@ -973,7 +984,10 @@ function Snoocore(config) {
      By default it will only remove the "access_token". Specify
      the users refresh token to revoke that token instead.
    */
-  self.deauth = function(refreshToken) {
+  self.deauth = function(refreshToken, options) {
+
+    options = options || {};
+    var serverWWW = thisOrThat(options.serverWWW, self._serverWWW);
 
     // no need to deauth if not authenticated
     if (!hasAuthenticatedData()) {
@@ -985,7 +999,8 @@ function Snoocore(config) {
 
     return Snoocore.oauth.revokeToken(token, isRefreshToken, {
       key: self._oauth.key,
-      secret: self._oauth.secret
+      secret: self._oauth.secret,
+      serverWWW: serverWWW
     }).then(function() {
       self._authenticatedAuthData = {}; // clear internal authenticated auth data.
     });

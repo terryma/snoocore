@@ -2,6 +2,7 @@
 
 var querystring = require('querystring');
 var util = require('util');
+var urlLib = require('url');
 
 var when = require('when');
 
@@ -32,7 +33,7 @@ oauth.getExplicitAuthUrl = function(options) {
   query.response_type = 'code';
   query.scope = normalizeScope(options.scope);
 
-  var baseUrl = 'https://www.reddit.com/api/v1/authorize';
+  var baseUrl = 'https://' + options.serverWWW + '/api/v1/authorize';
 
   if (options.mobile) {
     baseUrl += '.compact';
@@ -50,7 +51,7 @@ oauth.getImplicitAuthUrl = function(options) {
   query.response_type = 'token';
   query.scope = normalizeScope(options.scope);
 
-  var baseUrl = 'https://www.reddit.com/api/v1/authorize';
+  var baseUrl = 'https://' + options.serverWWW + '/api/v1/authorize';
 
   if (options.mobile) {
     baseUrl += '.compact';
@@ -124,7 +125,7 @@ oauth.getAuthData = function(type, options) {
 
   return request.https({
     method: 'POST',
-    hostname: 'www.reddit.com',
+    hostname: options.serverWWW,
     path: '/api/v1/access_token',
     headers: headers
   }, querystring.stringify(params)).then(function(response) {
@@ -155,7 +156,7 @@ oauth.revokeToken = function(token, isRefreshToken, options) {
 
   return request.https({
     method: 'POST',
-    hostname: 'ssl.reddit.com',
+    hostname: options.serverWWW,
     path: '/api/v1/revoke_token',
     headers: {
       'Authorization': auth

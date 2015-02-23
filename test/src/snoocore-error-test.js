@@ -2,7 +2,7 @@
 
 // The point of these test cases is to check that we are providing
 // helpful error messages to users that can guide them in the
-// right direction. The Reddit API is a bit of a mystery when 
+// right direction. The Reddit API is a bit of a mystery when
 // starting out.
 
 var when = require('when');
@@ -98,23 +98,21 @@ describe('Snoocore Error Test', function () {
   });
 
   it('should retry an endpoint on HTTP 5xx', function() {
+
+    // allow self signed certs for our test server
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
+
     var reddit = util.getScriptInstance([ 'identity', 'read' ]);
 
     // create a reference to the actual reddit servers
-    var redditServers = {
-      oauth: 'https://oauth.reddit.com',
-      www: 'https://www.reddit.com',
-      ssl: 'https://ssl.reddit.com'
-    };
+    var redditWWW = 'www.reddit.com';
+    var redditOAuth = 'oauth.reddit.com';
 
     return reddit.auth().then(function() {
 
       // Switch servers to use error test server (returns 500 errors every time)
-      reddit._server = {
-	oauth: 'https://localhost:' + config.testServer.serverErrorPort,
-	www: 'https://localhost:' + config.testServer.serverErrorPort,
-	ssl: 'https://localhost:' + config.testServer.serverErrorPort
-      };
+      reddit._serverOAuth = 'localhost:' + config.testServer.serverErrorPort;
+      reddit._serverWWW = 'localhost:' + config.testServer.serverErrorPort;
 
       return when.promise(function(resolve, reject) {
 	var hotPromise;
@@ -133,20 +131,21 @@ describe('Snoocore Error Test', function () {
 	  delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
 
 	  // switch to the proper reddit servers
-	  reddit._server = redditServers;
-	  expect(reddit._server).to.eql(redditServers);
+	  reddit._serverWWW = redditWWW;
+	  reddit._serverOAuth = redditOAuth;
+
+	  expect(reddit._serverWWW).to.eql(redditWWW);
+	  expect(reddit._serverOAuth).to.eql(redditOAuth);
 
 	  // this should resolve now that the servers are correct
 	  hotPromise.done(resolve);
 	});
 
-	process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0; // allow self signed certs
 	hotPromise = reddit('/hot').get();
       });
 
     });
   });
-
 
   it('should retry an endpoint 3 times then fail', function() {
 
@@ -158,11 +157,8 @@ describe('Snoocore Error Test', function () {
     return reddit.auth().then(function() {
 
       // Switch servers to use error test server (returns 500 errors every time)
-      reddit._server = {
-	oauth: 'https://localhost:' + config.testServer.serverErrorPort,
-	www: 'https://localhost:' + config.testServer.serverErrorPort,
-	ssl: 'https://localhost:' + config.testServer.serverErrorPort
-      };
+      reddit._serverOAuth = 'localhost:' + config.testServer.serverErrorPort;
+      reddit._serverWWW = 'localhost:' + config.testServer.serverErrorPort;
 
       var retryAttempts = 3; // let's only retry 3 times to keep it short
 
@@ -173,9 +169,6 @@ describe('Snoocore Error Test', function () {
 	reddit.on('server_error', function(error) {
 
 	  expect(error instanceof Error);
-
-	  console.log('ral', error.retryAttemptsLeft);
-	  
 	  expect(error.retryAttemptsLeft).to.equal(--retryAttempts);
 	  expect(error.status).to.equal(500);
 	  expect(error.url).to.equal('https://localhost:3001/hot.json');
@@ -187,7 +180,7 @@ describe('Snoocore Error Test', function () {
 	  hotPromise.done(reject, resolve);
 	});
 
-	hotPromise = reddit('/hot').get(void 0, { 
+	hotPromise = reddit('/hot').get(void 0, {
 	  retryAttempts: retryAttempts,
 	  retryDelay: 500 // no need to make this take longer than necessary
 	});
