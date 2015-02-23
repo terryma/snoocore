@@ -21,8 +21,6 @@ function normalizeScope(scope) {
   return scope;
 }
 
-// keep backwards compatability
-oauth.getAuthUrl =
 oauth.getExplicitAuthUrl = function(options) {
   var query = {};
 

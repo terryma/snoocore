@@ -17,9 +17,9 @@ describe('OAuth Module Test', function (require) {
 
   this.timeout(config.testTimeout);
 
-  describe('#getAuthUrl()', function() {
+  describe('#getExplicitAuthUrl()', function() {
     it('should get a proper authorization url (WEB/INSTALLED)', function() {
-      var url = oauth.getAuthUrl({
+      var url = oauth.getExplicitAuthUrl({
 	key: config.reddit.web.key,
 	redirectUri: config.reddit.redirectUri,
 	state: 'foo',
@@ -36,7 +36,7 @@ describe('OAuth Module Test', function (require) {
     });
 
     it('should get a proper authorization url (mobile friendly) (WEB/INSTALLED)', function() {
-      var url = oauth.getAuthUrl({
+      var url = oauth.getExplicitAuthUrl({
 	key: config.reddit.web.key,
 	redirectUri: config.reddit.redirectUri,
 	state: 'foo',
@@ -54,27 +54,6 @@ describe('OAuth Module Test', function (require) {
     });
 
     it('should get back a proper authorization url (multiple scopes) (WEB/INSTALLED)', function() {
-      var url = oauth.getAuthUrl({
-	key: config.reddit.web.key,
-	redirectUri: config.reddit.redirectUri,
-	state: 'foo',
-	scope: [ 'identity', 'read', 'subscribe' ],
-	serverWWW: 'www.reddit.com'
-      });
-
-      expect(url.indexOf('https://www.reddit.com/api/v1/authorize?')).to.not.equal(-1);
-      expect(url.indexOf('client_id=' + config.reddit.web.key)).to.not.equal(-1);
-      expect(url.indexOf('state=foo')).to.not.equal(-1);
-      expect(url.indexOf('redirect_uri=' + encodeURIComponent(config.reddit.redirectUri))).to.not.equal(-1);
-      expect(url.indexOf('duration=temporary')).to.not.equal(-1);
-      expect(url.indexOf('response_type=code')).to.not.equal(-1);
-      expect(url.indexOf('scope=' + encodeURIComponent('identity read subscribe'))).to.not.equal(-1);
-    });
-
-  });
-
-  describe('#getExplicitAuthUrl()', function() {
-    it('should be the same as getAuthUrl()', function() {
       var url = oauth.getExplicitAuthUrl({
 	key: config.reddit.web.key,
 	redirectUri: config.reddit.redirectUri,
@@ -91,6 +70,7 @@ describe('OAuth Module Test', function (require) {
       expect(url.indexOf('response_type=code')).to.not.equal(-1);
       expect(url.indexOf('scope=' + encodeURIComponent('identity read subscribe'))).to.not.equal(-1);
     });
+
   });
 
   describe('#getImplicitAuthUrl()', function() {
@@ -115,7 +95,7 @@ describe('OAuth Module Test', function (require) {
 
     it('(Explicit) it should get an access token', function() {
 
-      var url = oauth.getAuthUrl({
+      var url = oauth.getExplicitAuthUrl({
 	key: config.reddit.web.key,
 	redirectUri: config.reddit.redirectUri,
 	state: 'foo',

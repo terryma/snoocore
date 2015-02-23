@@ -835,7 +835,6 @@ function Snoocore(config) {
   /*
      Get the Explicit Auth Url
    */
-  self.getAuthUrl =   // keep backwards compatability
   self.getExplicitAuthUrl = function(state, options) {
     var options = self._oauth;
     options.state = state || Math.ceil(Math.random() * 1000);
@@ -907,8 +906,6 @@ function Snoocore(config) {
 	});
 	break;
 
-      case 'web': // keep web/insatlled here for backwards compatability
-      case 'installed':
       case 'explicit':
 	authData = Snoocore.oauth.getAuthData(self._oauth.type, {
 	  authorizationCode: authDataOrAuthCodeOrAccessToken, // auth code in this case
@@ -959,7 +956,7 @@ function Snoocore(config) {
 	self._applicationOnlyAuthData = authDataResult;
       }
 
-      // if the web/installed app used a perminant duration, send
+      // if the explicit app used a perminant duration, send
       // back the refresh token that will be used to re-authenticate
       // later without user interaction.
       if (authDataResult.refresh_token) {
