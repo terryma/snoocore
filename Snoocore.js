@@ -737,13 +737,13 @@ function Snoocore(config) {
   /*
      Build support for the raw API calls
    */
-  self.raw = function(url) {
+  self.raw = function(urlOrPath) {
 
-    var parsed = urlLib.parse(url);
-
+    var parsed = urlLib.parse(urlOrPath);
+    
     function getEndpoint(method) {
       return {
-	path: parsed.path,
+	path: parsed.pathname,
 	method: method,
 	oauth: [],
 	isListing: true
@@ -761,8 +761,8 @@ function Snoocore(config) {
    */
   self.path = function(path) {
 
-    path = path.replace(/^\//, ''); // remove leading slash if any
-    var sections = path.split('/'); // sections to traverse down
+    // remove leading slash if any
+    var sections = path.replace(/^\//, '').split('/');
     var leaf = self._endpointTree; // the top level of the endpoint tree that we will traverse down
 
     // Adjust how this call is built if necessary
@@ -816,7 +816,7 @@ function Snoocore(config) {
 
       // Check that the actual section is a valid one
       if (typeof leaf[actualSection] === 'undefined') {
-	throw new Error('Invalid path provided. Check that this is a valid path.\n' + path);
+	return self.raw(path); // Assume that this is a raw endpoint.
       }
 
       // move down the endpoint tree
@@ -825,9 +825,8 @@ function Snoocore(config) {
 
     // Check that our leaf is an endpoint before building the call
     if (typeof leaf._endpoints === 'undefined') {
-      throw new Error('Invalid path provided. Check that this is a valid path.\n' + path);
+      return self.raw(path); // Assume that this is a raw endpoint
     }
-
 
     return buildCall(leaf._endpoints, buildCallOptions);
   };

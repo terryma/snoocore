@@ -290,6 +290,20 @@ describe('Snoocore Internal Tests', function () {
 		   });
     });
 
+    it('should call a raw route just using a path', function() {
+      var reddit = util.getScriptInstance([ 'read' ]);
+      return reddit.raw('/r/netsec/hot.json').get().then(function(result) {
+	expect(result).to.haveOwnProperty('kind', 'Listing');
+      });
+    });
+
+    it('it should redirect to reddit.raw when the path is unknown in `reddit(path)`', function() {
+      var reddit = util.getScriptInstance([ 'read' ]);
+      return reddit('/.json').get().then(function(result) {
+	expect(result).to.haveOwnProperty('kind', 'Listing');
+      });
+    });
+
   });
 
   describe('#path()', function() {
@@ -312,13 +326,6 @@ describe('Snoocore Internal Tests', function () {
 		       .then(function(result) {
 			 expect(result).to.haveOwnProperty('kind', 'Listing');
 		       });
-    });
-
-    it('should crash if an invalid endpoint is provided', function() {
-      var reddit = util.getScriptInstance([ 'read' ]);
-      expect(function() {
-        return reddit.path('/invalid/endpoint');
-      }).to.throw();
     });
 
     it('should allow a "path" syntax (where reddit === path fn)', function() {
