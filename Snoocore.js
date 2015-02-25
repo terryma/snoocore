@@ -70,7 +70,7 @@ function Snoocore(config) {
 
   if (isOAuthType('implicit') || isOAuthType('explicit')) {
     self._oauth.redirectUri = thisOrThrow(self._oauth.redirectUri,
-					  missingMsg + '`oauth.redirectUri` for type implicit/explicit');
+                                          missingMsg + '`oauth.redirectUri` for type implicit/explicit');
   }
 
   //
@@ -189,11 +189,11 @@ function Snoocore(config) {
     for (; i >= 0; --i) {
       requiredScope = endpoint.oauth[i];
       missingScope = (
-	(self._oauth.scope || []).indexOf(requiredScope) === -1 &&
-	requiredScope !== 'any');
+        (self._oauth.scope || []).indexOf(requiredScope) === -1 &&
+        requiredScope !== 'any');
 
       if (missingScope) {
-	return true;
+        return true;
       }
     }
     return false;
@@ -316,22 +316,22 @@ function Snoocore(config) {
 
       // replace any of the user alias place holders with the actual ones
       Object.keys(options.urlParamAlias || []).forEach(function(providedAlias) {
-	// e.g. '$subreddit' vs '$sub'
-	var actualAlias = options.urlParamAlias[providedAlias];
-	// set the givenArgs to matche the actual alias value with the value that
-	// the user gave
-	givenArgs[actualAlias] = givenArgs[providedAlias];
-	// remove the provided alias
-	delete givenArgs[providedAlias];
+        // e.g. '$subreddit' vs '$sub'
+        var actualAlias = options.urlParamAlias[providedAlias];
+        // set the givenArgs to matche the actual alias value with the value that
+        // the user gave
+        givenArgs[actualAlias] = givenArgs[providedAlias];
+        // remove the provided alias
+        delete givenArgs[providedAlias];
       });
 
       // replace any of the url parameters with values embedded into the
       // path into the givenArguments
       Object.keys(options.urlParamValue || []).forEach(function(providedValue) {
-	// e.g. '$subreddit' vs 'aww'
-	var actualAlias = options.urlParamValue[providedValue];
-	// add the correct argument to givenArgs with the value provided
-	givenArgs[actualAlias] = providedValue;
+        // e.g. '$subreddit' vs 'aww'
+        var actualAlias = options.urlParamValue[providedValue];
+        // add the correct argument to givenArgs with the value provided
+        givenArgs[actualAlias] = providedValue;
       });
 
       return givenArgs;
@@ -339,16 +339,16 @@ function Snoocore(config) {
 
     endpoints.forEach(function(endpoint) {
       methods[endpoint.method.toLowerCase()] = function(givenArgs, callOptions) {
-	givenArgs = fixGivenArgs(givenArgs);
-	return callRedditApi(endpoint, givenArgs, callOptions);
+        givenArgs = fixGivenArgs(givenArgs);
+        return callRedditApi(endpoint, givenArgs, callOptions);
       };
 
       // Listings can only be 'GET' requests
       if (endpoint.method === 'GET' && endpoint.isListing) {
-	methods.listing = function(givenArgs, callOptions) {
-	  givenArgs = fixGivenArgs(givenArgs);
-	  return getListing(endpoint, givenArgs, callOptions);
-	};
+        methods.listing = function(givenArgs, callOptions) {
+          givenArgs = fixGivenArgs(givenArgs);
+          return getListing(endpoint, givenArgs, callOptions);
+        };
       }
     });
 
@@ -405,8 +405,8 @@ function Snoocore(config) {
 
     if (callContextOptions.retryAttemptsLeft <= 0) {
       return when.reject(new Error(
-	'All retry attempts exhausted. Failed to access the reddit servers' +
-	' (HTTP ' + response._status + ').'));
+        'All retry attempts exhausted. Failed to access the reddit servers' +
+        ' (HTTP ' + response._status + ').'));
     }
 
     return delay(callContextOptions.retryDelay).then(function() {
@@ -435,8 +435,8 @@ function Snoocore(config) {
     if (!isApplicationOnly() && !hasRefreshToken() && !isOAuthType('script')) {
       self.emit('access_token_expired');
       return when.reject(new Error('Access token has expired. Listen for ' +
-				   'the "access_token_expired" event to handle ' +
-				   'this gracefully in your app.'));
+                                   'the "access_token_expired" event to handle ' +
+                                   'this gracefully in your app.'));
 
     }
 
@@ -454,7 +454,7 @@ function Snoocore(config) {
       --callContextOptions.reauthAttemptsLeft;
 
       if (callContextOptions.reauthAttemptsLeft <= 0) {
-	return when.reject(new Error('Unable to refresh the access_token.'));
+        return when.reject(new Error('Unable to refresh the access_token.'));
       }
 
       var reauth;
@@ -462,25 +462,25 @@ function Snoocore(config) {
       // If we are application only, or are bypassing authentication for a call
       // go ahead and use application only OAuth
       if (isApplicationOnly() || callContextOptions.bypassAuth) {
-	reauth = self.applicationOnlyAuth();
+        reauth = self.applicationOnlyAuth();
       } else {
-	// If we have been authenticated with a permanent refresh token
-	if (hasRefreshToken()) { reauth = self.refresh(self._refreshToken); }
-	// If we are OAuth type script and not implicit authenticated
-	if (isOAuthType('script')) { reauth = self.auth(); }
+        // If we have been authenticated with a permanent refresh token
+        if (hasRefreshToken()) { reauth = self.refresh(self._refreshToken); }
+        // If we are OAuth type script and not implicit authenticated
+        if (isOAuthType('script')) { reauth = self.auth(); }
       }
 
       return reauth.then(function() {
-	return callRedditApi(endpoint, givenArgs, callContextOptions);
+        return callRedditApi(endpoint, givenArgs, callContextOptions);
       });
     }
 
     // Throw a generic error that displays a dump of data for this response
     var redditResponse = typeof data === 'object' ? JSON.stringify(data, null, 2) : response._body;
     return when.reject(new Error('\n>>> Reddit Response:\n\n' + redditResponse
-			       + '\n\n>>> Endpoint URL: '+ url
-			       + '\n\n>>> Endpoint method: ' + endpoint.method
-			       + '\n\n>>> Arguments: ' + JSON.stringify(args, null, 2)));
+                               + '\n\n>>> Endpoint URL: '+ url
+                               + '\n\n>>> Endpoint method: ' + endpoint.method
+                               + '\n\n>>> Arguments: ' + JSON.stringify(args, null, 2)));
   }
 
   /*
@@ -514,11 +514,11 @@ function Snoocore(config) {
 
     switch(String(response._status).substring(0, 1)) {
       case '5':
-	return handleServerErrorResponse(response, endpoint, givenArgs, callContextOptions);
+        return handleServerErrorResponse(response, endpoint, givenArgs, callContextOptions);
       case '4':
-	return handleClientErrorResponse(response, endpoint, givenArgs, callContextOptions);
+        return handleClientErrorResponse(response, endpoint, givenArgs, callContextOptions);
       case '2':
-	return handleSuccessResponse(response, endpoint, givenArgs, callContextOptions);
+        return handleSuccessResponse(response, endpoint, givenArgs, callContextOptions);
     }
 
     return when.reject(new Error('Invalid reddit response status of ' + response._status));
@@ -587,9 +587,9 @@ function Snoocore(config) {
       var callDuration = endCallTime - startCallTime;
 
       if (callDuration < throttle) {
-	self._throttleDelay -= callDuration;
+        self._throttleDelay -= callDuration;
       } else {
-	self._throttleDelay -= throttle;
+        self._throttleDelay -= throttle;
       }
     });
 
@@ -613,70 +613,70 @@ function Snoocore(config) {
     function getSlice(givenArgs) {
       return callRedditApi(endpoint, givenArgs, options).then(function(result) {
 
-	var slice = {};
-	var listing = result || {};
+        var slice = {};
+        var listing = result || {};
 
-	slice.get = result || {};
+        slice.get = result || {};
 
-	if (result instanceof Array) {
-	  if (typeof options.listingIndex === 'undefined') {
-	    throw new Error('Must specify a `listingIndex` for this listing.');
-	  }
+        if (result instanceof Array) {
+          if (typeof options.listingIndex === 'undefined') {
+            throw new Error('Must specify a `listingIndex` for this listing.');
+          }
 
-	  listing = result[options.listingIndex];
-	}
+          listing = result[options.listingIndex];
+        }
 
-	slice.count = count;
+        slice.count = count;
 
-	slice.before = listing.data.before || null;
-	slice.after = listing.data.after || null;
-	slice.allChildren = listing.data.children || [];
+        slice.before = listing.data.before || null;
+        slice.after = listing.data.after || null;
+        slice.allChildren = listing.data.children || [];
 
-	slice.empty = slice.allChildren.length === 0;
+        slice.empty = slice.allChildren.length === 0;
 
-	slice.children = slice.allChildren.filter(function(child) {
-	  return !child.data.stickied;
-	});
+        slice.children = slice.allChildren.filter(function(child) {
+          return !child.data.stickied;
+        });
 
-	slice.stickied = slice.allChildren.filter(function(child) {
-	  return child.data.stickied;
-	});
+        slice.stickied = slice.allChildren.filter(function(child) {
+          return child.data.stickied;
+        });
 
-	slice.next = function() {
-	  count += limit;
+        slice.next = function() {
+          count += limit;
 
-	  var args = givenArgs;
-	  args.before = null;
-	  args.after = slice.children[slice.children.length - 1].data.name;
-	  args.count = count;
-	  return getSlice(args);
-	};
+          var args = givenArgs;
+          args.before = null;
+          args.after = slice.children[slice.children.length - 1].data.name;
+          args.count = count;
+          return getSlice(args);
+        };
 
-	slice.previous = function() {
-	  count -= limit;
+        slice.previous = function() {
+          count -= limit;
 
-	  var args = givenArgs;
-	  args.before = slice.children[0].data.name;
-	  args.after = null;
-	  args.count = count;
-	  return getSlice(args);
-	};
+          var args = givenArgs;
+          args.before = slice.children[0].data.name;
+          args.after = null;
+          args.count = count;
+          return getSlice(args);
+        };
 
-	slice.start = function() {
-	  count = 0;
+        slice.start = function() {
+          count = 0;
 
-	  var args = givenArgs;
-	  args.before = null;
-	  args.after = start;
-	  args.count = count;
-	  return getSlice(args);
-	};
+          var args = givenArgs;
+          args.before = null;
+          args.after = start;
+          args.count = count;
+          return getSlice(args);
+        };
 
-	slice.requery = function() {
-	  return getSlice(givenArgs);
-	};
+        slice.requery = function() {
+          return getSlice(givenArgs);
+        };
 
-	return slice;
+        return slice;
       });
 
     }
@@ -716,15 +716,15 @@ function Snoocore(config) {
       var len = pathSections.length;
 
       for (; i < len - 1; ++i) {
-	if (typeof leaf[pathSections[i]] === 'undefined') {
-	  leaf[pathSections[i]] = {};
-	}
-	leaf = leaf[pathSections[i]];
+        if (typeof leaf[pathSections[i]] === 'undefined') {
+          leaf[pathSections[i]] = {};
+        }
+        leaf = leaf[pathSections[i]];
       }
 
       // push the endpoint to this section of the tree
       if (typeof leaf[pathSections[i]] === 'undefined') {
-	leaf[pathSections[i]] = { _endpoints: [] };
+        leaf[pathSections[i]] = { _endpoints: [] };
       }
 
       leaf[pathSections[i]]._endpoints.push(endpoint);
@@ -740,13 +740,13 @@ function Snoocore(config) {
   self.raw = function(urlOrPath) {
 
     var parsed = urlLib.parse(urlOrPath);
-    
+
     function getEndpoint(method) {
       return {
-	path: parsed.pathname,
-	method: method,
-	oauth: [],
-	isListing: true
+        path: parsed.pathname,
+        method: method,
+        oauth: [],
+        isListing: true
       };
     }
 
@@ -786,37 +786,37 @@ function Snoocore(config) {
       // value of the url parameter
       if (typeof leaf[providedSection] === 'undefined') {
 
-	var leafKeys = Object.keys(leaf);
+        var leafKeys = Object.keys(leaf);
 
-	for (var j = 0, jlen = leafKeys.length; j < jlen; ++j) {
-	  // Return the section that represents a placeholder
-	  if (leafKeys[j].substring(0, 1) === '$') {
-	    actualSection = leafKeys[j]; // The actual value, e.g. '$subreddit'
+        for (var j = 0, jlen = leafKeys.length; j < jlen; ++j) {
+          // Return the section that represents a placeholder
+          if (leafKeys[j].substring(0, 1) === '$') {
+            actualSection = leafKeys[j]; // The actual value, e.g. '$subreddit'
 
-	    // If this section is the actual section, the next section of
-	    // this path should be valid as well if we have a next session
-	    if (nextSection && leaf[actualSection][nextSection]) {
-	      break;
-	    }
+            // If this section is the actual section, the next section of
+            // this path should be valid as well if we have a next session
+            if (nextSection && leaf[actualSection][nextSection]) {
+              break;
+            }
 
-	    // continue until we find a valid section
-	  }
-	}
+            // continue until we find a valid section
+          }
+        }
 
-	// The user is using their own alias
-	if (providedSection.substring(0, 1) === '$') {
-	  buildCallOptions.urlParamAlias[providedSection] = actualSection;
-	}
-	// looks like they used a value instead of the placeholder
-	else {
-	  buildCallOptions.urlParamValue[providedSection] = actualSection;
-	}
+        // The user is using their own alias
+        if (providedSection.substring(0, 1) === '$') {
+          buildCallOptions.urlParamAlias[providedSection] = actualSection;
+        }
+        // looks like they used a value instead of the placeholder
+        else {
+          buildCallOptions.urlParamValue[providedSection] = actualSection;
+        }
 
       }
 
       // Check that the actual section is a valid one
       if (typeof leaf[actualSection] === 'undefined') {
-	return self.raw(path); // Assume that this is a raw endpoint.
+        return self.raw(path); // Assume that this is a raw endpoint.
       }
 
       // move down the endpoint tree
@@ -894,75 +894,75 @@ function Snoocore(config) {
 
     switch(self._oauth.type) {
       case 'script':
-	authData = Snoocore.oauth.getAuthData(self._oauth.type, {
-	  key: self._oauth.key,
-	  secret: self._oauth.secret,
-	  scope: self._oauth.scope,
-	  username: self._oauth.username,
-	  password: self._oauth.password,
-	  applicationOnly: isApplicationOnly,
-	  serverWWW: serverWWW
-	});
-	break;
+        authData = Snoocore.oauth.getAuthData(self._oauth.type, {
+          key: self._oauth.key,
+          secret: self._oauth.secret,
+          scope: self._oauth.scope,
+          username: self._oauth.username,
+          password: self._oauth.password,
+          applicationOnly: isApplicationOnly,
+          serverWWW: serverWWW
+        });
+        break;
 
       case 'explicit':
-	authData = Snoocore.oauth.getAuthData(self._oauth.type, {
-	  authorizationCode: authDataOrAuthCodeOrAccessToken, // auth code in this case
-	  key: self._oauth.key,
-	  secret: self._oauth.secret,
-	  redirectUri: self._oauth.redirectUri,
-	  scope: self._oauth.scope,
-	  applicationOnly: isApplicationOnly,
-	  serverWWW: serverWWW
-	});
-	break;
+        authData = Snoocore.oauth.getAuthData(self._oauth.type, {
+          authorizationCode: authDataOrAuthCodeOrAccessToken, // auth code in this case
+          key: self._oauth.key,
+          secret: self._oauth.secret,
+          redirectUri: self._oauth.redirectUri,
+          scope: self._oauth.scope,
+          applicationOnly: isApplicationOnly,
+          serverWWW: serverWWW
+        });
+        break;
 
       case 'implicit':
-	if (isApplicationOnly) {
-	  authData = Snoocore.oauth.getAuthData(self._oauth.type, {
-	    key: self._oauth.key,
-	    scope: self._oauth.scope,
-	    applicationOnly: true,
-	    serverWWW: serverWWW
-	  });
-	} else {
-	  // Set the access token, no need to make another call to reddit
-	  // using the `Snoocore.oauth.getAuthData` call
-	  authData = {
-	    access_token: authDataOrAuthCodeOrAccessToken, // access token in this case
-	    token_type: 'bearer',
-	    expires_in: 3600,
-	    scope: self._oauth.scope
-	  };
-	}
-	break;
+        if (isApplicationOnly) {
+          authData = Snoocore.oauth.getAuthData(self._oauth.type, {
+            key: self._oauth.key,
+            scope: self._oauth.scope,
+            applicationOnly: true,
+            serverWWW: serverWWW
+          });
+        } else {
+          // Set the access token, no need to make another call to reddit
+          // using the `Snoocore.oauth.getAuthData` call
+          authData = {
+            access_token: authDataOrAuthCodeOrAccessToken, // access token in this case
+            token_type: 'bearer',
+            expires_in: 3600,
+            scope: self._oauth.scope
+          };
+        }
+        break;
 
       default:
-	// assume that it is the authData
-	authData = authDataOrAuthCodeOrAccessToken;
+        // assume that it is the authData
+        authData = authDataOrAuthCodeOrAccessToken;
     }
 
     return when(authData).then(function(authDataResult) {
 
       if (typeof authDataResult !== 'object') {
-	return when.reject(new Error(
-	  'There was a problem authenticating: ', authDataResult));
+        return when.reject(new Error(
+          'There was a problem authenticating: ', authDataResult));
       }
 
       if (!isApplicationOnly) {
-	self._authenticatedAuthData = authDataResult;
+        self._authenticatedAuthData = authDataResult;
       } else {
-	self._applicationOnlyAuthData = authDataResult;
+        self._applicationOnlyAuthData = authDataResult;
       }
 
       // if the explicit app used a perminant duration, send
       // back the refresh token that will be used to re-authenticate
       // later without user interaction.
       if (authDataResult.refresh_token) {
-	// set the internal refresh token for automatic expiring
-	// access_token management
-	self._refreshToken = authDataResult.refresh_token;
-	return authDataResult.refresh_token;
+        // set the internal refresh token for automatic expiring
+        // access_token management
+        self._refreshToken = authDataResult.refresh_token;
+        return authDataResult.refresh_token;
       }
     });
   };

@@ -82,36 +82,36 @@ oauth.getAuthData = function(type, options) {
       case 'installed': // web & installed for backwards compatability
       case 'web':
       case 'explicit':
-	params.grant_type = 'client_credentials';
-	break;
+        params.grant_type = 'client_credentials';
+        break;
       case 'implicit':
-	params.grant_type = 'https://oauth.reddit.com/grants/installed_client';
-	params.device_id = options.deviceId || 'DO_NOT_TRACK_THIS_DEVICE';
-	break;
+        params.grant_type = 'https://oauth.reddit.com/grants/installed_client';
+        params.device_id = options.deviceId || 'DO_NOT_TRACK_THIS_DEVICE';
+        break;
       default:
-	return when.reject(new Error('Invalid OAuth type specified (Application only OAuth).'));
+        return when.reject(new Error('Invalid OAuth type specified (Application only OAuth).'));
     }
   }
   // This AuthData is for an actual logged in user
   else {
     switch (type) {
       case 'script':
-	params.grant_type = 'password';
-	params.username = options.username;
-	params.password = options.password;
-	break;
+        params.grant_type = 'password';
+        params.username = options.username;
+        params.password = options.password;
+        break;
       case 'web': // web & installed for backwards compatability
       case 'installed':
       case 'explicit':
-	params.grant_type = 'authorization_code';
-	params.client_id = options.key;
-	params.redirect_uri = options.redirectUri;
-	params.code = options.authorizationCode;
-	break;
+        params.grant_type = 'authorization_code';
+        params.client_id = options.key;
+        params.redirect_uri = options.redirectUri;
+        params.code = options.authorizationCode;
+        break;
       case 'refresh':
-	break;
+        break;
       default:
-	return when.reject(new Error('Invalid OAuth type specified (Authenticated OAuth).'));
+        return when.reject(new Error('Invalid OAuth type specified (Authenticated OAuth).'));
     }
   }
 
