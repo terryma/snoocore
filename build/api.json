@@ -2028,7 +2028,9 @@
     ],
     "extensions": [],
     "method": "GET",
-    "args": {},
+    "args": {
+      "expand_srs": {}
+    },
     "isListing": false
   },
   {
@@ -2040,7 +2042,8 @@
     "method": "DELETE",
     "args": {
       "multipath": {},
-      "uh": {}
+      "uh": {},
+      "expand_srs": {}
     },
     "isListing": false
   },
@@ -2053,7 +2056,8 @@
     "method": "DELETE",
     "args": {
       "multipath": {},
-      "uh": {}
+      "uh": {},
+      "expand_srs": {}
     },
     "isListing": false
   },
@@ -2065,6 +2069,7 @@
     "extensions": [],
     "method": "GET",
     "args": {
+      "expand_srs": {},
       "multipath": {}
     },
     "isListing": false
@@ -2077,6 +2082,7 @@
     "extensions": [],
     "method": "GET",
     "args": {
+      "expand_srs": {},
       "multipath": {}
     },
     "isListing": false
@@ -2091,7 +2097,8 @@
     "args": {
       "model": {},
       "multipath": {},
-      "uh": {}
+      "uh": {},
+      "expand_srs": {}
     },
     "isListing": false
   },
@@ -2105,7 +2112,8 @@
     "args": {
       "model": {},
       "multipath": {},
-      "uh": {}
+      "uh": {},
+      "expand_srs": {}
     },
     "isListing": false
   },
@@ -2119,7 +2127,8 @@
     "args": {
       "model": {},
       "multipath": {},
-      "uh": {}
+      "uh": {},
+      "expand_srs": {}
     },
     "isListing": false
   },
@@ -2133,7 +2142,8 @@
     "args": {
       "model": {},
       "multipath": {},
-      "uh": {}
+      "uh": {},
+      "expand_srs": {}
     },
     "isListing": false
   },
@@ -2660,6 +2670,7 @@
       "description": {},
       "exclude_banned_modqueue": {},
       "header-title": {},
+      "hide_ads": {},
       "iden": {},
       "lang": {},
       "link_type": {},
@@ -3908,5 +3919,24 @@
       "uh": {}
     },
     "isListing": false
+  },
+  {
+    "path": "/subreddits/gold",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [
+      ".json",
+      ".xml"
+    ],
+    "method": "GET",
+    "args": {
+      "after": {},
+      "before": {},
+      "count": {},
+      "limit": {},
+      "show": {}
+    },
+    "isListing": true
   }
 ]
