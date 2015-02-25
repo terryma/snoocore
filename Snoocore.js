@@ -382,6 +382,29 @@ function Snoocore(config) {
     return ccOptions;
   }
 
+
+  /*
+     Returns a uniform error for all response errors.
+   */
+  self._test.getResponseError = getResponseError;
+  function getResponseError(response, url, args) {
+
+    var responseError = new Error([
+      '>>> Response Status: ' + response._status,
+      '>>> Endpoint URL: '+ url,
+      '>>> Arguments: ' + JSON.stringify(args, null, 2),
+      '>>> Response Body:',
+      response._body
+    ].join('\n\n'));
+
+    responseError.url = url;
+    responseError.args = args;
+    responseError.status = response._status;
+    responseError.body = response._body;
+
+    return responseError;
+  }
+
   /*
      Handle a reddit 500 / server error. This will try to call the endpoint again
      after the given retryDelay. If we do not have any retry attempts left, it
@@ -392,21 +415,16 @@ function Snoocore(config) {
 
     --callContextOptions.retryAttemptsLeft;
 
-    var serverError = new Error('Reddit has come back with an HTTP status of ' + response._status);
     var args = buildArgs(givenArgs, endpoint);
     var url = buildUrl(givenArgs, endpoint, callContextOptions);
 
-    serverError.retryAttemptsLeft = callContextOptions.retryAttemptsLeft;
-    serverError.status = response._status;
-    serverError.url = url;
-    serverError.args = args;
-    serverError.body = response._body;
-    self.emit('server_error', serverError);
+    var responseError = getResponseError(response, url, args);
+    responseError.retryAttemptsLeft = callContextOptions.retryAttemptsLeft;
+    self.emit('server_error', responseError);
 
     if (callContextOptions.retryAttemptsLeft <= 0) {
-      return when.reject(new Error(
-        'All retry attempts exhausted. Failed to access the reddit servers' +
-        ' (HTTP ' + response._status + ').'));
+      responseError.message = 'All retry attempts exhausted.\n\n' + responseError.message;
+      return when.reject(responseError);
     }
 
     return delay(callContextOptions.retryDelay).then(function() {
@@ -475,12 +493,8 @@ function Snoocore(config) {
       });
     }
 
-    // Throw a generic error that displays a dump of data for this response
-    var redditResponse = typeof data === 'object' ? JSON.stringify(data, null, 2) : response._body;
-    return when.reject(new Error('\n>>> Reddit Response:\n\n' + redditResponse
-                               + '\n\n>>> Endpoint URL: '+ url
-                               + '\n\n>>> Endpoint method: ' + endpoint.method
-                               + '\n\n>>> Arguments: ' + JSON.stringify(args, null, 2)));
+    // Reject with a response error that has info on the call made
+    return when.reject(getResponseError(response, url, args));
   }
 
   /*

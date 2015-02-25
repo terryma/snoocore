@@ -20,6 +20,25 @@ describe('Snoocore Error Test', function () {
 
   this.timeout(config.testTimeout);
 
+  it('should get a proper response error', function() {
+    var reddit = util.getScriptInstance([ 'identity', 'modconfig' ]);
+
+    var responseError = reddit._test.getResponseError({
+      _status: 200,
+      _body: 300
+    }, 'someurl', { some: 'args' });
+
+    expect(responseError instanceof Error);
+    expect(responseError.status).to.eql(200);
+    expect(responseError.url).to.eql('someurl');
+    expect(responseError.args).to.eql({ some: 'args' });
+
+    expect(responseError.message.indexOf('Response Status')).to.not.eql(-1);
+    expect(responseError.message.indexOf('Endpoint URL')).to.not.eql(-1);
+    expect(responseError.message.indexOf('Arguments')).to.not.eql(-1);
+    expect(responseError.message.indexOf('Response Body')).to.not.eql(-1);
+  });
+
   it('should handle data.json.errors field', function() {
 
     var reddit = util.getScriptInstance([ 'identity', 'modconfig' ]);
@@ -90,10 +109,11 @@ describe('Snoocore Error Test', function () {
     }).then(function() {
       throw new Error('expected this to fail with invalid scope');
     }).catch(function(error) {
-      expect(error.message.indexOf('Reddit Response')).to.not.equal(-1);
+      expect(error.message.indexOf('Response Body')).to.not.equal(-1);
       expect(error.message.indexOf('Endpoint URL')).to.not.equal(-1);
-      expect(error.message.indexOf('Endpoint method')).to.not.equal(-1);
       expect(error.message.indexOf('Arguments')).to.not.equal(-1);
+
+      expect(error.status).to.eql(404);
     });
   });
 
@@ -187,8 +207,7 @@ describe('Snoocore Error Test', function () {
       });
 
     }).then(function(error) {
-      expect(error.message).to.eql(
-	'All retry attempts exhausted. Failed to access the reddit servers (HTTP 500).');
+      expect(error.message.indexOf('All retry attempts exhausted')).to.not.eql(-1);
     }).finally(function() {
       // don't allow self signed certs again
       delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
