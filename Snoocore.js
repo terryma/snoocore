@@ -412,11 +412,13 @@ function Snoocore(config) {
 			 (data && data.json && data.json.errors && data.json.errors.length > 0));
 
 	if (hasErrors) {
-	  var redditResponse = typeof data === 'object' ? JSON.stringify(data, null, 2) : response._body;
-	  throw new Error('\n>>> Reddit Response:\n\n' + redditResponse
+	  var redditResponse = typeof data === 'object' ? JSON.stringify(data, null, 2) : response._body,
+	  err = new Error('\n>>> Reddit Response:\n\n' + redditResponse
 			+ '\n\n>>> Endpoint URL: '+ url
 			+ '\n\n>>> Endpoint method: ' + endpoint.method
 			+ '\n\n>>> Arguments: ' + JSON.stringify(args, null, 2));
+	  err.httpStatus = response._status;
+	  throw err;
 	}
 
 	return data;
