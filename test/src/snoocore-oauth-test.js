@@ -25,13 +25,13 @@ describe('Snoocore OAuth Test', function () {
         throw new Error('should not pass, expect to fail with error');
       }).catch(function(error) {
         return expect(error.message).to.eql(
-	  'Must be authenticated with a user to make a call to this endpoint.');
+          'Must be authenticated with a user to make a call to this endpoint.');
       });
     });
 
   });
 
-  describe('Explicit internal configuration (duration permanent)', function() {
+  describe.only('Explicit internal configuration (duration permanent)', function() {
 
     it('should auth, get refresh token, deauth, use refresh token to reauth, deauth(true) -> refresh', function() {
 
@@ -42,9 +42,9 @@ describe('Snoocore OAuth Test', function () {
       return tsi.standardServer.allowAuthUrl(url).then(function(params) {
         var authorizationCode = params.code;
         return reddit.auth(authorizationCode).then(function(refreshToken) {
-	 
+
           return reddit('/api/v1/me').get().then(function(data) {
-	    
+
             expect(data.name).to.be.a('string');
 
             // deauthenticae with the current access token (e.g. "logoff")
@@ -112,18 +112,18 @@ describe('Snoocore OAuth Test', function () {
       var authTokenB;
 
       return reddit.auth().then(function() {
-	return reddit('/api/v1/me').get();
+        return reddit('/api/v1/me').get();
       }).then(function(data) {
-	expect(data.name).to.be.a('string');
-	authTokenA = reddit._authenticatedAuthData.access_token;
-	// "timeout" - simulate expired access token
-	reddit._authenticatedAuthData.access_token = 'invalidToken';
+        expect(data.name).to.be.a('string');
+        authTokenA = reddit._authenticatedAuthData.access_token;
+        // "timeout" - simulate expired access token
+        reddit._authenticatedAuthData.access_token = 'invalidToken';
       }).then(function() {
-	return reddit('/api/v1/me').get();
+        return reddit('/api/v1/me').get();
       }).then(function(data) {
-	expect(data.name).to.be.a('string');
-	authTokenB = reddit._authenticatedAuthData.access_token;
-	expect(authTokenA === authTokenB).to.equal(false);
+        expect(data.name).to.be.a('string');
+        authTokenB = reddit._authenticatedAuthData.access_token;
+        expect(authTokenA === authTokenB).to.equal(false);
       });
     });
 
@@ -131,15 +131,15 @@ describe('Snoocore OAuth Test', function () {
       var reddit = util.getScriptInstance([ 'identity' ]);
 
       return reddit.auth().then(function() {
-	return reddit('/api/v1/me').get();
+        return reddit('/api/v1/me').get();
       }).then(function(data) {
-	expect(data.name).to.be.a('string');
-	return reddit.deauth();
+        expect(data.name).to.be.a('string');
+        return reddit.deauth();
       }).then(function() {
-	return reddit('/api/v1/me').get();
+        return reddit('/api/v1/me').get();
       }).catch(function(error) {
-	return expect(error.message).to.eql(
-	  'Must be authenticated with a user to make a call to this endpoint.');
+        return expect(error.message).to.eql(
+          'Must be authenticated with a user to make a call to this endpoint.');
       });
     });
 
@@ -198,40 +198,40 @@ describe('Snoocore OAuth Test', function () {
 
       return tsi.standardServer.allowAuthUrl(url).then(function(params) {
 
-	expect(params.state).to.equal(state);
+        expect(params.state).to.equal(state);
 
-	var accessToken = params['access_token'];
+        var accessToken = params['access_token'];
 
-	return reddit.auth(accessToken).then(function() {
-	  return reddit('/api/v1/me').get();
-	}).then(function(data) {
-	  expect(data.error).to.be.undefined;
-	  expect(data.name).to.be.a('string');
-	  // "expire" the access token
-	  reddit._authenticatedAuthData.access_token = 'invalid_token';
+        return reddit.auth(accessToken).then(function() {
+          return reddit('/api/v1/me').get();
+        }).then(function(data) {
+          expect(data.error).to.be.undefined;
+          expect(data.name).to.be.a('string');
+          // "expire" the access token
+          reddit._authenticatedAuthData.access_token = 'invalid_token';
 
-	  return when.promise(function(resolve, reject) {
+          return when.promise(function(resolve, reject) {
 
-	    var i = 2;
+            var i = 2;
 
-	    reddit.on('auth_token_expired', function() {
-	      --i; if (i === 0) { resolve(); }
-	    });
+            reddit.on('auth_token_expired', function() {
+              --i; if (i === 0) { resolve(); }
+            });
 
-	    reddit('/api/v1/me').get().done(function() {
-	      reject(); // should have failed, reject this promise if it didn't
-	    }, function(error) {
-	      --i; if (i === 0) { return resolve(); }
-	      expect(error.message).to.equal(
-		'Access token has expired. ' +
-		'Listen for the "access_token_expired" event to ' +
-		'handle this gracefully in your app.');
-	      resolve();
-	    });
+            reddit('/api/v1/me').get().done(function() {
+              reject(); // should have failed, reject this promise if it didn't
+            }, function(error) {
+              --i; if (i === 0) { return resolve(); }
+              expect(error.message).to.equal(
+                'Access token has expired. ' +
+                'Listen for the "access_token_expired" event to ' +
+                'handle this gracefully in your app.');
+              resolve();
+            });
 
 
-	  });
-	});
+          });
+        });
       });
 
     });
@@ -258,9 +258,9 @@ describe('Snoocore OAuth Test', function () {
 
       // OAuth only endpoint.
       return reddit('/api/v1/user/$username/trophies').get({
-	$username: 'tsenior'
+        $username: 'tsenior'
       }).then(function(result) {
-	expect(result.kind).to.equal('TrophyList');
+        expect(result.kind).to.equal('TrophyList');
       });
     });
 
@@ -269,9 +269,9 @@ describe('Snoocore OAuth Test', function () {
 
       // OAuth only endpoint.
       return reddit('/api/v1/user/$username/trophies').get({
-	$username: 'tsenior'
+        $username: 'tsenior'
       }).then(function(result) {
-	expect(result.kind).to.equal('TrophyList');
+        expect(result.kind).to.equal('TrophyList');
       });
     });
 

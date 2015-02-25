@@ -8,7 +8,7 @@ var he = require('he');
 var when = require('when');
 var delay = require('when/delay');
 
-var rawApi = require('./build/api');
+var endpointTree = require('./build/endpointTree');
 var utils = require('./utils');
 
 var pkg = require('./package');
@@ -76,14 +76,6 @@ function Snoocore(config) {
   //
   //--- end of initial configuration
   //
-
-  /*
-     Structure the raw reddit api into a tree format
-     @TODO move this into a build step in ./run.js, no need to build
-     this every time we load the library
-   */
-  self._endpointTree = buildEndpointTree(rawApi);
-
 
   /*
      The current throttle delay before a request will go through
@@ -698,56 +690,6 @@ function Snoocore(config) {
     return getSlice(givenArgs);
   }
 
-
-  /*
-     Structures the reddit api endpoints into a tree
-     that we can use later for traversing
-     The layout:
-
-     {
-     api: { v1: { me: { _endpoints: [ {GET} ], prefs: { _endpoints: [ {GET}, {PATCH}  ] }}}},
-     live: { $thread: { "about.json": { _endpoints: [ {GET} ] }}},
-     ...
-     }
-
-     The endpoints live in arrays to support instances where
-     there are multiple verbs defined for an endpoint such as
-     /api/v1/me/prefs
-
-     It also handles the ase where /api/v1/me is a parent endpoint to
-     /app/v1/me/prefs by defining endpoints in a `_endpoints` field.
-   */
-  function buildEndpointTree(rawApi) {
-    var endpointTree = {};
-
-    rawApi.forEach(function(endpoint) {
-      // get the sections to traverse down for this endpoint
-      var pathSections = endpoint.path.substring(1).split('/');
-      var leaf = endpointTree; // start at the root
-
-      // move down to where we need to be in the chain for this endpoint
-      var i = 0;
-      var len = pathSections.length;
-
-      for (; i < len - 1; ++i) {
-        if (typeof leaf[pathSections[i]] === 'undefined') {
-          leaf[pathSections[i]] = {};
-        }
-        leaf = leaf[pathSections[i]];
-      }
-
-      // push the endpoint to this section of the tree
-      if (typeof leaf[pathSections[i]] === 'undefined') {
-        leaf[pathSections[i]] = { _endpoints: [] };
-      }
-
-      leaf[pathSections[i]]._endpoints.push(endpoint);
-
-    });
-
-    return endpointTree;
-  }
-
   /*
      Build support for the raw API calls
    */
@@ -777,7 +719,7 @@ function Snoocore(config) {
 
     // remove leading slash if any
     var sections = path.replace(/^\//, '').split('/');
-    var leaf = self._endpointTree; // the top level of the endpoint tree that we will traverse down
+    var leaf = endpointTree; // the top level of the endpoint tree that we will traverse down
 
     // Adjust how this call is built if necessary
     var buildCallOptions = {

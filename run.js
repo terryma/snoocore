@@ -52,12 +52,70 @@ exports.buildRedditApi = function(done) {
   }, done);
 };
 
+/*
+   Structures the reddit api endpoints into a tree
+   that we can use later for traversing
+   The layout:
+
+   {
+   api: { v1: { me: { _endpoints: [ {GET} ], prefs: { _endpoints: [ {GET}, {PATCH}  ] }}}},
+   live: { $thread: { "about.json": { _endpoints: [ {GET} ] }}},
+   ...
+   }
+
+   The endpoints live in arrays to support instances where
+   there are multiple verbs defined for an endpoint such as
+   /api/v1/me/prefs
+
+   It also handles the ase where /api/v1/me is a parent endpoint to
+   /app/v1/me/prefs by defining endpoints in a `_endpoints` field.
+ */
+function buildEndpointTree(rawApi) {
+  var endpointTree = {};
+
+  rawApi.forEach(function(endpoint) {
+    // get the sections to traverse down for this endpoint
+    var pathSections = endpoint.path.substring(1).split('/');
+    var leaf = endpointTree; // start at the root
+
+    // move down to where we need to be in the chain for this endpoint
+    var i = 0;
+    var len = pathSections.length;
+
+    for (; i < len - 1; ++i) {
+      if (typeof leaf[pathSections[i]] === 'undefined') {
+        leaf[pathSections[i]] = {};
+      }
+      leaf = leaf[pathSections[i]];
+    }
+
+    // push the endpoint to this section of the tree
+    if (typeof leaf[pathSections[i]] === 'undefined') {
+      leaf[pathSections[i]] = { _endpoints: [] };
+    }
+
+    leaf[pathSections[i]]._endpoints.push(endpoint);
+
+  });
+
+  return endpointTree;
+}
+
+exports.buildEndpointTree = function(done) {
+  return exports.buildRedditApi(function() {
+    var rawApi = require(path.join(__dirname, 'build', 'api.json'));
+    var endpointTree = buildEndpointTree(rawApi);
+    var endpointTreeFilePath = path.join(__dirname, 'build', 'endpointTree.json');
+    fs.writeFile(endpointTreeFilePath, JSON.stringify(endpointTree, null, 2), done);
+  });
+};
+
 exports.buildStandalone = function(done) {
   return exec(path.join(__dirname, 'node_modules', '.bin', 'browserify') +
-			' --standalone Snoocore' +
-			' --exclude request/requestNode.js' +
-			' --outfile dist/Snoocore-standalone.js' +
-			' Snoocore.js',
+              ' --standalone Snoocore' +
+              ' --exclude request/requestNode.js' +
+              ' --outfile dist/Snoocore-standalone.js' +
+              ' Snoocore.js',
               { cwd: __dirname },
               function(error, stdout, stderr) {
                 return done(error);
@@ -66,9 +124,9 @@ exports.buildStandalone = function(done) {
 
 exports.buildBrowserTests = function(done) {
   return exec(path.join(__dirname, 'node_modules', '.bin', 'browserify') +
-			' --exclude request/requestNode.js' +
-			' --outfile test/build/browser-tests.js' +
-			' test/browser-tests.js',
+              ' --exclude request/requestNode.js' +
+              ' --outfile test/build/browser-tests.js' +
+              ' test/browser-tests.js',
               { cwd: __dirname },
               function(error, stdout, stderr) {
                 return done(error);
@@ -90,8 +148,8 @@ exports.karmaTests = function(done) {
 
     karma.on('exit', function(code) {
       return (code !== 0)
-             ? done(new Error('Karma tests failed to run'))
-			     : done();
+        ? done(new Error('Karma tests failed to run'))
+        : done();
     });
   });
 };
@@ -108,8 +166,8 @@ exports.mochaTests = function(done) {
 
   mocha.on('exit', function(code) {
     return (code !== 0)
-           ? done(new Error('Mocha tests failed to run'))
-			   : done();
+      ? done(new Error('Mocha tests failed to run'))
+      : done();
   });
 };
 
@@ -164,6 +222,9 @@ switch(argv[0]) {
     break;
   case 'api':
     fn = exports.buildRedditApi;
+    break;
+  case 'endpointTree':
+    fn = exports.buildEndpointTree;
     break;
   default:
     fn = function(done) {
