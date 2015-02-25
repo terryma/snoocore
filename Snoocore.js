@@ -244,6 +244,28 @@ function Snoocore(config) {
     return methods;
   }
 
+
+  /*
+     Returns a uniform error for all response errors.
+   */
+  function getResponseError(response, url, args) {
+
+    var responseError = new Error([
+      '>>> Response Status: ' + response._status,
+      '>>> Endpoint URL: '+ url,
+      '>>> Arguments: ' + JSON.stringify(args, null, 2),
+      '>>> Response Body:',
+      response._body
+    ].join('\n\n'));
+
+    responseError.url = url;
+    responseError.args = args;
+    responseError.status = response._status;
+    responseError.body = response._body;
+
+    return responseError;
+  }
+
   // Call the reddit api
   function callRedditApi(endpoint, givenArgs, options) {
 
@@ -341,20 +363,13 @@ function Snoocore(config) {
 
 	  --retryAttemptsLeft;
 
-	  var serverError = new Error('Reddit has come back with an HTTP status of ' + response._status);
-
-	  serverError.retryAttemptsLeft = retryAttemptsLeft;
-	  serverError.status = response._status;
-	  serverError.url = url;
-	  serverError.args = args;
-	  serverError.body = response._body;
-
-	  self.emit('server_error', serverError);
-
+	  var responseError = getResponseError(response, url, args);
+	  responseError.retryAttemptsLeft = retryAttemptsLeft;
+	  self.emit('server_error', responseError);
+	  
 	  if (retryAttemptsLeft <= 0) {
-	    throw new Error(
-	      'All retry attempts exhausted. Failed to access the reddit servers' +
-	      ' (HTTP ' + response._status + ').');
+	    responseError.message = 'All retry attempts exhausted.\n\n' + responseError.message;
+	    throw responseError;
 	  }
 
 	  return delay(retryDelay).then(function() {
@@ -412,13 +427,8 @@ function Snoocore(config) {
 			 (data && data.json && data.json.errors && data.json.errors.length > 0));
 
 	if (hasErrors) {
-	  var redditResponse = typeof data === 'object' ? JSON.stringify(data, null, 2) : response._body,
-	  err = new Error('\n>>> Reddit Response:\n\n' + redditResponse
-			+ '\n\n>>> Endpoint URL: '+ url
-			+ '\n\n>>> Endpoint method: ' + endpoint.method
-			+ '\n\n>>> Arguments: ' + JSON.stringify(args, null, 2));
-	  err.httpStatus = response._status;
-	  throw err;
+	  var redditError = getResponseError(response, url, args);
+	  throw redditError;
 	}
 
 	return data;
@@ -459,7 +469,7 @@ function Snoocore(config) {
 	var listing = result || {};
 
 	slice.get = result || {};
-	
+
 	if (result instanceof Array) {
 	  if (typeof options.listingIndex === 'undefined') {
 	    throw new Error('Must specify a `listingIndex` for this listing.');
@@ -869,7 +879,8 @@ function Snoocore(config) {
     addUrlExtension: addUrlExtension,
     buildUrl: buildUrl,
     buildArgs: buildArgs,
-    buildCall: buildCall
+    buildCall: buildCall,
+    getResponseError: getResponseError
   };
 
 
