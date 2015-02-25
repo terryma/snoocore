@@ -31,8 +31,8 @@ function Snoocore(config) {
   self._userAgent = config.userAgent || 'snoocore-default-User-Agent';
 
   self._isNode = typeof config.browser !== 'undefined'
-					 ? !config.browser
-					 : utils.isNode();
+                                         ? !config.browser
+                                         : utils.isNode();
 
   self._server = {
     oauth: 'https://oauth.reddit.com',
@@ -44,14 +44,14 @@ function Snoocore(config) {
   // attribute. Most of the time, users will need the string "json"
   // See the docs for more information on this.
   self._apiType = (typeof config.apiType === 'undefined') ?
-		  'json' : config.apiType;
+                  'json' : config.apiType;
 
   self._decodeHtmlEntities = config.decodeHtmlEntities || false;
 
   self._retryAttempts = (typeof config.retryAttempts === 'undefined') ?
-			60 : config.retryAttempts;
+                        60 : config.retryAttempts;
   self._retryDelay = (typeof config.retryDelay === 'undefined') ?
-		     5000 : config.retryDelay;
+                     5000 : config.retryDelay;
 
   self._modhash = ''; // The current mod hash of whatever user we have
   self._redditSession = ''; // The current cookie (reddit_session)
@@ -153,8 +153,8 @@ function Snoocore(config) {
     }
     // else, decide if we want to use www vs. ssl
     return endpoint.method === 'GET'
-			     ? self._server.www + endpoint.path
-			     : self._server.ssl + endpoint.path;
+                             ? self._server.www + endpoint.path
+                             : self._server.ssl + endpoint.path;
   }
 
   // Builds the URL that we will query taking into account any
@@ -179,7 +179,7 @@ function Snoocore(config) {
     }
 
     var apiType = (typeof endpointArgs.api_type === 'undefined') ?
-		  self._apiType : endpointArgs.api_type;
+                  self._apiType : endpointArgs.api_type;
 
     // If we have an api type (not false), and the endpoint requires it
     // go ahead and set it in the args.
@@ -205,22 +205,22 @@ function Snoocore(config) {
 
       // replace any of the user alias place holders with the actual ones
       Object.keys(options.urlParamAlias || []).forEach(function(providedAlias) {
-	// e.g. '$subreddit' vs '$sub'
-	var actualAlias = options.urlParamAlias[providedAlias];
-	// set the givenArgs to matche the actual alias value with the value that
-	// the user gave
-	givenArgs[actualAlias] = givenArgs[providedAlias];
-	// remove the provided alias
-	delete givenArgs[providedAlias];
+        // e.g. '$subreddit' vs '$sub'
+        var actualAlias = options.urlParamAlias[providedAlias];
+        // set the givenArgs to matche the actual alias value with the value that
+        // the user gave
+        givenArgs[actualAlias] = givenArgs[providedAlias];
+        // remove the provided alias
+        delete givenArgs[providedAlias];
       });
 
       // replace any of the url parameters with values embedded into the
       // path into the givenArguments
       Object.keys(options.urlParamValue || []).forEach(function(providedValue) {
-	// e.g. '$subreddit' vs 'aww'
-	var actualAlias = options.urlParamValue[providedValue];
-	// add the correct argument to givenArgs with the value provided
-	givenArgs[actualAlias] = providedValue;
+        // e.g. '$subreddit' vs 'aww'
+        var actualAlias = options.urlParamValue[providedValue];
+        // add the correct argument to givenArgs with the value provided
+        givenArgs[actualAlias] = providedValue;
       });
 
       return givenArgs;
@@ -228,16 +228,16 @@ function Snoocore(config) {
 
     endpoints.forEach(function(endpoint) {
       methods[endpoint.method.toLowerCase()] = function(givenArgs, callOptions) {
-	givenArgs = fixGivenArgs(givenArgs);
-	return callRedditApi(endpoint, givenArgs, callOptions);
+        givenArgs = fixGivenArgs(givenArgs);
+        return callRedditApi(endpoint, givenArgs, callOptions);
       };
 
       // Listings can only be 'GET' requests
       if (endpoint.method === 'GET' && endpoint.isListing) {
-	methods.listing = function(givenArgs, callOptions) {
-	  givenArgs = fixGivenArgs(givenArgs);
-	  return getListing(endpoint, givenArgs, callOptions);
-	};
+        methods.listing = function(givenArgs, callOptions) {
+          givenArgs = fixGivenArgs(givenArgs);
+          return getListing(endpoint, givenArgs, callOptions);
+        };
       }
     });
 
@@ -275,8 +275,8 @@ function Snoocore(config) {
     if (isAuthenticated() && !hasRefreshToken() && hasAccessTokenExpired()) {
       self.emit('access_token_expired');
       return when.reject(new Error('Authorization token has expired. Listen for ' +
-				   'the "access_token_expired" event to handle ' +
-				   'this gracefully in your app.'));
+                                   'the "access_token_expired" event to handle ' +
+                                   'this gracefully in your app.'));
     }
 
     // Options that will change the way this call behaves
@@ -284,13 +284,13 @@ function Snoocore(config) {
 
     var bypassAuth = options.bypassAuth || false;
     var decodeHtmlEntities = (typeof options.decodeHtmlEntities !== 'undefined') ?
-			     options.decodeHtmlEntities : self._decodeHtmlEntities;
+                             options.decodeHtmlEntities : self._decodeHtmlEntities;
     var retryAttemptsLeft = (typeof options.retryAttempts !== 'undefined') ?
-			    options.retryAttempts : self._retryAttempts;
+                            options.retryAttempts : self._retryAttempts;
     var retryDelay = (typeof options.retryDelay !== 'undefined') ?
-		     options.retryDelay : self._retryDelay;
+                     options.retryDelay : self._retryDelay;
     var reauthAttemptsLeft = (typeof options.reauthAttemptsLeft !== 'undefined') ?
-			     options.reauthAttemptsLeft : retryAttemptsLeft;
+                             options.reauthAttemptsLeft : retryAttemptsLeft;
 
 
     var throttle = getThrottle(bypassAuth);
@@ -309,129 +309,129 @@ function Snoocore(config) {
       var headers = {};
 
       if (self._isNode) {
-	// Can't set User-Agent in browser based JavaScript!
-	headers['User-Agent'] = self._userAgent;
+        // Can't set User-Agent in browser based JavaScript!
+        headers['User-Agent'] = self._userAgent;
 
-	// Can't set custom headers in Firefox CORS requests
-	headers['X-Modhash'] = self._modhash;
+        // Can't set custom headers in Firefox CORS requests
+        headers['X-Modhash'] = self._modhash;
       }
 
       // If we are nod bypassing authentication, authenticate the user
       if (!bypassAuth) {
 
-	if (isAuthenticated()) {
-	  // OAuth based authentication
+        if (isAuthenticated()) {
+          // OAuth based authentication
 
-	  // Check that the correct scopes have been requested
-	  var missingScope;
-	  endpoint.oauth.forEach(function(requiredScope) {
-	    missingScope = (
-	      (self._oauth.scope || []).indexOf(requiredScope) === -1 &&
-	      requiredScope !== 'any');
+          // Check that the correct scopes have been requested
+          var missingScope;
+          endpoint.oauth.forEach(function(requiredScope) {
+            missingScope = (
+              (self._oauth.scope || []).indexOf(requiredScope) === -1 &&
+              requiredScope !== 'any');
 
-	    if (missingScope) {
-	      throw new Error('missing required scope(s): ' + endpoint.oauth.join(', '));
-	    }
-	  });
+            if (missingScope) {
+              throw new Error('missing required scope(s): ' + endpoint.oauth.join(', '));
+            }
+          });
 
-	  headers['Authorization'] = self._authData.token_type + ' ' +
-				     self._authData.access_token;
-	}
-	else if (isLoggedIn() && self._isNode) {
-	  /* Cookie based authentication (only supported in Node.js) */
-	  headers['Cookie'] = 'reddit_session=' + self._redditSession + ';';
-	}
+          headers['Authorization'] = self._authData.token_type + ' ' +
+                                     self._authData.access_token;
+        }
+        else if (isLoggedIn() && self._isNode) {
+          /* Cookie based authentication (only supported in Node.js) */
+          headers['Cookie'] = 'reddit_session=' + self._redditSession + ';';
+        }
 
       }
 
       var requestOptions = {
-	method: method,
-	hostname: parsedUrl.hostname,
-	path: parsedUrl.path,
- 	headers: headers
+        method: method,
+        hostname: parsedUrl.hostname,
+        path: parsedUrl.path,
+        headers: headers
       };
 
       if (parsedUrl.port) {
-	requestOptions.port = parsedUrl.port;
+        requestOptions.port = parsedUrl.port;
       }
 
       return Snoocore.request.https(requestOptions, args).then(function(response) {
 
-	// HTTP 5xx status
+        // HTTP 5xx status
 
-	if (String(response._status).substring(0, 1) === '5') {
+        if (String(response._status).substring(0, 1) === '5') {
 
-	  --retryAttemptsLeft;
+          --retryAttemptsLeft;
 
-	  var responseError = getResponseError(response, url, args);
-	  responseError.retryAttemptsLeft = retryAttemptsLeft;
-	  self.emit('server_error', responseError);
-	  
-	  if (retryAttemptsLeft <= 0) {
-	    responseError.message = 'All retry attempts exhausted.\n\n' + responseError.message;
-	    throw responseError;
-	  }
+          var responseError = getResponseError(response, url, args);
+          responseError.retryAttemptsLeft = retryAttemptsLeft;
+          self.emit('server_error', responseError);
 
-	  return delay(retryDelay).then(function() {
-	    options.retryAttempts = retryAttemptsLeft;
-	    return callRedditApi(endpoint, givenArgs, options);
-	  });
-	}
+          if (retryAttemptsLeft <= 0) {
+            responseError.message = 'All retry attempts exhausted.\n\n' + responseError.message;
+            throw responseError;
+          }
 
-	// Forbidden. Try to get a new access_token if we have
-	// a refresh token
+          return delay(retryDelay).then(function() {
+            options.retryAttempts = retryAttemptsLeft;
+            return callRedditApi(endpoint, givenArgs, options);
+          });
+        }
 
-	var shouldReauth = (hasAccessToken() &&
-	  (response._status === 403 || response._status === 401) &&
-	  (hasRefreshToken() || self._oauth.type === 'script'));
+        // Forbidden. Try to get a new access_token if we have
+        // a refresh token
 
-	if (shouldReauth) {
+        var shouldReauth = (hasAccessToken() &&
+          (response._status === 403 || response._status === 401) &&
+          (hasRefreshToken() || self._oauth.type === 'script'));
 
-	  --reauthAttemptsLeft;
-	  options.reauthAttemptsLeft = reauthAttemptsLeft;
+        if (shouldReauth) {
 
-	  if (reauthAttemptsLeft <= 0) {
-	    throw new Error('Unable to refresh the access_token.');
-	  }
+          --reauthAttemptsLeft;
+          options.reauthAttemptsLeft = reauthAttemptsLeft;
 
-	  var reauth;
+          if (reauthAttemptsLeft <= 0) {
+            throw new Error('Unable to refresh the access_token.');
+          }
 
-	  if (hasRefreshToken()) { reauth = self.refresh(self._refreshToken); }
-	  if (self._oauth.type === 'script') { reauth = self.auth(); }
+          var reauth;
 
-	  return reauth.then(function() {
-	    return callRedditApi(endpoint, givenArgs, options);
-	  });
-	}
+          if (hasRefreshToken()) { reauth = self.refresh(self._refreshToken); }
+          if (self._oauth.type === 'script') { reauth = self.auth(); }
 
-	var data = response._body || {};
+          return reauth.then(function() {
+            return callRedditApi(endpoint, givenArgs, options);
+          });
+        }
 
-	if (decodeHtmlEntities) {
-	  data = he.decode(data);
-	}
+        var data = response._body || {};
 
-	try { // Attempt to parse some JSON, otherwise continue on (may be empty, or text)
-	  data = JSON.parse(data);
-	} catch(e) {}
+        if (decodeHtmlEntities) {
+          data = he.decode(data);
+        }
 
-	if (data && data.json && data.json.data)
-	{
-	  // login cookie information
-	  self._modhash = data.json.data.modhash;
-	  self._redditSession = data.json.data.cookie;
-	}
+        try { // Attempt to parse some JSON, otherwise continue on (may be empty, or text)
+          data = JSON.parse(data);
+        } catch(e) {}
 
-	// Throw any errors that reddit may inform us about
-	var hasErrors = (data.hasOwnProperty('error') ||
-			 (data.hasOwnProperty('errors') && data.errors.length > 0) ||
-			 (data && data.json && data.json.errors && data.json.errors.length > 0));
+        if (data && data.json && data.json.data)
+        {
+          // login cookie information
+          self._modhash = data.json.data.modhash;
+          self._redditSession = data.json.data.cookie;
+        }
 
-	if (hasErrors) {
-	  var redditError = getResponseError(response, url, args);
-	  throw redditError;
-	}
+        // Throw any errors that reddit may inform us about
+        var hasErrors = (data.hasOwnProperty('error') ||
+                         (data.hasOwnProperty('errors') && data.errors.length > 0) ||
+                         (data && data.json && data.json.errors && data.json.errors.length > 0));
 
-	return data;
+        if (hasErrors) {
+          var redditError = getResponseError(response, url, args);
+          throw redditError;
+        }
+
+        return data;
       });
 
     }).finally(function() {
@@ -441,9 +441,9 @@ function Snoocore(config) {
       var callDuration = endCallTime - startCallTime;
 
       if (callDuration < throttle) {
-	self._throttleDelay -= callDuration;
+        self._throttleDelay -= callDuration;
       } else {
-	self._throttleDelay -= throttle;
+        self._throttleDelay -= throttle;
       }
     });
 
@@ -465,70 +465,70 @@ function Snoocore(config) {
     function getSlice(givenArgs) {
       return callRedditApi(endpoint, givenArgs, options).then(function(result) {
 
-	var slice = {};
-	var listing = result || {};
+        var slice = {};
+        var listing = result || {};
 
-	slice.get = result || {};
+        slice.get = result || {};
 
-	if (result instanceof Array) {
-	  if (typeof options.listingIndex === 'undefined') {
-	    throw new Error('Must specify a `listingIndex` for this listing.');
-	  }
+        if (result instanceof Array) {
+          if (typeof options.listingIndex === 'undefined') {
+            throw new Error('Must specify a `listingIndex` for this listing.');
+          }
 
-	  listing = result[options.listingIndex];
-	}
+          listing = result[options.listingIndex];
+        }
 
-	slice.count = count;
+        slice.count = count;
 
-	slice.before = listing.data.before || null;
-	slice.after = listing.data.after || null;
-	slice.allChildren = listing.data.children || [];
+        slice.before = listing.data.before || null;
+        slice.after = listing.data.after || null;
+        slice.allChildren = listing.data.children || [];
 
-	slice.empty = slice.allChildren.length === 0;
+        slice.empty = slice.allChildren.length === 0;
 
-	slice.children = slice.allChildren.filter(function(child) {
-	  return !child.data.stickied;
-	});
+        slice.children = slice.allChildren.filter(function(child) {
+          return !child.data.stickied;
+        });
 
-	slice.stickied = slice.allChildren.filter(function(child) {
-	  return child.data.stickied;
-	});
+        slice.stickied = slice.allChildren.filter(function(child) {
+          return child.data.stickied;
+        });
 
-	slice.next = function() {
-	  count += limit;
+        slice.next = function() {
+          count += limit;
 
-	  var args = givenArgs;
-	  args.before = null;
-	  args.after = slice.children[slice.children.length - 1].data.name;
-	  args.count = count;
-	  return getSlice(args);
-	};
+          var args = givenArgs;
+          args.before = null;
+          args.after = slice.children[slice.children.length - 1].data.name;
+          args.count = count;
+          return getSlice(args);
+        };
 
-	slice.previous = function() {
-	  count -= limit;
+        slice.previous = function() {
+          count -= limit;
 
-	  var args = givenArgs;
-	  args.before = slice.children[0].data.name;
-	  args.after = null;
-	  args.count = count;
-	  return getSlice(args);
-	};
+          var args = givenArgs;
+          args.before = slice.children[0].data.name;
+          args.after = null;
+          args.count = count;
+          return getSlice(args);
+        };
 
-	slice.start = function() {
-	  count = 0;
+        slice.start = function() {
+          count = 0;
 
-	  var args = givenArgs;
-	  args.before = null;
-	  args.after = start;
-	  args.count = count;
-	  return getSlice(args);
-	};
+          var args = givenArgs;
+          args.before = null;
+          args.after = start;
+          args.count = count;
+          return getSlice(args);
+        };
 
-	slice.requery = function() {
-	  return getSlice(givenArgs);
-	};
+        slice.requery = function() {
+          return getSlice(givenArgs);
+        };
 
-	return slice;
+        return slice;
       });
 
     }
@@ -568,15 +568,15 @@ function Snoocore(config) {
       var len = pathSections.length;
 
       for (; i < len - 1; ++i) {
-	if (typeof leaf[pathSections[i]] === 'undefined') {
-	  leaf[pathSections[i]] = {};
-	}
-	leaf = leaf[pathSections[i]];
+        if (typeof leaf[pathSections[i]] === 'undefined') {
+          leaf[pathSections[i]] = {};
+        }
+        leaf = leaf[pathSections[i]];
       }
 
       // push the endpoint to this section of the tree
       if (typeof leaf[pathSections[i]] === 'undefined') {
-	leaf[pathSections[i]] = { _endpoints: [] };
+        leaf[pathSections[i]] = { _endpoints: [] };
       }
 
       leaf[pathSections[i]]._endpoints.push(endpoint);
@@ -593,15 +593,15 @@ function Snoocore(config) {
 
     function getEndpoint(method) {
       return {
-	path: parsed.path,
-	method: method,
-	oauth: [],
-	isListing: true
+        path: parsed.path,
+        method: method,
+        oauth: [],
+        isListing: true
       };
     }
 
     var endpoints = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'UPDATE']
-		       .map(getEndpoint);
+                       .map(getEndpoint);
     return buildCall(endpoints);
   };
 
@@ -633,37 +633,37 @@ function Snoocore(config) {
       // value of the url parameter
       if (typeof leaf[providedSection] === 'undefined') {
 
-	var leafKeys = Object.keys(leaf);
+        var leafKeys = Object.keys(leaf);
 
-	for (var j = 0, jlen = leafKeys.length; j < jlen; ++j) {
-	  // Return the section that represents a placeholder
-	  if (leafKeys[j].substring(0, 1) === '$') {
-	    actualSection = leafKeys[j]; // The actual value, e.g. '$subreddit'
+        for (var j = 0, jlen = leafKeys.length; j < jlen; ++j) {
+          // Return the section that represents a placeholder
+          if (leafKeys[j].substring(0, 1) === '$') {
+            actualSection = leafKeys[j]; // The actual value, e.g. '$subreddit'
 
-	    // If this section is the actual section, the next section of
-	    // this path should be valid as well if we have a next session
-	    if (nextSection && leaf[actualSection][nextSection]) {
-	      break;
-	    }
+            // If this section is the actual section, the next section of
+            // this path should be valid as well if we have a next session
+            if (nextSection && leaf[actualSection][nextSection]) {
+              break;
+            }
 
-	    // continue until we find a valid section
-	  }
-	}
+            // continue until we find a valid section
+          }
+        }
 
-	// The user is using their own alias
-	if (providedSection.substring(0, 1) === '$') {
-	  buildCallOptions.urlParamAlias[providedSection] = actualSection;
-	}
-	// looks like they used a value instead of the placeholder
-	else {
-	  buildCallOptions.urlParamValue[providedSection] = actualSection;
-	}
+        // The user is using their own alias
+        if (providedSection.substring(0, 1) === '$') {
+          buildCallOptions.urlParamAlias[providedSection] = actualSection;
+        }
+        // looks like they used a value instead of the placeholder
+        else {
+          buildCallOptions.urlParamValue[providedSection] = actualSection;
+        }
 
       }
 
       // Check that the actual section is a valid one
       if (typeof leaf[actualSection] === 'undefined') {
-	throw new Error('Invalid path provided. Check that this is a valid path.\n' + path);
+        throw new Error('Invalid path provided. Check that this is a valid path.\n' + path);
       }
 
       // move down the endpoint tree
@@ -691,8 +691,8 @@ function Snoocore(config) {
 
     if (!hasUserPass && !hasCookieModhash) {
       return when.reject(new Error(
-	'login expects either a username/password, or a ' +
-	'cookie/modhash'));
+        'login expects either a username/password, or a ' +
+        'cookie/modhash'));
     }
 
     if (hasCookieModhash) {
@@ -702,12 +702,12 @@ function Snoocore(config) {
     }
 
     var rem = typeof options.rem !== 'undefined'
-				   ? options.rem
-				   : true;
+                                   ? options.rem
+                                   : true;
 
     var api_type = typeof options.api_type !== 'undefined'
-					     ? options.api_type
-					     : 'json';
+                                             ? options.api_type
+                                             : 'json';
 
     return self.path('/api/login').post({
       user: options.username,
@@ -721,9 +721,9 @@ function Snoocore(config) {
   // on Reddit for good measure.
   self.logout = function() {
     var getModhash = self._modhash
-		   ? when.resolve(self._modhash)
+                   ? when.resolve(self._modhash)
       : self.path('/api/me.json').get().then(function(result) {
-	return result.data ? result.data.modhash : void 0;
+        return result.data ? result.data.modhash : void 0;
       });
 
     return getModhash.then(function(modhash) {
@@ -735,15 +735,15 @@ function Snoocore(config) {
       var args = { uh: modhash };
 
       return Snoocore.request.https({
-	method: 'POST',
-	hostname: 'www.reddit.com',
-	path: '/logout',
-	headers: {
-	  'X-Modhash': modhash
-	}
+        method: 'POST',
+        hostname: 'www.reddit.com',
+        path: '/logout',
+        headers: {
+          'X-Modhash': modhash
+        }
       }, args).then(function(response) {
-	self._modhash = '';
-	self._redditSession = '';
+        self._modhash = '';
+        self._redditSession = '';
       });
 
     });
@@ -797,39 +797,39 @@ function Snoocore(config) {
 
     switch(self._oauth.type) {
       case 'script':
-	authData = Snoocore.oauth.getAuthData(self._oauth.type, {
-	  consumerKey: self._oauth.consumerKey,
-	  consumerSecret: self._oauth.consumerSecret,
-	  scope: self._oauth.scope,
-	  username: self._login.username,
-	  password: self._login.password
-	});
-	break;
+        authData = Snoocore.oauth.getAuthData(self._oauth.type, {
+          consumerKey: self._oauth.consumerKey,
+          consumerSecret: self._oauth.consumerSecret,
+          scope: self._oauth.scope,
+          username: self._login.username,
+          password: self._login.password
+        });
+        break;
 
       case 'web': // keep web/insatlled here for backwards compatability
       case 'installed':
       case 'explicit':
-	authData = Snoocore.oauth.getAuthData(self._oauth.type, {
-	  authorizationCode: authDataOrAuthCodeOrAccessToken, // auth code in this case
-	  consumerKey: self._oauth.consumerKey,
-	  consumerSecret: self._oauth.consumerSecret || '',
-	  redirectUri: self._oauth.redirectUri,
-	  scope: self._oauth.scope
-	});
-	break;
+        authData = Snoocore.oauth.getAuthData(self._oauth.type, {
+          authorizationCode: authDataOrAuthCodeOrAccessToken, // auth code in this case
+          consumerKey: self._oauth.consumerKey,
+          consumerSecret: self._oauth.consumerSecret || '',
+          redirectUri: self._oauth.redirectUri,
+          scope: self._oauth.scope
+        });
+        break;
 
       case 'implicit':
-	authData = {
-	  access_token: authDataOrAuthCodeOrAccessToken, // access token in this case
-	  token_type: 'bearer',
-	  expires_in: 3600,
-	  scope: self._oauth.scope
-	};
-	break;
+        authData = {
+          access_token: authDataOrAuthCodeOrAccessToken, // access token in this case
+          token_type: 'bearer',
+          expires_in: 3600,
+          scope: self._oauth.scope
+        };
+        break;
 
       default:
-	// assume that it is the authData
-	authData = authDataOrAuthCodeOrAccessToken;
+        // assume that it is the authData
+        authData = authDataOrAuthCodeOrAccessToken;
     }
 
     return when(authData).then(function(authDataResult) {
@@ -840,10 +840,10 @@ function Snoocore(config) {
       // back the refresh token that will be used to re-authenticate
       // later without user interaction.
       if (authDataResult.refresh_token) {
-	// set the internal refresh token for automatic expiring
-	// access_token management
-	self._refreshToken = authDataResult.refresh_token;
-	return authDataResult.refresh_token;
+        // set the internal refresh token for automatic expiring
+        // access_token management
+        self._refreshToken = authDataResult.refresh_token;
+        return authDataResult.refresh_token;
       }
     });
   };
