@@ -1449,7 +1449,9 @@
             ],
             "extensions": [],
             "method": "GET",
-            "args": {},
+            "args": {
+              "expand_srs": {}
+            },
             "isListing": false
           }
         ]
@@ -1465,7 +1467,8 @@
             "method": "DELETE",
             "args": {
               "multipath": {},
-              "uh": {}
+              "uh": {},
+              "expand_srs": {}
             },
             "isListing": false
           },
@@ -1477,6 +1480,7 @@
             "extensions": [],
             "method": "GET",
             "args": {
+              "expand_srs": {},
               "multipath": {}
             },
             "isListing": false
@@ -1491,7 +1495,8 @@
             "args": {
               "model": {},
               "multipath": {},
-              "uh": {}
+              "uh": {},
+              "expand_srs": {}
             },
             "isListing": false
           },
@@ -1505,7 +1510,8 @@
             "args": {
               "model": {},
               "multipath": {},
-              "uh": {}
+              "uh": {},
+              "expand_srs": {}
             },
             "isListing": false
           }
@@ -1638,7 +1644,8 @@
             "method": "DELETE",
             "args": {
               "multipath": {},
-              "uh": {}
+              "uh": {},
+              "expand_srs": {}
             },
             "isListing": false
           },
@@ -1650,6 +1657,7 @@
             "extensions": [],
             "method": "GET",
             "args": {
+              "expand_srs": {},
               "multipath": {}
             },
             "isListing": false
@@ -1664,7 +1672,8 @@
             "args": {
               "model": {},
               "multipath": {},
-              "uh": {}
+              "uh": {},
+              "expand_srs": {}
             },
             "isListing": false
           },
@@ -1678,7 +1687,8 @@
             "args": {
               "model": {},
               "multipath": {},
-              "uh": {}
+              "uh": {},
+              "expand_srs": {}
             },
             "isListing": false
           }
@@ -1818,12 +1828,15 @@
           "args": {
             "allow_top": {},
             "api_type": {},
+            "captcha": {},
             "collapse_deleted_comments": {},
             "comment_score_hide_mins": {},
             "css_on_cname": {},
             "description": {},
             "exclude_banned_modqueue": {},
             "header-title": {},
+            "hide_ads": {},
+            "iden": {},
             "lang": {},
             "link_type": {},
             "name": {},
@@ -1933,7 +1946,8 @@
             "header": {},
             "img_type": {},
             "name": {},
-            "uh": {}
+            "uh": {},
+            "upload_type": {}
           },
           "isListing": false
         }
@@ -2133,6 +2147,40 @@
           }
         ]
       }
+    },
+    "delete_sr_banner": {
+      "_endpoints": [
+        {
+          "path": "/api/delete_sr_banner",
+          "oauth": [
+            "modconfig"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "delete_sr_icon": {
+      "_endpoints": [
+        {
+          "path": "/api/delete_sr_icon",
+          "oauth": [
+            "modconfig"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
     }
   },
   "prefs": {
@@ -2556,7 +2604,8 @@
                 "header": {},
                 "img_type": {},
                 "name": {},
-                "uh": {}
+                "uh": {},
+                "upload_type": {}
               },
               "isListing": false
             }
@@ -2742,6 +2791,40 @@
               }
             ]
           }
+        },
+        "delete_sr_banner": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/api/delete_sr_banner",
+              "oauth": [
+                "modconfig"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "delete_sr_icon": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/api/delete_sr_icon",
+              "oauth": [
+                "modconfig"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
         }
       },
       "comments": {
@@ -4353,6 +4436,29 @@
           "isListing": true
         }
       ]
+    },
+    "gold": {
+      "_endpoints": [
+        {
+          "path": "/subreddits/gold",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [
+            ".json",
+            ".xml"
+          ],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "show": {}
+          },
+          "isListing": true
+        }
+      ]
     }
   },
   "user": {
@@ -4824,6 +4930,29 @@
             ".json",
             ".xml"
           ],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "article": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "show": {}
+          },
+          "isListing": true
+        }
+      ]
+    }
+  },
+  "related": {
+    "$article": {
+      "_endpoints": [
+        {
+          "path": "/related/$article",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [],
           "method": "GET",
           "args": {
             "after": {},

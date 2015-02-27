@@ -2155,6 +2155,7 @@
     "extensions": [],
     "method": "POST",
     "args": {
+      "display_name": {},
       "from": {},
       "to": {},
       "uh": {}
@@ -2279,6 +2280,7 @@
     "extensions": [],
     "method": "POST",
     "args": {
+      "display_name": {},
       "from": {},
       "to": {},
       "uh": {}
@@ -3938,5 +3940,18 @@
       "show": {}
     },
     "isListing": true
+  },
+  {
+    "path": "/api/multi/user/$username",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "expand_srs": {},
+      "username": {}
+    },
+    "isListing": false
   }
 ]
