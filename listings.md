@@ -43,7 +43,7 @@ reddit('/r/hot').listing({ limit: 10 }).then(function(slice) {
 });
 ```
 
-For full working examples checkout the [examples on GitHub](https://github.com/trevorsenior/snoocore/tree/master/examples)
+For full working examples checkout the [examples on GitHub](https://github.com/trevorsenior/snoocore-examples/tree/master)
 
 - - -
 
