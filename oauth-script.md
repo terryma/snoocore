@@ -32,7 +32,7 @@ var reddit = new Snoocore({
 // To authenticate with OAuth, simply call `auth()`
 return reddit.auth().then(function() {
     // Make an OAuth call to show that it is working
-    return reddit.api.v1.me.get();
+    return reddit('/api/v1/me').get();
 })
 .then(function(data) {
     console.log(data); // Log the response
