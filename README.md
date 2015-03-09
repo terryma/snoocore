@@ -25,7 +25,7 @@ See the [basic usage](http://trevorsenior.github.io/snoocore/basicUsage.html) se
 
 <sub>Snoocore [uses promises](http://tsenior.com/snoocore/promises.html)!</sub>
 
-**Node.js and Browser support**
+**Node.js and Bower support**
 
 `npm install snoocore` || `bower install snoocore`
 
