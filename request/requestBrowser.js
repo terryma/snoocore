@@ -19,7 +19,7 @@ exports.https = function(options, formData) {
 
     try {
       // https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest
-      var x = new XMLHttpRequest();
+      var x = new window.XMLHttpRequest();
 
       var url = 'https://' + options.hostname + options.path;
 
