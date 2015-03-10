@@ -14,7 +14,7 @@ var utils = require('./utils');
 
 module.exports = Snoocore;
 
-Snoocore.version = '2.7.1';
+Snoocore.version = '2.7.2';
 
 Snoocore.oauth = require('./oauth');
 Snoocore.request = require('./request');
@@ -11575,7 +11575,7 @@ exports.https = function(options, formData) {
 
     try {
       // https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest
-      var x = new XMLHttpRequest();
+      var x = new window.XMLHttpRequest();
 
       var url = 'https://' + options.hostname + options.path;
 
