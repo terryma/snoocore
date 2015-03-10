@@ -14,7 +14,7 @@ var utils = require('./utils');
 
 module.exports = Snoocore;
 
-Snoocore.version = '2.7.1';
+Snoocore.version = '2.7.2';
 
 Snoocore.oauth = require('./oauth');
 Snoocore.request = require('./request');
@@ -2927,7 +2927,9 @@ module.exports=[
     ],
     "extensions": [],
     "method": "GET",
-    "args": {},
+    "args": {
+      "expand_srs": {}
+    },
     "isListing": false
   },
   {
@@ -2939,7 +2941,8 @@ module.exports=[
     "method": "DELETE",
     "args": {
       "multipath": {},
-      "uh": {}
+      "uh": {},
+      "expand_srs": {}
     },
     "isListing": false
   },
@@ -2952,7 +2955,8 @@ module.exports=[
     "method": "DELETE",
     "args": {
       "multipath": {},
-      "uh": {}
+      "uh": {},
+      "expand_srs": {}
     },
     "isListing": false
   },
@@ -2964,6 +2968,7 @@ module.exports=[
     "extensions": [],
     "method": "GET",
     "args": {
+      "expand_srs": {},
       "multipath": {}
     },
     "isListing": false
@@ -2976,6 +2981,7 @@ module.exports=[
     "extensions": [],
     "method": "GET",
     "args": {
+      "expand_srs": {},
       "multipath": {}
     },
     "isListing": false
@@ -2990,7 +2996,8 @@ module.exports=[
     "args": {
       "model": {},
       "multipath": {},
-      "uh": {}
+      "uh": {},
+      "expand_srs": {}
     },
     "isListing": false
   },
@@ -3004,7 +3011,8 @@ module.exports=[
     "args": {
       "model": {},
       "multipath": {},
-      "uh": {}
+      "uh": {},
+      "expand_srs": {}
     },
     "isListing": false
   },
@@ -3018,7 +3026,8 @@ module.exports=[
     "args": {
       "model": {},
       "multipath": {},
-      "uh": {}
+      "uh": {},
+      "expand_srs": {}
     },
     "isListing": false
   },
@@ -3032,7 +3041,8 @@ module.exports=[
     "args": {
       "model": {},
       "multipath": {},
-      "uh": {}
+      "uh": {},
+      "expand_srs": {}
     },
     "isListing": false
   },
@@ -3559,6 +3569,7 @@ module.exports=[
       "description": {},
       "exclude_banned_modqueue": {},
       "header-title": {},
+      "hide_ads": {},
       "iden": {},
       "lang": {},
       "link_type": {},
@@ -4807,6 +4818,25 @@ module.exports=[
       "uh": {}
     },
     "isListing": false
+  },
+  {
+    "path": "/subreddits/gold",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [
+      ".json",
+      ".xml"
+    ],
+    "method": "GET",
+    "args": {
+      "after": {},
+      "before": {},
+      "count": {},
+      "limit": {},
+      "show": {}
+    },
+    "isListing": true
   }
 ]
 },{}],3:[function(require,module,exports){
@@ -16743,7 +16773,7 @@ exports.https = function(options, formData) {
 
     try {
       // https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest
-      var x = new XMLHttpRequest();
+      var x = new window.XMLHttpRequest();
 
       var url = 'https://' + options.hostname + options.path;
 
