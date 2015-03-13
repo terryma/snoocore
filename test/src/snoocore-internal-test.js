@@ -175,11 +175,8 @@ describe('Snoocore Internal Tests', function () {
   });
 
   describe('#buildUrl()', function() {
-    var endpoint = {
-      path: '/$urlparam/bar',
-      method: 'GET',
-      oauth: [ 'identity' ]
-    };
+    var endpointPath = '/$urlparam/bar';
+    var endopintMethod = 'GET';
 
     it('should build an url', function() {
       var reddit = util.getScriptInstance();
@@ -189,7 +186,7 @@ describe('Snoocore Internal Tests', function () {
         user: 'foo',
         passwd: 'foo',
         $urlparam: 'something'
-      }, endpoint);
+      }, endpointPath, endpointMethod, options);
 
       expect(url).to.equal('https://oauth.reddit.com/something/bar');
     });

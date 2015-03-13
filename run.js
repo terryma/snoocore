@@ -6,7 +6,7 @@ var path = require('path');
 var exec = require('child_process').exec;
 var spawn = require('child_process').spawn;
 
-var build = require('snooform');
+var snooform = require('snooform');
 
 exports.installModules = function(done) {
   fs.exists(path.join(__dirname, 'node_modules'), function(exists) {
@@ -20,97 +20,68 @@ exports.installModules = function(done) {
   });
 };
 
-exports.buildRedditApi = function(done) {
+/*
+   Exports a list of endpoints that have unique properties identified
+   by characters in a string. This obscure format is to save on space
+   in browsers.
 
-  var filePath = path.join(__dirname, 'build', 'api.json');
-  var oldApi = require(filePath);
+   These so far include:
 
-  // A map containing the old endpoints, that will be replaced
-  // by the new endpoints / updates
-  var newMap = oldApi.reduce(function(prev, curr) {
-    prev[curr.method + '_' + curr.path] = curr;
-    return prev;
-  }, {});
+   e = endpoint requires an extension of '.json' to function
+   a = endpoint requires the parameter 'api_type: "json"'
 
-  // build the reddit api without the endpoint descriptions or the
-  // argument descriptions to cut down on the final library size
-  build.jsonApi({
+ */
+exports.buildEndpointProperties = function(done) {
+
+  return snooform.jsonApi({
     skipDescription: true,
     skipArgsDescription: true,
     skipUrls: true
   }).done(function(json) {
-    // replace the previous endpoints with updated endpoints
-    JSON.parse(json).forEach(function(endpoint) {
-      newMap[endpoint.method + '_' + endpoint.path] = endpoint;
-    });
 
-    var newEndpoints = Object.keys(newMap).map(function(key) {
-      return newMap[key];
-    });
+    var endpoints = JSON.parse(json);
+    var endpointProperties = {};
 
-    fs.writeFile(filePath, JSON.stringify(newEndpoints, null, 2), done);
-  }, done);
-};
+    endpoints.forEach(function(endpoint) {
 
-/*
-   Structures the reddit api endpoints into a tree
-   that we can use later for traversing
-   The layout:
+      var properties = '';
 
-   {
-   api: { v1: { me: { _endpoints: [ {GET} ], prefs: { _endpoints: [ {GET}, {PATCH}  ] }}}},
-   live: { $thread: { "about.json": { _endpoints: [ {GET} ] }}},
-   ...
-   }
-
-   The endpoints live in arrays to support instances where
-   there are multiple verbs defined for an endpoint such as
-   /api/v1/me/prefs
-
-   It also handles the ase where /api/v1/me is a parent endpoint to
-   /app/v1/me/prefs by defining endpoints in a `_endpoints` field.
- */
-function buildEndpointTree(rawApi) {
-  var endpointTree = {};
-
-  rawApi.forEach(function(endpoint) {
-    // get the sections to traverse down for this endpoint
-    var pathSections = endpoint.path.substring(1).split('/');
-    var leaf = endpointTree; // start at the root
-
-    // move down to where we need to be in the chain for this endpoint
-    var i = 0;
-    var len = pathSections.length;
-
-    for (; i < len - 1; ++i) {
-      if (typeof leaf[pathSections[i]] === 'undefined') {
-        leaf[pathSections[i]] = {};
+      // requires parameter api_type: 'json'
+      if (typeof endpoint.args.api_type !== 'undefined') {
+        properties += 'a';
       }
-      leaf = leaf[pathSections[i]];
-    }
 
-    // push the endpoint to this section of the tree
-    if (typeof leaf[pathSections[i]] === 'undefined') {
-      leaf[pathSections[i]] = { _endpoints: [] };
-    }
+      // if this endpoint has any special properties make note of it:
+      if (properties !== '') {
+        // go ahead and replace placeholders just with "$"
+        var path = endpoint.path.replace(/\$\w+/g, '$');
+        endpointProperties[endpoint.method + path] = properties;
+      }
+    });
 
-    leaf[pathSections[i]]._endpoints.push(endpoint);
-
-  });
-
-  return endpointTree;
-}
-
-exports.buildEndpointTree = function(done) {
-  return exports.buildRedditApi(function() {
-    var rawApi = require(path.join(__dirname, 'build', 'api.json'));
-    var endpointTree = buildEndpointTree(rawApi);
-    var endpointTreeFilePath = path.join(__dirname, 'build', 'endpointTree.json');
-    fs.writeFile(endpointTreeFilePath, JSON.stringify(endpointTree, null, 2), done);
+    var endpointPropertiesPath = path.join(__dirname,
+                                           'build',
+                                           'endpointProperties.json');
+    fs.writeFile(endpointPropertiesPath,
+                 JSON.stringify(endpointProperties, null, 2),
+                 done);
   });
 };
 
-exports.buildStandalone = function(done) {
+exports.buildNodeStandalone = function(done) {
+  return exec(path.join(__dirname, 'node_modules', '.bin', 'browserify') +
+              ' --standalone Snoocore' +
+              ' --exclude request/requestBrowser.js' +
+              ' --outfile dist/Snoocore-nodejs-standalone.js' +
+              ' Snoocore.js',
+              { cwd: __dirname },
+              function(error, stdout, stderr) {
+                return done(error);
+              });
+
+};
+
+exports.buildBrowserStandalone = function(done) {
   return exec(path.join(__dirname, 'node_modules', '.bin', 'browserify') +
               ' --standalone Snoocore' +
               ' --exclude request/requestNode.js' +
@@ -120,6 +91,13 @@ exports.buildStandalone = function(done) {
               function(error, stdout, stderr) {
                 return done(error);
               });
+};
+
+exports.buildStandalone = function(done) {
+  return exports.buildNodeStandalone(function(error) {
+    if (error) { return done(error); }
+    return exports.buildBrowserStandalone(done);
+  });
 };
 
 exports.buildBrowserTests = function(done) {
@@ -211,20 +189,17 @@ switch(argv[0]) {
   case 'standalone':
     fn = exports.buildStandalone;
     break;
-  case 'test':
-    fn = exports.runTests;
-    break;
   case 'mocha':
     fn = exports.mochaTests;
     break;
   case 'karma':
     fn = exports.karmaTests;
     break;
-  case 'api':
-    fn = exports.buildRedditApi;
+  case 'test':
+    fn = exports.runTests;
     break;
-  case 'endpointTree':
-    fn = exports.buildEndpointTree;
+  case 'endpointProps':
+    fn = exports.buildEndpointProperties;
     break;
   default:
     fn = function(done) {

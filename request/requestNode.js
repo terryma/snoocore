@@ -32,7 +32,7 @@ exports.https = function(options, formData) {
   // console.log('\n>>> headers\n', options.headers);
 
   // stick the data at the end of the path. It is going to b
-  if (options.method === 'GET') {
+  if (options.method === 'GET' && data.buffer.toString() !== '') {
     options.path += '?' + data.buffer.toString();
   }
 
@@ -47,9 +47,9 @@ exports.https = function(options, formData) {
       res.on('error', function(error) { return reject(error); });
       res.on('data', function(chunk) { body += chunk; });
       res.on('end', function() {
-	res._body = body; // attach the response body to the object
-	res._status = res.statusCode;
-	return resolve(res);
+        res._body = body; // attach the response body to the object
+        res._status = res.statusCode;
+        return resolve(res);
       });
     });
 

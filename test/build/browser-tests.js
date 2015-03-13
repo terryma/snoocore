@@ -9,7 +9,7 @@ var he = require('he');
 var when = require('when');
 var delay = require('when/delay');
 
-var rawApi = require('./build/api');
+var endpointTree = require('./build/endpointTree');
 var utils = require('./utils');
 
 var pkg = require('./package');
@@ -71,20 +71,12 @@ function Snoocore(config) {
 
   if (isOAuthType('implicit') || isOAuthType('explicit')) {
     self._oauth.redirectUri = thisOrThrow(self._oauth.redirectUri,
-					  missingMsg + '`oauth.redirectUri` for type implicit/explicit');
+                                          missingMsg + '`oauth.redirectUri` for type implicit/explicit');
   }
 
   //
   //--- end of initial configuration
   //
-
-  /*
-     Structure the raw reddit api into a tree format
-     @TODO move this into a build step in ./run.js, no need to build
-     this every time we load the library
-   */
-  self._endpointTree = buildEndpointTree(rawApi);
-
 
   /*
      The current throttle delay before a request will go through
@@ -190,11 +182,11 @@ function Snoocore(config) {
     for (; i >= 0; --i) {
       requiredScope = endpoint.oauth[i];
       missingScope = (
-	(self._oauth.scope || []).indexOf(requiredScope) === -1 &&
-	requiredScope !== 'any');
+        (self._oauth.scope || []).indexOf(requiredScope) === -1 &&
+        requiredScope !== 'any');
 
       if (missingScope) {
-	return true;
+        return true;
       }
     }
     return false;
@@ -317,22 +309,22 @@ function Snoocore(config) {
 
       // replace any of the user alias place holders with the actual ones
       Object.keys(options.urlParamAlias || []).forEach(function(providedAlias) {
-	// e.g. '$subreddit' vs '$sub'
-	var actualAlias = options.urlParamAlias[providedAlias];
-	// set the givenArgs to matche the actual alias value with the value that
-	// the user gave
-	givenArgs[actualAlias] = givenArgs[providedAlias];
-	// remove the provided alias
-	delete givenArgs[providedAlias];
+        // e.g. '$subreddit' vs '$sub'
+        var actualAlias = options.urlParamAlias[providedAlias];
+        // set the givenArgs to matche the actual alias value with the value that
+        // the user gave
+        givenArgs[actualAlias] = givenArgs[providedAlias];
+        // remove the provided alias
+        delete givenArgs[providedAlias];
       });
 
       // replace any of the url parameters with values embedded into the
       // path into the givenArguments
       Object.keys(options.urlParamValue || []).forEach(function(providedValue) {
-	// e.g. '$subreddit' vs 'aww'
-	var actualAlias = options.urlParamValue[providedValue];
-	// add the correct argument to givenArgs with the value provided
-	givenArgs[actualAlias] = providedValue;
+        // e.g. '$subreddit' vs 'aww'
+        var actualAlias = options.urlParamValue[providedValue];
+        // add the correct argument to givenArgs with the value provided
+        givenArgs[actualAlias] = providedValue;
       });
 
       return givenArgs;
@@ -340,16 +332,16 @@ function Snoocore(config) {
 
     endpoints.forEach(function(endpoint) {
       methods[endpoint.method.toLowerCase()] = function(givenArgs, callOptions) {
-	givenArgs = fixGivenArgs(givenArgs);
-	return callRedditApi(endpoint, givenArgs, callOptions);
+        givenArgs = fixGivenArgs(givenArgs);
+        return callRedditApi(endpoint, givenArgs, callOptions);
       };
 
       // Listings can only be 'GET' requests
       if (endpoint.method === 'GET' && endpoint.isListing) {
-	methods.listing = function(givenArgs, callOptions) {
-	  givenArgs = fixGivenArgs(givenArgs);
-	  return getListing(endpoint, givenArgs, callOptions);
-	};
+        methods.listing = function(givenArgs, callOptions) {
+          givenArgs = fixGivenArgs(givenArgs);
+          return getListing(endpoint, givenArgs, callOptions);
+        };
       }
     });
 
@@ -383,6 +375,29 @@ function Snoocore(config) {
     return ccOptions;
   }
 
+
+  /*
+     Returns a uniform error for all response errors.
+   */
+  self._test.getResponseError = getResponseError;
+  function getResponseError(response, url, args) {
+
+    var responseError = new Error([
+      '>>> Response Status: ' + response._status,
+      '>>> Endpoint URL: '+ url,
+      '>>> Arguments: ' + JSON.stringify(args, null, 2),
+      '>>> Response Body:',
+      response._body
+    ].join('\n\n'));
+
+    responseError.url = url;
+    responseError.args = args;
+    responseError.status = response._status;
+    responseError.body = response._body;
+
+    return responseError;
+  }
+
   /*
      Handle a reddit 500 / server error. This will try to call the endpoint again
      after the given retryDelay. If we do not have any retry attempts left, it
@@ -393,21 +408,16 @@ function Snoocore(config) {
 
     --callContextOptions.retryAttemptsLeft;
 
-    var serverError = new Error('Reddit has come back with an HTTP status of ' + response._status);
     var args = buildArgs(givenArgs, endpoint);
     var url = buildUrl(givenArgs, endpoint, callContextOptions);
 
-    serverError.retryAttemptsLeft = callContextOptions.retryAttemptsLeft;
-    serverError.status = response._status;
-    serverError.url = url;
-    serverError.args = args;
-    serverError.body = response._body;
-    self.emit('server_error', serverError);
+    var responseError = getResponseError(response, url, args);
+    responseError.retryAttemptsLeft = callContextOptions.retryAttemptsLeft;
+    self.emit('server_error', responseError);
 
     if (callContextOptions.retryAttemptsLeft <= 0) {
-      return when.reject(new Error(
-	'All retry attempts exhausted. Failed to access the reddit servers' +
-	' (HTTP ' + response._status + ').'));
+      responseError.message = 'All retry attempts exhausted.\n\n' + responseError.message;
+      return when.reject(responseError);
     }
 
     return delay(callContextOptions.retryDelay).then(function() {
@@ -436,8 +446,8 @@ function Snoocore(config) {
     if (!isApplicationOnly() && !hasRefreshToken() && !isOAuthType('script')) {
       self.emit('access_token_expired');
       return when.reject(new Error('Access token has expired. Listen for ' +
-				   'the "access_token_expired" event to handle ' +
-				   'this gracefully in your app.'));
+                                   'the "access_token_expired" event to handle ' +
+                                   'this gracefully in your app.'));
 
     }
 
@@ -455,7 +465,7 @@ function Snoocore(config) {
       --callContextOptions.reauthAttemptsLeft;
 
       if (callContextOptions.reauthAttemptsLeft <= 0) {
-	return when.reject(new Error('Unable to refresh the access_token.'));
+        return when.reject(new Error('Unable to refresh the access_token.'));
       }
 
       var reauth;
@@ -463,25 +473,22 @@ function Snoocore(config) {
       // If we are application only, or are bypassing authentication for a call
       // go ahead and use application only OAuth
       if (isApplicationOnly() || callContextOptions.bypassAuth) {
-	reauth = self.applicationOnlyAuth();
+        console.log('oh hey');
+        reauth = self.applicationOnlyAuth();
       } else {
-	// If we have been authenticated with a permanent refresh token
-	if (hasRefreshToken()) { reauth = self.refresh(self._refreshToken); }
-	// If we are OAuth type script and not implicit authenticated
-	if (isOAuthType('script')) { reauth = self.auth(); }
+        // If we have been authenticated with a permanent refresh token
+        if (hasRefreshToken()) { reauth = self.refresh(self._refreshToken); }
+        // If we are OAuth type script and not implicit authenticated
+        if (isOAuthType('script')) { reauth = self.auth(); }
       }
 
       return reauth.then(function() {
-	return callRedditApi(endpoint, givenArgs, callContextOptions);
+        return callRedditApi(endpoint, givenArgs, callContextOptions);
       });
     }
 
-    // Throw a generic error that displays a dump of data for this response
-    var redditResponse = typeof data === 'object' ? JSON.stringify(data, null, 2) : response._body;
-    return when.reject(new Error('\n>>> Reddit Response:\n\n' + redditResponse
-			       + '\n\n>>> Endpoint URL: '+ url
-			       + '\n\n>>> Endpoint method: ' + endpoint.method
-			       + '\n\n>>> Arguments: ' + JSON.stringify(args, null, 2)));
+    // Reject with a response error that has info on the call made
+    return when.reject(getResponseError(response, url, args));
   }
 
   /*
@@ -515,11 +522,11 @@ function Snoocore(config) {
 
     switch(String(response._status).substring(0, 1)) {
       case '5':
-	return handleServerErrorResponse(response, endpoint, givenArgs, callContextOptions);
+        return handleServerErrorResponse(response, endpoint, givenArgs, callContextOptions);
       case '4':
-	return handleClientErrorResponse(response, endpoint, givenArgs, callContextOptions);
+        return handleClientErrorResponse(response, endpoint, givenArgs, callContextOptions);
       case '2':
-	return handleSuccessResponse(response, endpoint, givenArgs, callContextOptions);
+        return handleSuccessResponse(response, endpoint, givenArgs, callContextOptions);
     }
 
     return when.reject(new Error('Invalid reddit response status of ' + response._status));
@@ -580,6 +587,8 @@ function Snoocore(config) {
     return delay(self._throttleDelay - throttle).then(function() {
       return Snoocore.request.https(requestOptions, args);
     }).then(function(response) {
+      console.log(requestOptions, args);
+      console.log(response);
       return handleRedditResponse(response, endpoint, givenArgs, callContextOptions);
     }).finally(function() {
       // decrement the throttle delay. If the call is quick and snappy, we
@@ -588,9 +597,9 @@ function Snoocore(config) {
       var callDuration = endCallTime - startCallTime;
 
       if (callDuration < throttle) {
-	self._throttleDelay -= callDuration;
+        self._throttleDelay -= callDuration;
       } else {
-	self._throttleDelay -= throttle;
+        self._throttleDelay -= throttle;
       }
     });
 
@@ -614,70 +623,70 @@ function Snoocore(config) {
     function getSlice(givenArgs) {
       return callRedditApi(endpoint, givenArgs, options).then(function(result) {
 
-	var slice = {};
-	var listing = result || {};
+        var slice = {};
+        var listing = result || {};
 
-	slice.get = result || {};
+        slice.get = result || {};
 
-	if (result instanceof Array) {
-	  if (typeof options.listingIndex === 'undefined') {
-	    throw new Error('Must specify a `listingIndex` for this listing.');
-	  }
+        if (result instanceof Array) {
+          if (typeof options.listingIndex === 'undefined') {
+            throw new Error('Must specify a `listingIndex` for this listing.');
+          }
 
-	  listing = result[options.listingIndex];
-	}
+          listing = result[options.listingIndex];
+        }
 
-	slice.count = count;
+        slice.count = count;
 
-	slice.before = listing.data.before || null;
-	slice.after = listing.data.after || null;
-	slice.allChildren = listing.data.children || [];
+        slice.before = listing.data.before || null;
+        slice.after = listing.data.after || null;
+        slice.allChildren = listing.data.children || [];
 
-	slice.empty = slice.allChildren.length === 0;
+        slice.empty = slice.allChildren.length === 0;
 
-	slice.children = slice.allChildren.filter(function(child) {
-	  return !child.data.stickied;
-	});
+        slice.children = slice.allChildren.filter(function(child) {
+          return !child.data.stickied;
+        });
 
-	slice.stickied = slice.allChildren.filter(function(child) {
-	  return child.data.stickied;
-	});
+        slice.stickied = slice.allChildren.filter(function(child) {
+          return child.data.stickied;
+        });
 
-	slice.next = function() {
-	  count += limit;
+        slice.next = function() {
+          count += limit;
 
-	  var args = givenArgs;
-	  args.before = null;
-	  args.after = slice.children[slice.children.length - 1].data.name;
-	  args.count = count;
-	  return getSlice(args);
-	};
+          var args = givenArgs;
+          args.before = null;
+          args.after = slice.children[slice.children.length - 1].data.name;
+          args.count = count;
+          return getSlice(args);
+        };
 
-	slice.previous = function() {
-	  count -= limit;
+        slice.previous = function() {
+          count -= limit;
 
-	  var args = givenArgs;
-	  args.before = slice.children[0].data.name;
-	  args.after = null;
-	  args.count = count;
-	  return getSlice(args);
-	};
+          var args = givenArgs;
+          args.before = slice.children[0].data.name;
+          args.after = null;
+          args.count = count;
+          return getSlice(args);
+        };
 
-	slice.start = function() {
-	  count = 0;
+        slice.start = function() {
+          count = 0;
 
-	  var args = givenArgs;
-	  args.before = null;
-	  args.after = start;
-	  args.count = count;
-	  return getSlice(args);
-	};
+          var args = givenArgs;
+          args.before = null;
+          args.after = start;
+          args.count = count;
+          return getSlice(args);
+        };
 
-	slice.requery = function() {
-	  return getSlice(givenArgs);
-	};
+        slice.requery = function() {
+          return getSlice(givenArgs);
+        };
 
-	return slice;
+        return slice;
       });
 
     }
@@ -685,69 +694,19 @@ function Snoocore(config) {
     return getSlice(givenArgs);
   }
 
-
-  /*
-     Structures the reddit api endpoints into a tree
-     that we can use later for traversing
-     The layout:
-
-     {
-     api: { v1: { me: { _endpoints: [ {GET} ], prefs: { _endpoints: [ {GET}, {PATCH}  ] }}}},
-     live: { $thread: { "about.json": { _endpoints: [ {GET} ] }}},
-     ...
-     }
-
-     The endpoints live in arrays to support instances where
-     there are multiple verbs defined for an endpoint such as
-     /api/v1/me/prefs
-
-     It also handles the ase where /api/v1/me is a parent endpoint to
-     /app/v1/me/prefs by defining endpoints in a `_endpoints` field.
-   */
-  function buildEndpointTree(rawApi) {
-    var endpointTree = {};
-
-    rawApi.forEach(function(endpoint) {
-      // get the sections to traverse down for this endpoint
-      var pathSections = endpoint.path.substring(1).split('/');
-      var leaf = endpointTree; // start at the root
-
-      // move down to where we need to be in the chain for this endpoint
-      var i = 0;
-      var len = pathSections.length;
-
-      for (; i < len - 1; ++i) {
-	if (typeof leaf[pathSections[i]] === 'undefined') {
-	  leaf[pathSections[i]] = {};
-	}
-	leaf = leaf[pathSections[i]];
-      }
-
-      // push the endpoint to this section of the tree
-      if (typeof leaf[pathSections[i]] === 'undefined') {
-	leaf[pathSections[i]] = { _endpoints: [] };
-      }
-
-      leaf[pathSections[i]]._endpoints.push(endpoint);
-
-    });
-
-    return endpointTree;
-  }
-
   /*
      Build support for the raw API calls
    */
-  self.raw = function(url) {
+  self.raw = function(urlOrPath) {
 
-    var parsed = urlLib.parse(url);
+    var parsed = urlLib.parse(urlOrPath);
 
     function getEndpoint(method) {
       return {
-	path: parsed.path,
-	method: method,
-	oauth: [],
-	isListing: true
+        path: parsed.pathname,
+        method: method,
+        oauth: [],
+        isListing: true
       };
     }
 
@@ -762,9 +721,9 @@ function Snoocore(config) {
    */
   self.path = function(path) {
 
-    path = path.replace(/^\//, ''); // remove leading slash if any
-    var sections = path.split('/'); // sections to traverse down
-    var leaf = self._endpointTree; // the top level of the endpoint tree that we will traverse down
+    // remove leading slash if any
+    var sections = path.replace(/^\//, '').split('/');
+    var leaf = endpointTree; // the top level of the endpoint tree that we will traverse down
 
     // Adjust how this call is built if necessary
     var buildCallOptions = {
@@ -787,37 +746,37 @@ function Snoocore(config) {
       // value of the url parameter
       if (typeof leaf[providedSection] === 'undefined') {
 
-	var leafKeys = Object.keys(leaf);
+        var leafKeys = Object.keys(leaf);
 
-	for (var j = 0, jlen = leafKeys.length; j < jlen; ++j) {
-	  // Return the section that represents a placeholder
-	  if (leafKeys[j].substring(0, 1) === '$') {
-	    actualSection = leafKeys[j]; // The actual value, e.g. '$subreddit'
+        for (var j = 0, jlen = leafKeys.length; j < jlen; ++j) {
+          // Return the section that represents a placeholder
+          if (leafKeys[j].substring(0, 1) === '$') {
+            actualSection = leafKeys[j]; // The actual value, e.g. '$subreddit'
 
-	    // If this section is the actual section, the next section of
-	    // this path should be valid as well if we have a next session
-	    if (nextSection && leaf[actualSection][nextSection]) {
-	      break;
-	    }
+            // If this section is the actual section, the next section of
+            // this path should be valid as well if we have a next session
+            if (nextSection && leaf[actualSection][nextSection]) {
+              break;
+            }
 
-	    // continue until we find a valid section
-	  }
-	}
+            // continue until we find a valid section
+          }
+        }
 
-	// The user is using their own alias
-	if (providedSection.substring(0, 1) === '$') {
-	  buildCallOptions.urlParamAlias[providedSection] = actualSection;
-	}
-	// looks like they used a value instead of the placeholder
-	else {
-	  buildCallOptions.urlParamValue[providedSection] = actualSection;
-	}
+        // The user is using their own alias
+        if (providedSection.substring(0, 1) === '$') {
+          buildCallOptions.urlParamAlias[providedSection] = actualSection;
+        }
+        // looks like they used a value instead of the placeholder
+        else {
+          buildCallOptions.urlParamValue[providedSection] = actualSection;
+        }
 
       }
 
       // Check that the actual section is a valid one
       if (typeof leaf[actualSection] === 'undefined') {
-	throw new Error('Invalid path provided. Check that this is a valid path.\n' + path);
+        return self.raw(path); // Assume that this is a raw endpoint.
       }
 
       // move down the endpoint tree
@@ -826,9 +785,8 @@ function Snoocore(config) {
 
     // Check that our leaf is an endpoint before building the call
     if (typeof leaf._endpoints === 'undefined') {
-      throw new Error('Invalid path provided. Check that this is a valid path.\n' + path);
+      return self.raw(path); // Assume that this is a raw endpoint
     }
-
 
     return buildCall(leaf._endpoints, buildCallOptions);
   };
@@ -896,75 +854,76 @@ function Snoocore(config) {
 
     switch(self._oauth.type) {
       case 'script':
-	authData = Snoocore.oauth.getAuthData(self._oauth.type, {
-	  key: self._oauth.key,
-	  secret: self._oauth.secret,
-	  scope: self._oauth.scope,
-	  username: self._oauth.username,
-	  password: self._oauth.password,
-	  applicationOnly: isApplicationOnly,
-	  serverWWW: serverWWW
-	});
-	break;
+        authData = Snoocore.oauth.getAuthData(self._oauth.type, {
+          key: self._oauth.key,
+          secret: self._oauth.secret,
+          scope: self._oauth.scope,
+          username: self._oauth.username,
+          password: self._oauth.password,
+          applicationOnly: isApplicationOnly,
+          serverWWW: serverWWW
+        });
+        break;
 
       case 'explicit':
-	authData = Snoocore.oauth.getAuthData(self._oauth.type, {
-	  authorizationCode: authDataOrAuthCodeOrAccessToken, // auth code in this case
-	  key: self._oauth.key,
-	  secret: self._oauth.secret,
-	  redirectUri: self._oauth.redirectUri,
-	  scope: self._oauth.scope,
-	  applicationOnly: isApplicationOnly,
-	  serverWWW: serverWWW
-	});
-	break;
+        authData = Snoocore.oauth.getAuthData(self._oauth.type, {
+          authorizationCode: authDataOrAuthCodeOrAccessToken, // auth code in this case
+          key: self._oauth.key,
+          secret: self._oauth.secret,
+          redirectUri: self._oauth.redirectUri,
+          scope: self._oauth.scope,
+          applicationOnly: isApplicationOnly,
+          serverWWW: serverWWW
+        });
+        break;
 
       case 'implicit':
-	if (isApplicationOnly) {
-	  authData = Snoocore.oauth.getAuthData(self._oauth.type, {
-	    key: self._oauth.key,
-	    scope: self._oauth.scope,
-	    applicationOnly: true,
-	    serverWWW: serverWWW
-	  });
-	} else {
-	  // Set the access token, no need to make another call to reddit
-	  // using the `Snoocore.oauth.getAuthData` call
-	  authData = {
-	    access_token: authDataOrAuthCodeOrAccessToken, // access token in this case
-	    token_type: 'bearer',
-	    expires_in: 3600,
-	    scope: self._oauth.scope
-	  };
-	}
-	break;
+        if (isApplicationOnly) {
+          console.log('ohhh heeyyy (2)');
+          authData = Snoocore.oauth.getAuthData(self._oauth.type, {
+            key: self._oauth.key,
+            scope: self._oauth.scope,
+            applicationOnly: true,
+            serverWWW: serverWWW
+          });
+        } else {
+          // Set the access token, no need to make another call to reddit
+          // using the `Snoocore.oauth.getAuthData` call
+          authData = {
+            access_token: authDataOrAuthCodeOrAccessToken, // access token in this case
+            token_type: 'bearer',
+            expires_in: 3600,
+            scope: self._oauth.scope
+          };
+        }
+        break;
 
       default:
-	// assume that it is the authData
-	authData = authDataOrAuthCodeOrAccessToken;
+        // assume that it is the authData
+        authData = authDataOrAuthCodeOrAccessToken;
     }
 
     return when(authData).then(function(authDataResult) {
 
       if (typeof authDataResult !== 'object') {
-	return when.reject(new Error(
-	  'There was a problem authenticating: ', authDataResult));
+        return when.reject(new Error(
+          'There was a problem authenticating: ', authDataResult));
       }
 
       if (!isApplicationOnly) {
-	self._authenticatedAuthData = authDataResult;
+        self._authenticatedAuthData = authDataResult;
       } else {
-	self._applicationOnlyAuthData = authDataResult;
+        self._applicationOnlyAuthData = authDataResult;
       }
 
       // if the explicit app used a perminant duration, send
       // back the refresh token that will be used to re-authenticate
       // later without user interaction.
       if (authDataResult.refresh_token) {
-	// set the internal refresh token for automatic expiring
-	// access_token management
-	self._refreshToken = authDataResult.refresh_token;
-	return authDataResult.refresh_token;
+        // set the internal refresh token for automatic expiring
+        // access_token management
+        self._refreshToken = authDataResult.refresh_token;
+        return authDataResult.refresh_token;
       }
     });
   };
@@ -1019,3846 +978,4977 @@ function Snoocore(config) {
   return self;
 }
 
-},{"./build/api":2,"./oauth":71,"./package":72,"./request":75,"./request/file":73,"./utils":84,"events":7,"he":51,"url":15,"util":17,"when":70,"when/delay":52}],2:[function(require,module,exports){
-module.exports=[
-  {
-    "path": "/api/clear_sessions",
-    "oauth": [],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "curpass": {},
-      "dest": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/delete_user",
-    "oauth": [],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "confirm": {},
-      "delete_message": {},
-      "passwd": {},
-      "uh": {},
-      "user": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/login",
-    "oauth": [],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "passwd": {},
-      "rem": {},
-      "user": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/me.json",
-    "oauth": [],
-    "extensions": [],
-    "method": "GET",
-    "args": {},
-    "isListing": false
-  },
-  {
-    "path": "/api/register",
-    "oauth": [],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "email": {},
-      "passwd": {},
-      "passwd2": {},
-      "rem": {},
-      "user": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/set_force_https",
-    "oauth": [],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "curpass": {},
-      "force_https": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/update_email",
-    "oauth": [],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "curpass": {},
-      "dest": {},
-      "email": {},
-      "uh": {},
-      "verify": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/update_password",
-    "oauth": [],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "curpass": {},
-      "newpass": {},
-      "uh": {},
-      "verpass": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/v1/me",
-    "oauth": [
-      "identity"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {},
-    "isListing": false
-  },
-  {
-    "path": "/api/v1/me/karma",
-    "oauth": [
-      "mysubreddits"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {},
-    "isListing": false
-  },
-  {
-    "path": "/api/v1/me/prefs",
-    "oauth": [
-      "identity"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "fields": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/v1/me/prefs",
-    "oauth": [
-      "account"
-    ],
-    "extensions": [],
-    "method": "PATCH",
-    "args": {
-      "This": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/v1/me/trophies",
-    "oauth": [
-      "identity"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {},
-    "isListing": false
-  },
-  {
-    "path": "/prefs/$where",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/prefs/friends",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/prefs/blocked",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/api/v1/me/friends",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/api/v1/me/blocked",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/api/needs_captcha.json",
-    "oauth": [
-      "any"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {},
-    "isListing": false
-  },
-  {
-    "path": "/api/new_captcha",
-    "oauth": [
-      "any"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/captcha/$iden",
-    "oauth": [
-      "any"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {},
-    "isListing": false
-  },
-  {
-    "path": "/api/clearflairtemplates",
-    "oauth": [
-      "modflair"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "flair_type": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/api/clearflairtemplates",
-    "oauth": [
-      "modflair"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "flair_type": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/deleteflair",
-    "oauth": [
-      "modflair"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "name": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/api/deleteflair",
-    "oauth": [
-      "modflair"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "name": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/deleteflairtemplate",
-    "oauth": [
-      "modflair"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "flair_template_id": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/api/deleteflairtemplate",
-    "oauth": [
-      "modflair"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "flair_template_id": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/flair",
-    "oauth": [
-      "modflair"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "css_class": {},
-      "link": {},
-      "name": {},
-      "text": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/api/flair",
-    "oauth": [
-      "modflair"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "css_class": {},
-      "link": {},
-      "name": {},
-      "text": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/flairconfig",
-    "oauth": [
-      "modflair"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "flair_enabled": {},
-      "flair_position": {},
-      "flair_self_assign_enabled": {},
-      "link_flair_position": {},
-      "link_flair_self_assign_enabled": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/api/flairconfig",
-    "oauth": [
-      "modflair"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "flair_enabled": {},
-      "flair_position": {},
-      "flair_self_assign_enabled": {},
-      "link_flair_position": {},
-      "link_flair_self_assign_enabled": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/flaircsv",
-    "oauth": [
-      "modflair"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "flair_csv": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/api/flaircsv",
-    "oauth": [
-      "modflair"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "flair_csv": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/flairlist",
-    "oauth": [
-      "modflair"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "name": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/r/$subreddit/api/flairlist",
-    "oauth": [
-      "modflair"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "name": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/api/flairselector",
-    "oauth": [
-      "flair"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "link": {},
-      "name": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/api/flairselector",
-    "oauth": [
-      "flair"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "link": {},
-      "name": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/flairtemplate",
-    "oauth": [
-      "modflair"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "css_class": {},
-      "flair_template_id": {},
-      "flair_type": {},
-      "text": {},
-      "text_editable": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/api/flairtemplate",
-    "oauth": [
-      "modflair"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "css_class": {},
-      "flair_template_id": {},
-      "flair_type": {},
-      "text": {},
-      "text_editable": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/selectflair",
-    "oauth": [
-      "flair"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "flair_template_id": {},
-      "link": {},
-      "name": {},
-      "text": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/api/selectflair",
-    "oauth": [
-      "flair"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "flair_template_id": {},
-      "link": {},
-      "name": {},
-      "text": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/setflairenabled",
-    "oauth": [
-      "flair"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "flair_enabled": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/api/setflairenabled",
-    "oauth": [
-      "flair"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "flair_enabled": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/v1/gold/gild/$fullname",
-    "oauth": [
-      "creddits"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "fullname": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/v1/gold/give/$username",
-    "oauth": [
-      "creddits"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "months": {},
-      "username": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/comment",
-    "oauth": [
-      "submit"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "text": {},
-      "thing_id": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/del",
-    "oauth": [
-      "edit"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "id": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/editusertext",
-    "oauth": [
-      "edit"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "text": {},
-      "thing_id": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/hide",
-    "oauth": [
-      "report"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "id": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/info",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "id": {},
-      "url": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/api/info",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "id": {},
-      "url": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/marknsfw",
-    "oauth": [
-      "modposts"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "id": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/morechildren",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "api_type": {},
-      "children": {},
-      "id": {},
-      "link_id": {},
-      "pv_hex": {},
-      "sort": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/report",
-    "oauth": [
-      "report"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "other_reason": {},
-      "reason": {},
-      "thing_id": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/save",
-    "oauth": [
-      "save"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "category": {},
-      "id": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/saved_categories.json",
-    "oauth": [
-      "save"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {},
-    "isListing": false
-  },
-  {
-    "path": "/api/sendreplies",
-    "oauth": [
-      "edit"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "id": {},
-      "state": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/set_contest_mode",
-    "oauth": [
-      "modposts"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "id": {},
-      "state": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/set_subreddit_sticky",
-    "oauth": [
-      "modposts"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "id": {},
-      "state": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/store_visits",
-    "oauth": [
-      "save"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "links": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/submit",
-    "oauth": [
-      "submit"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "captcha": {},
-      "extension": {},
-      "iden": {},
-      "kind": {},
-      "resubmit": {},
-      "sendreplies": {},
-      "sr": {},
-      "text": {},
-      "then": {},
-      "title": {},
-      "uh": {},
-      "url": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/unhide",
-    "oauth": [
-      "report"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "id": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/unmarknsfw",
-    "oauth": [
-      "modposts"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "id": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/unsave",
-    "oauth": [
-      "save"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "id": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/vote",
-    "oauth": [
-      "vote"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "dir": {},
-      "id": {},
-      "uh": {},
-      "v": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/by_id/$names",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "names": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/comments/$article",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "article": {},
-      "comment": {},
-      "context": {},
-      "depth": {},
-      "limit": {},
-      "showedits": {},
-      "showmore": {},
-      "sort": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/comments/$article",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "article": {},
-      "comment": {},
-      "context": {},
-      "depth": {},
-      "limit": {},
-      "showedits": {},
-      "showmore": {},
-      "sort": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/hot",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/r/$subreddit/hot",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/new",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/r/$subreddit/new",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/random",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {},
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/random",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {},
-    "isListing": false
-  },
-  {
-    "path": "/$sort",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "t": {},
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/r/$subreddit/$sort",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "t": {},
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/top",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "t": {},
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/r/$subreddit/top",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "t": {},
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/controversial",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "t": {},
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/r/$subreddit/controversial",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "t": {},
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/api/live/create",
-    "oauth": [
-      "submit"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "description": {},
-      "nsfw": {},
-      "resources": {},
-      "title": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/live/$thread/accept_contributor_invite",
-    "oauth": [
-      "livemanage"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/live/$thread/close_thread",
-    "oauth": [
-      "livemanage"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/live/$thread/delete_update",
-    "oauth": [
-      "edit"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "id": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/live/$thread/edit",
-    "oauth": [
-      "livemanage"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "description": {},
-      "nsfw": {},
-      "resources": {},
-      "title": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/live/$thread/invite_contributor",
-    "oauth": [
-      "livemanage"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "name": {},
-      "permissions": {},
-      "type": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/live/$thread/leave_contributor",
-    "oauth": [
-      "livemanage"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/live/$thread/report",
-    "oauth": [
-      "report"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "type": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/live/$thread/rm_contributor",
-    "oauth": [
-      "livemanage"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "id": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/live/$thread/rm_contributor_invite",
-    "oauth": [
-      "livemanage"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "id": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/live/$thread/set_contributor_permissions",
-    "oauth": [
-      "livemanage"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "name": {},
-      "permissions": {},
-      "type": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/live/$thread/strike_update",
-    "oauth": [
-      "edit"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "id": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/live/$thread/update",
-    "oauth": [
-      "submit"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "body": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/live/$thread",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "is_embed": {},
-      "limit": {},
-      "stylesr": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/live/$thread/about.json",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {},
-    "isListing": false
-  },
-  {
-    "path": "/live/$thread/contributors.json",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {},
-    "isListing": false
-  },
-  {
-    "path": "/live/$thread/discussions",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/api/block",
-    "oauth": [
-      "privatemessages"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "id": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/compose",
-    "oauth": [
-      "privatemessages"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "captcha": {},
-      "from_sr": {},
-      "iden": {},
-      "subject": {},
-      "text": {},
-      "to": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/read_all_messages",
-    "oauth": [
-      "privatemessages"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/read_message",
-    "oauth": [
-      "privatemessages"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "id": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/unblock_subreddit",
-    "oauth": [
-      "privatemessages"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "id": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/unread_message",
-    "oauth": [
-      "privatemessages"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "id": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/message/$where",
-    "oauth": [
-      "privatemessages"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "mark": {},
-      "mid": {},
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/message/inbox",
-    "oauth": [
-      "privatemessages"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "mark": {},
-      "mid": {},
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/message/unread",
-    "oauth": [
-      "privatemessages"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "mark": {},
-      "mid": {},
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/message/sent",
-    "oauth": [
-      "privatemessages"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "mark": {},
-      "mid": {},
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/about/log",
-    "oauth": [
-      "modlog"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "mod": {},
-      "show": {},
-      "type": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/r/$subreddit/about/log",
-    "oauth": [
-      "modlog"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "mod": {},
-      "show": {},
-      "type": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/about/$location",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "location": {},
-      "only": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/r/$subreddit/about/$location",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "location": {},
-      "only": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/about/reports",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "location": {},
-      "only": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/r/$subreddit/about/reports",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "location": {},
-      "only": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/about/spam",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "location": {},
-      "only": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/r/$subreddit/about/spam",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "location": {},
-      "only": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/about/modqueue",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "location": {},
-      "only": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/r/$subreddit/about/modqueue",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "location": {},
-      "only": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/about/unmoderated",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "location": {},
-      "only": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/r/$subreddit/about/unmoderated",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "location": {},
-      "only": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/about/edited",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "location": {},
-      "only": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/r/$subreddit/about/edited",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "location": {},
-      "only": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/api/accept_moderator_invite",
-    "oauth": [
-      "modself"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/api/accept_moderator_invite",
-    "oauth": [
-      "modself"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/approve",
-    "oauth": [
-      "modposts"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "id": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/distinguish",
-    "oauth": [
-      "modposts"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "how": {},
-      "id": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/ignore_reports",
-    "oauth": [
-      "modposts"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "id": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/leavecontributor",
-    "oauth": [
-      "modself"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "id": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/leavemoderator",
-    "oauth": [
-      "modself"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "id": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/remove",
-    "oauth": [
-      "modposts"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "id": {},
-      "spam": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/unignore_reports",
-    "oauth": [
-      "modposts"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "id": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/stylesheet",
-    "oauth": [
-      "modconfig"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {},
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/stylesheet",
-    "oauth": [
-      "modconfig"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {},
-    "isListing": false
-  },
-  {
-    "path": "/api/multi/mine",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {},
-    "isListing": false
-  },
-  {
-    "path": "/api/multi/$multipath",
-    "oauth": [
-      "subscribe"
-    ],
-    "extensions": [],
-    "method": "DELETE",
-    "args": {
-      "multipath": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/filter/filterpath",
-    "oauth": [
-      "subscribe"
-    ],
-    "extensions": [],
-    "method": "DELETE",
-    "args": {
-      "multipath": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/multi/$multipath",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "multipath": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/filter/filterpath",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "multipath": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/multi/$multipath",
-    "oauth": [
-      "subscribe"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "model": {},
-      "multipath": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/filter/filterpath",
-    "oauth": [
-      "subscribe"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "model": {},
-      "multipath": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/multi/$multipath",
-    "oauth": [
-      "subscribe"
-    ],
-    "extensions": [],
-    "method": "PUT",
-    "args": {
-      "model": {},
-      "multipath": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/filter/filterpath",
-    "oauth": [
-      "subscribe"
-    ],
-    "extensions": [],
-    "method": "PUT",
-    "args": {
-      "model": {},
-      "multipath": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/multi/$multipath/copy",
-    "oauth": [
-      "subscribe"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "from": {},
-      "to": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/multi/$multipath/description",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "multipath": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/multi/$multipath/description",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "PUT",
-    "args": {
-      "model": {},
-      "multipath": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/multi/$multipath/r/$srname",
-    "oauth": [
-      "subscribe"
-    ],
-    "extensions": [],
-    "method": "DELETE",
-    "args": {
-      "multipath": {},
-      "srname": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/filter/filterpath/r/$srname",
-    "oauth": [
-      "subscribe"
-    ],
-    "extensions": [],
-    "method": "DELETE",
-    "args": {
-      "multipath": {},
-      "srname": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/multi/$multipath/r/$srname",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "multipath": {},
-      "srname": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/filter/filterpath/r/$srname",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "multipath": {},
-      "srname": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/multi/$multipath/r/$srname",
-    "oauth": [
-      "subscribe"
-    ],
-    "extensions": [],
-    "method": "PUT",
-    "args": {
-      "model": {},
-      "multipath": {},
-      "srname": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/filter/filterpath/r/$srname",
-    "oauth": [
-      "subscribe"
-    ],
-    "extensions": [],
-    "method": "PUT",
-    "args": {
-      "model": {},
-      "multipath": {},
-      "srname": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/multi/$multipath/rename",
-    "oauth": [
-      "subscribe"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "from": {},
-      "to": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/search",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "q": {},
-      "restrict_sr": {},
-      "show": {},
-      "sort": {},
-      "syntax": {},
-      "t": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/r/$subreddit/search",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "q": {},
-      "restrict_sr": {},
-      "show": {},
-      "sort": {},
-      "syntax": {},
-      "t": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/about/$where",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {},
-      "user": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/r/$subreddit/about/$where",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {},
-      "user": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/about/banned",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {},
-      "user": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/r/$subreddit/about/banned",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {},
-      "user": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/about/wikibanned",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {},
-      "user": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/r/$subreddit/about/wikibanned",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {},
-      "user": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/about/contributors",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {},
-      "user": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/r/$subreddit/about/contributors",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {},
-      "user": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/about/wikicontributors",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {},
-      "user": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/r/$subreddit/about/wikicontributors",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {},
-      "user": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/about/moderators",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {},
-      "user": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/r/$subreddit/about/moderators",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {},
-      "user": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/api/delete_sr_header",
-    "oauth": [
-      "modconfig"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/api/delete_sr_header",
-    "oauth": [
-      "modconfig"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/delete_sr_img",
-    "oauth": [
-      "modconfig"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "img_name": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/api/delete_sr_img",
-    "oauth": [
-      "modconfig"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "img_name": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/recommend/sr/$srnames",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "omit": {},
-      "srnames": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/search_reddit_names.json",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "include_over_18": {},
-      "query": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/site_admin",
-    "oauth": [
-      "modconfig"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "allow_top": {},
-      "api_type": {},
-      "collapse_deleted_comments": {},
-      "comment_score_hide_mins": {},
-      "css_on_cname": {},
-      "description": {},
-      "exclude_banned_modqueue": {},
-      "header-title": {},
-      "lang": {},
-      "link_type": {},
-      "name": {},
-      "over_18": {},
-      "public_description": {},
-      "public_traffic": {},
-      "show_cname_sidebar": {},
-      "show_media": {},
-      "spam_comments": {},
-      "spam_links": {},
-      "spam_selfposts": {},
-      "sr": {},
-      "submit_link_label": {},
-      "submit_text": {},
-      "submit_text_label": {},
-      "title": {},
-      "type": {},
-      "uh": {},
-      "wiki_edit_age": {},
-      "wiki_edit_karma": {},
-      "wikimode": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/submit_text.json",
-    "oauth": [
-      "submit"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {},
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/api/submit_text.json",
-    "oauth": [
-      "submit"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {},
-    "isListing": false
-  },
-  {
-    "path": "/api/$subreddit_stylesheet",
-    "oauth": [
-      "modconfig"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "op": {},
-      "reason": {},
-      "stylesheet_contents": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/api/subreddit_stylesheet",
-    "oauth": [
-      "modconfig"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "op": {},
-      "reason": {},
-      "stylesheet_contents": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/subreddits_by_topic.json",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "query": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/subscribe",
-    "oauth": [
-      "subscribe"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "action": {},
-      "sr": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/upload_sr_img",
-    "oauth": [
-      "modconfig"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "file": {},
-      "formid": {},
-      "header": {},
-      "img_type": {},
-      "name": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/api/upload_sr_img",
-    "oauth": [
-      "modconfig"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "file": {},
-      "formid": {},
-      "header": {},
-      "img_type": {},
-      "name": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/about.json",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {},
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/about/edit.json",
-    "oauth": [
-      "modconfig"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "created": {},
-      "location": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/subreddits/mine/$where",
-    "oauth": [
-      "mysubreddits"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/subreddits/mine/subscriber",
-    "oauth": [
-      "mysubreddits"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/subreddits/mine/contributor",
-    "oauth": [
-      "mysubreddits"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/subreddits/mine/moderator",
-    "oauth": [
-      "mysubreddits"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/subreddits/search",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "q": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/subreddits/$where",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/subreddits/popular",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/subreddits/new",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/api/friend",
-    "oauth": [
-      "any"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "ban_message": {},
-      "container": {},
-      "duration": {},
-      "name": {},
-      "note": {},
-      "permissions": {},
-      "type": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/api/friend",
-    "oauth": [
-      "any"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "ban_message": {},
-      "container": {},
-      "duration": {},
-      "name": {},
-      "note": {},
-      "permissions": {},
-      "type": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/setpermissions",
-    "oauth": [
-      "modothers"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "name": {},
-      "permissions": {},
-      "type": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/api/setpermissions",
-    "oauth": [
-      "modothers"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "api_type": {},
-      "name": {},
-      "permissions": {},
-      "type": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/unfriend",
-    "oauth": [
-      "any"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "container": {},
-      "id": {},
-      "name": {},
-      "type": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/api/unfriend",
-    "oauth": [
-      "any"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "container": {},
-      "id": {},
-      "name": {},
-      "type": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/username_available.json",
-    "oauth": [],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "user": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/v1/me/friends/$username",
-    "oauth": [
-      "subscribe"
-    ],
-    "extensions": [],
-    "method": "DELETE",
-    "args": {
-      "username": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/v1/me/friends/$username",
-    "oauth": [
-      "mysubreddits"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "username": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/v1/me/friends/$username",
-    "oauth": [
-      "subscribe"
-    ],
-    "extensions": [],
-    "method": "PUT",
-    "args": {
-      "This": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/v1/user/$username/trophies",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "username": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/user/$username/about.json",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "username": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/user/$username/$where",
-    "oauth": [
-      "history"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "show": {},
-      "sort": {},
-      "t": {},
-      "username": {},
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/user/$username/overview",
-    "oauth": [
-      "history"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "show": {},
-      "sort": {},
-      "t": {},
-      "username": {},
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/user/$username/submitted",
-    "oauth": [
-      "history"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "show": {},
-      "sort": {},
-      "t": {},
-      "username": {},
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/user/$username/comments",
-    "oauth": [
-      "history"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "show": {},
-      "sort": {},
-      "t": {},
-      "username": {},
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/user/$username/liked",
-    "oauth": [
-      "history"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "show": {},
-      "sort": {},
-      "t": {},
-      "username": {},
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/user/$username/disliked",
-    "oauth": [
-      "history"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "show": {},
-      "sort": {},
-      "t": {},
-      "username": {},
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/user/$username/hidden",
-    "oauth": [
-      "history"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "show": {},
-      "sort": {},
-      "t": {},
-      "username": {},
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/user/$username/saved",
-    "oauth": [
-      "history"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "show": {},
-      "sort": {},
-      "t": {},
-      "username": {},
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/user/$username/gilded",
-    "oauth": [
-      "history"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "show": {},
-      "sort": {},
-      "t": {},
-      "username": {},
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/api/wiki/alloweditor/$act",
-    "oauth": [
-      "modwiki"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "act": {},
-      "page": {},
-      "uh": {},
-      "username": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/api/wiki/alloweditor/$act",
-    "oauth": [
-      "modwiki"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "act": {},
-      "page": {},
-      "uh": {},
-      "username": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/wiki/alloweditor/del",
-    "oauth": [
-      "modwiki"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "act": {},
-      "page": {},
-      "uh": {},
-      "username": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/api/wiki/alloweditor/del",
-    "oauth": [
-      "modwiki"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "act": {},
-      "page": {},
-      "uh": {},
-      "username": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/wiki/alloweditor/add",
-    "oauth": [
-      "modwiki"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "act": {},
-      "page": {},
-      "uh": {},
-      "username": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/api/wiki/alloweditor/add",
-    "oauth": [
-      "modwiki"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "act": {},
-      "page": {},
-      "uh": {},
-      "username": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/wiki/edit",
-    "oauth": [
-      "wikiedit"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "content": {},
-      "page": {},
-      "previous": {},
-      "reason": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/api/wiki/edit",
-    "oauth": [
-      "wikiedit"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "content": {},
-      "page": {},
-      "previous": {},
-      "reason": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/wiki/hide",
-    "oauth": [
-      "modwiki"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "page": {},
-      "revision": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/api/wiki/hide",
-    "oauth": [
-      "modwiki"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "page": {},
-      "revision": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/api/wiki/revert",
-    "oauth": [
-      "modwiki"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "page": {},
-      "revision": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/api/wiki/revert",
-    "oauth": [
-      "modwiki"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "page": {},
-      "revision": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/wiki/discussions/$page",
-    "oauth": [
-      "wikiread"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "page": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/r/$subreddit/wiki/discussions/$page",
-    "oauth": [
-      "wikiread"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "page": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/wiki/pages",
-    "oauth": [
-      "wikiread"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {},
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/wiki/pages",
-    "oauth": [
-      "wikiread"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {},
-    "isListing": false
-  },
-  {
-    "path": "/wiki/revisions",
-    "oauth": [
-      "wikiread"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/r/$subreddit/wiki/revisions",
-    "oauth": [
-      "wikiread"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/wiki/revisions/$page",
-    "oauth": [
-      "wikiread"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "page": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/r/$subreddit/wiki/revisions/$page",
-    "oauth": [
-      "wikiread"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "page": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/wiki/settings/$page",
-    "oauth": [
-      "modwiki"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "page": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/wiki/settings/$page",
-    "oauth": [
-      "modwiki"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "page": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/wiki/settings/$page",
-    "oauth": [
-      "modwiki"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "listed": {},
-      "page": {},
-      "permlevel": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/wiki/settings/$page",
-    "oauth": [
-      "modwiki"
-    ],
-    "extensions": [],
-    "method": "POST",
-    "args": {
-      "listed": {},
-      "page": {},
-      "permlevel": {},
-      "uh": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/wiki/$page",
-    "oauth": [
-      "wikiread"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "page": {},
-      "v": {},
-      "v2": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/wiki/$page",
-    "oauth": [
-      "wikiread"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "page": {},
-      "v": {},
-      "v2": {}
-    },
-    "isListing": false
-  },
-  {
-    "path": "/$article/duplicates",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "article": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/$article/related",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "article": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/sidebar",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {},
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/sidebar",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {},
-    "isListing": false
-  },
-  {
-    "path": "/sticky",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {},
-    "isListing": false
-  },
-  {
-    "path": "/r/$subreddit/sticky",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [],
-    "method": "GET",
-    "args": {},
-    "isListing": false
-  },
-  {
-    "path": "/duplicates/$article",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "article": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
-  },
-  {
-    "path": "/subreddits/employee",
-    "oauth": [
-      "read"
-    ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
-    "method": "GET",
-    "args": {
-      "after": {},
-      "before": {},
-      "count": {},
-      "limit": {},
-      "show": {}
-    },
-    "isListing": true
+},{"./build/endpointTree":2,"./oauth":71,"./package":72,"./request":75,"./request/file":73,"./utils":84,"events":7,"he":51,"url":15,"util":17,"when":70,"when/delay":52}],2:[function(require,module,exports){
+module.exports={
+  "api": {
+    "clear_sessions": {
+      "_endpoints": [
+        {
+          "path": "/api/clear_sessions",
+          "oauth": [],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "curpass": {},
+            "dest": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "delete_user": {
+      "_endpoints": [
+        {
+          "path": "/api/delete_user",
+          "oauth": [],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "confirm": {},
+            "delete_message": {},
+            "passwd": {},
+            "uh": {},
+            "user": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "login": {
+      "_endpoints": [
+        {
+          "path": "/api/login",
+          "oauth": [],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "passwd": {},
+            "rem": {},
+            "user": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "me.json": {
+      "_endpoints": [
+        {
+          "path": "/api/me.json",
+          "oauth": [],
+          "extensions": [],
+          "method": "GET",
+          "args": {},
+          "isListing": false
+        }
+      ]
+    },
+    "register": {
+      "_endpoints": [
+        {
+          "path": "/api/register",
+          "oauth": [],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "email": {},
+            "passwd": {},
+            "passwd2": {},
+            "rem": {},
+            "user": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "set_force_https": {
+      "_endpoints": [
+        {
+          "path": "/api/set_force_https",
+          "oauth": [],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "curpass": {},
+            "force_https": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "update_email": {
+      "_endpoints": [
+        {
+          "path": "/api/update_email",
+          "oauth": [],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "curpass": {},
+            "dest": {},
+            "email": {},
+            "uh": {},
+            "verify": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "update_password": {
+      "_endpoints": [
+        {
+          "path": "/api/update_password",
+          "oauth": [],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "curpass": {},
+            "newpass": {},
+            "uh": {},
+            "verpass": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "v1": {
+      "me": {
+        "_endpoints": [
+          {
+            "path": "/api/v1/me",
+            "oauth": [
+              "identity"
+            ],
+            "extensions": [],
+            "method": "GET",
+            "args": {},
+            "isListing": false
+          }
+        ],
+        "karma": {
+          "_endpoints": [
+            {
+              "path": "/api/v1/me/karma",
+              "oauth": [
+                "mysubreddits"
+              ],
+              "extensions": [],
+              "method": "GET",
+              "args": {},
+              "isListing": false
+            }
+          ]
+        },
+        "prefs": {
+          "_endpoints": [
+            {
+              "path": "/api/v1/me/prefs",
+              "oauth": [
+                "identity"
+              ],
+              "extensions": [],
+              "method": "GET",
+              "args": {
+                "fields": {}
+              },
+              "isListing": false
+            },
+            {
+              "path": "/api/v1/me/prefs",
+              "oauth": [
+                "account"
+              ],
+              "extensions": [],
+              "method": "PATCH",
+              "args": {
+                "This": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "trophies": {
+          "_endpoints": [
+            {
+              "path": "/api/v1/me/trophies",
+              "oauth": [
+                "identity"
+              ],
+              "extensions": [],
+              "method": "GET",
+              "args": {},
+              "isListing": false
+            }
+          ]
+        },
+        "friends": {
+          "_endpoints": [
+            {
+              "path": "/api/v1/me/friends",
+              "oauth": [
+                "read"
+              ],
+              "extensions": [
+                ".json",
+                ".xml"
+              ],
+              "method": "GET",
+              "args": {
+                "after": {},
+                "before": {},
+                "count": {},
+                "limit": {},
+                "show": {}
+              },
+              "isListing": true
+            }
+          ],
+          "$username": {
+            "_endpoints": [
+              {
+                "path": "/api/v1/me/friends/$username",
+                "oauth": [
+                  "subscribe"
+                ],
+                "extensions": [],
+                "method": "DELETE",
+                "args": {
+                  "username": {}
+                },
+                "isListing": false
+              },
+              {
+                "path": "/api/v1/me/friends/$username",
+                "oauth": [
+                  "mysubreddits"
+                ],
+                "extensions": [],
+                "method": "GET",
+                "args": {
+                  "username": {}
+                },
+                "isListing": false
+              },
+              {
+                "path": "/api/v1/me/friends/$username",
+                "oauth": [
+                  "subscribe"
+                ],
+                "extensions": [],
+                "method": "PUT",
+                "args": {
+                  "This": {}
+                },
+                "isListing": false
+              }
+            ]
+          }
+        },
+        "blocked": {
+          "_endpoints": [
+            {
+              "path": "/api/v1/me/blocked",
+              "oauth": [
+                "read"
+              ],
+              "extensions": [
+                ".json",
+                ".xml"
+              ],
+              "method": "GET",
+              "args": {
+                "after": {},
+                "before": {},
+                "count": {},
+                "limit": {},
+                "show": {}
+              },
+              "isListing": true
+            }
+          ]
+        }
+      },
+      "gold": {
+        "gild": {
+          "$fullname": {
+            "_endpoints": [
+              {
+                "path": "/api/v1/gold/gild/$fullname",
+                "oauth": [
+                  "creddits"
+                ],
+                "extensions": [],
+                "method": "POST",
+                "args": {
+                  "fullname": {}
+                },
+                "isListing": false
+              }
+            ]
+          }
+        },
+        "give": {
+          "$username": {
+            "_endpoints": [
+              {
+                "path": "/api/v1/gold/give/$username",
+                "oauth": [
+                  "creddits"
+                ],
+                "extensions": [],
+                "method": "POST",
+                "args": {
+                  "months": {},
+                  "username": {}
+                },
+                "isListing": false
+              }
+            ]
+          }
+        }
+      },
+      "user": {
+        "$username": {
+          "trophies": {
+            "_endpoints": [
+              {
+                "path": "/api/v1/user/$username/trophies",
+                "oauth": [
+                  "read"
+                ],
+                "extensions": [],
+                "method": "GET",
+                "args": {
+                  "username": {}
+                },
+                "isListing": false
+              }
+            ]
+          }
+        }
+      }
+    },
+    "needs_captcha.json": {
+      "_endpoints": [
+        {
+          "path": "/api/needs_captcha.json",
+          "oauth": [
+            "any"
+          ],
+          "extensions": [],
+          "method": "GET",
+          "args": {},
+          "isListing": false
+        }
+      ]
+    },
+    "new_captcha": {
+      "_endpoints": [
+        {
+          "path": "/api/new_captcha",
+          "oauth": [
+            "any"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "clearflairtemplates": {
+      "_endpoints": [
+        {
+          "path": "/api/clearflairtemplates",
+          "oauth": [
+            "modflair"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "flair_type": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "deleteflair": {
+      "_endpoints": [
+        {
+          "path": "/api/deleteflair",
+          "oauth": [
+            "modflair"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "name": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "deleteflairtemplate": {
+      "_endpoints": [
+        {
+          "path": "/api/deleteflairtemplate",
+          "oauth": [
+            "modflair"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "flair_template_id": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "flair": {
+      "_endpoints": [
+        {
+          "path": "/api/flair",
+          "oauth": [
+            "modflair"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "css_class": {},
+            "link": {},
+            "name": {},
+            "text": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "flairconfig": {
+      "_endpoints": [
+        {
+          "path": "/api/flairconfig",
+          "oauth": [
+            "modflair"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "flair_enabled": {},
+            "flair_position": {},
+            "flair_self_assign_enabled": {},
+            "link_flair_position": {},
+            "link_flair_self_assign_enabled": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "flaircsv": {
+      "_endpoints": [
+        {
+          "path": "/api/flaircsv",
+          "oauth": [
+            "modflair"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "flair_csv": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "flairlist": {
+      "_endpoints": [
+        {
+          "path": "/api/flairlist",
+          "oauth": [
+            "modflair"
+          ],
+          "extensions": [],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "name": {},
+            "show": {}
+          },
+          "isListing": true
+        }
+      ]
+    },
+    "flairselector": {
+      "_endpoints": [
+        {
+          "path": "/api/flairselector",
+          "oauth": [
+            "flair"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "link": {},
+            "name": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "flairtemplate": {
+      "_endpoints": [
+        {
+          "path": "/api/flairtemplate",
+          "oauth": [
+            "modflair"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "css_class": {},
+            "flair_template_id": {},
+            "flair_type": {},
+            "text": {},
+            "text_editable": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "selectflair": {
+      "_endpoints": [
+        {
+          "path": "/api/selectflair",
+          "oauth": [
+            "flair"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "flair_template_id": {},
+            "link": {},
+            "name": {},
+            "text": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "setflairenabled": {
+      "_endpoints": [
+        {
+          "path": "/api/setflairenabled",
+          "oauth": [
+            "flair"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "flair_enabled": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "comment": {
+      "_endpoints": [
+        {
+          "path": "/api/comment",
+          "oauth": [
+            "submit"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "text": {},
+            "thing_id": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "del": {
+      "_endpoints": [
+        {
+          "path": "/api/del",
+          "oauth": [
+            "edit"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "id": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "editusertext": {
+      "_endpoints": [
+        {
+          "path": "/api/editusertext",
+          "oauth": [
+            "edit"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "text": {},
+            "thing_id": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "hide": {
+      "_endpoints": [
+        {
+          "path": "/api/hide",
+          "oauth": [
+            "report"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "id": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "info": {
+      "_endpoints": [
+        {
+          "path": "/api/info",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [],
+          "method": "GET",
+          "args": {
+            "id": {},
+            "url": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "marknsfw": {
+      "_endpoints": [
+        {
+          "path": "/api/marknsfw",
+          "oauth": [
+            "modposts"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "id": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "morechildren": {
+      "_endpoints": [
+        {
+          "path": "/api/morechildren",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [],
+          "method": "GET",
+          "args": {
+            "api_type": {},
+            "children": {},
+            "id": {},
+            "link_id": {},
+            "pv_hex": {},
+            "sort": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "report": {
+      "_endpoints": [
+        {
+          "path": "/api/report",
+          "oauth": [
+            "report"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "other_reason": {},
+            "reason": {},
+            "thing_id": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "save": {
+      "_endpoints": [
+        {
+          "path": "/api/save",
+          "oauth": [
+            "save"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "category": {},
+            "id": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "saved_categories.json": {
+      "_endpoints": [
+        {
+          "path": "/api/saved_categories.json",
+          "oauth": [
+            "save"
+          ],
+          "extensions": [],
+          "method": "GET",
+          "args": {},
+          "isListing": false
+        }
+      ]
+    },
+    "sendreplies": {
+      "_endpoints": [
+        {
+          "path": "/api/sendreplies",
+          "oauth": [
+            "edit"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "id": {},
+            "state": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "set_contest_mode": {
+      "_endpoints": [
+        {
+          "path": "/api/set_contest_mode",
+          "oauth": [
+            "modposts"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "id": {},
+            "state": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "set_subreddit_sticky": {
+      "_endpoints": [
+        {
+          "path": "/api/set_subreddit_sticky",
+          "oauth": [
+            "modposts"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "id": {},
+            "state": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "store_visits": {
+      "_endpoints": [
+        {
+          "path": "/api/store_visits",
+          "oauth": [
+            "save"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "links": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "submit": {
+      "_endpoints": [
+        {
+          "path": "/api/submit",
+          "oauth": [
+            "submit"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "captcha": {},
+            "extension": {},
+            "iden": {},
+            "kind": {},
+            "resubmit": {},
+            "sendreplies": {},
+            "sr": {},
+            "text": {},
+            "then": {},
+            "title": {},
+            "uh": {},
+            "url": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "unhide": {
+      "_endpoints": [
+        {
+          "path": "/api/unhide",
+          "oauth": [
+            "report"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "id": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "unmarknsfw": {
+      "_endpoints": [
+        {
+          "path": "/api/unmarknsfw",
+          "oauth": [
+            "modposts"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "id": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "unsave": {
+      "_endpoints": [
+        {
+          "path": "/api/unsave",
+          "oauth": [
+            "save"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "id": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "vote": {
+      "_endpoints": [
+        {
+          "path": "/api/vote",
+          "oauth": [
+            "vote"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "dir": {},
+            "id": {},
+            "uh": {},
+            "v": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "live": {
+      "create": {
+        "_endpoints": [
+          {
+            "path": "/api/live/create",
+            "oauth": [
+              "submit"
+            ],
+            "extensions": [],
+            "method": "POST",
+            "args": {
+              "api_type": {},
+              "description": {},
+              "nsfw": {},
+              "resources": {},
+              "title": {},
+              "uh": {}
+            },
+            "isListing": false
+          }
+        ]
+      },
+      "$thread": {
+        "accept_contributor_invite": {
+          "_endpoints": [
+            {
+              "path": "/api/live/$thread/accept_contributor_invite",
+              "oauth": [
+                "livemanage"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "close_thread": {
+          "_endpoints": [
+            {
+              "path": "/api/live/$thread/close_thread",
+              "oauth": [
+                "livemanage"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "delete_update": {
+          "_endpoints": [
+            {
+              "path": "/api/live/$thread/delete_update",
+              "oauth": [
+                "edit"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "id": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "edit": {
+          "_endpoints": [
+            {
+              "path": "/api/live/$thread/edit",
+              "oauth": [
+                "livemanage"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "description": {},
+                "nsfw": {},
+                "resources": {},
+                "title": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "invite_contributor": {
+          "_endpoints": [
+            {
+              "path": "/api/live/$thread/invite_contributor",
+              "oauth": [
+                "livemanage"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "name": {},
+                "permissions": {},
+                "type": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "leave_contributor": {
+          "_endpoints": [
+            {
+              "path": "/api/live/$thread/leave_contributor",
+              "oauth": [
+                "livemanage"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "report": {
+          "_endpoints": [
+            {
+              "path": "/api/live/$thread/report",
+              "oauth": [
+                "report"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "type": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "rm_contributor": {
+          "_endpoints": [
+            {
+              "path": "/api/live/$thread/rm_contributor",
+              "oauth": [
+                "livemanage"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "id": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "rm_contributor_invite": {
+          "_endpoints": [
+            {
+              "path": "/api/live/$thread/rm_contributor_invite",
+              "oauth": [
+                "livemanage"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "id": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "set_contributor_permissions": {
+          "_endpoints": [
+            {
+              "path": "/api/live/$thread/set_contributor_permissions",
+              "oauth": [
+                "livemanage"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "name": {},
+                "permissions": {},
+                "type": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "strike_update": {
+          "_endpoints": [
+            {
+              "path": "/api/live/$thread/strike_update",
+              "oauth": [
+                "edit"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "id": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "update": {
+          "_endpoints": [
+            {
+              "path": "/api/live/$thread/update",
+              "oauth": [
+                "submit"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "body": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        }
+      }
+    },
+    "block": {
+      "_endpoints": [
+        {
+          "path": "/api/block",
+          "oauth": [
+            "privatemessages"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "id": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "compose": {
+      "_endpoints": [
+        {
+          "path": "/api/compose",
+          "oauth": [
+            "privatemessages"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "captcha": {},
+            "from_sr": {},
+            "iden": {},
+            "subject": {},
+            "text": {},
+            "to": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "read_all_messages": {
+      "_endpoints": [
+        {
+          "path": "/api/read_all_messages",
+          "oauth": [
+            "privatemessages"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "read_message": {
+      "_endpoints": [
+        {
+          "path": "/api/read_message",
+          "oauth": [
+            "privatemessages"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "id": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "unblock_subreddit": {
+      "_endpoints": [
+        {
+          "path": "/api/unblock_subreddit",
+          "oauth": [
+            "privatemessages"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "id": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "unread_message": {
+      "_endpoints": [
+        {
+          "path": "/api/unread_message",
+          "oauth": [
+            "privatemessages"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "id": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "accept_moderator_invite": {
+      "_endpoints": [
+        {
+          "path": "/api/accept_moderator_invite",
+          "oauth": [
+            "modself"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "approve": {
+      "_endpoints": [
+        {
+          "path": "/api/approve",
+          "oauth": [
+            "modposts"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "id": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "distinguish": {
+      "_endpoints": [
+        {
+          "path": "/api/distinguish",
+          "oauth": [
+            "modposts"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "how": {},
+            "id": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "ignore_reports": {
+      "_endpoints": [
+        {
+          "path": "/api/ignore_reports",
+          "oauth": [
+            "modposts"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "id": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "leavecontributor": {
+      "_endpoints": [
+        {
+          "path": "/api/leavecontributor",
+          "oauth": [
+            "modself"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "id": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "leavemoderator": {
+      "_endpoints": [
+        {
+          "path": "/api/leavemoderator",
+          "oauth": [
+            "modself"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "id": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "remove": {
+      "_endpoints": [
+        {
+          "path": "/api/remove",
+          "oauth": [
+            "modposts"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "id": {},
+            "spam": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "unignore_reports": {
+      "_endpoints": [
+        {
+          "path": "/api/unignore_reports",
+          "oauth": [
+            "modposts"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "id": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "multi": {
+      "mine": {
+        "_endpoints": [
+          {
+            "path": "/api/multi/mine",
+            "oauth": [
+              "read"
+            ],
+            "extensions": [],
+            "method": "GET",
+            "args": {
+              "expand_srs": {}
+            },
+            "isListing": false
+          }
+        ]
+      },
+      "$multipath": {
+        "_endpoints": [
+          {
+            "path": "/api/multi/$multipath",
+            "oauth": [
+              "subscribe"
+            ],
+            "extensions": [],
+            "method": "DELETE",
+            "args": {
+              "multipath": {},
+              "uh": {},
+              "expand_srs": {}
+            },
+            "isListing": false
+          },
+          {
+            "path": "/api/multi/$multipath",
+            "oauth": [
+              "read"
+            ],
+            "extensions": [],
+            "method": "GET",
+            "args": {
+              "expand_srs": {},
+              "multipath": {}
+            },
+            "isListing": false
+          },
+          {
+            "path": "/api/multi/$multipath",
+            "oauth": [
+              "subscribe"
+            ],
+            "extensions": [],
+            "method": "POST",
+            "args": {
+              "model": {},
+              "multipath": {},
+              "uh": {},
+              "expand_srs": {}
+            },
+            "isListing": false
+          },
+          {
+            "path": "/api/multi/$multipath",
+            "oauth": [
+              "subscribe"
+            ],
+            "extensions": [],
+            "method": "PUT",
+            "args": {
+              "model": {},
+              "multipath": {},
+              "uh": {},
+              "expand_srs": {}
+            },
+            "isListing": false
+          }
+        ],
+        "copy": {
+          "_endpoints": [
+            {
+              "path": "/api/multi/$multipath/copy",
+              "oauth": [
+                "subscribe"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "from": {},
+                "to": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "description": {
+          "_endpoints": [
+            {
+              "path": "/api/multi/$multipath/description",
+              "oauth": [
+                "read"
+              ],
+              "extensions": [],
+              "method": "GET",
+              "args": {
+                "multipath": {}
+              },
+              "isListing": false
+            },
+            {
+              "path": "/api/multi/$multipath/description",
+              "oauth": [
+                "read"
+              ],
+              "extensions": [],
+              "method": "PUT",
+              "args": {
+                "model": {},
+                "multipath": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "r": {
+          "$srname": {
+            "_endpoints": [
+              {
+                "path": "/api/multi/$multipath/r/$srname",
+                "oauth": [
+                  "subscribe"
+                ],
+                "extensions": [],
+                "method": "DELETE",
+                "args": {
+                  "multipath": {},
+                  "srname": {},
+                  "uh": {}
+                },
+                "isListing": false
+              },
+              {
+                "path": "/api/multi/$multipath/r/$srname",
+                "oauth": [
+                  "read"
+                ],
+                "extensions": [],
+                "method": "GET",
+                "args": {
+                  "multipath": {},
+                  "srname": {}
+                },
+                "isListing": false
+              },
+              {
+                "path": "/api/multi/$multipath/r/$srname",
+                "oauth": [
+                  "subscribe"
+                ],
+                "extensions": [],
+                "method": "PUT",
+                "args": {
+                  "model": {},
+                  "multipath": {},
+                  "srname": {},
+                  "uh": {}
+                },
+                "isListing": false
+              }
+            ]
+          }
+        },
+        "rename": {
+          "_endpoints": [
+            {
+              "path": "/api/multi/$multipath/rename",
+              "oauth": [
+                "subscribe"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "from": {},
+                "to": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        }
+      }
+    },
+    "filter": {
+      "filterpath": {
+        "_endpoints": [
+          {
+            "path": "/api/filter/filterpath",
+            "oauth": [
+              "subscribe"
+            ],
+            "extensions": [],
+            "method": "DELETE",
+            "args": {
+              "multipath": {},
+              "uh": {},
+              "expand_srs": {}
+            },
+            "isListing": false
+          },
+          {
+            "path": "/api/filter/filterpath",
+            "oauth": [
+              "read"
+            ],
+            "extensions": [],
+            "method": "GET",
+            "args": {
+              "expand_srs": {},
+              "multipath": {}
+            },
+            "isListing": false
+          },
+          {
+            "path": "/api/filter/filterpath",
+            "oauth": [
+              "subscribe"
+            ],
+            "extensions": [],
+            "method": "POST",
+            "args": {
+              "model": {},
+              "multipath": {},
+              "uh": {},
+              "expand_srs": {}
+            },
+            "isListing": false
+          },
+          {
+            "path": "/api/filter/filterpath",
+            "oauth": [
+              "subscribe"
+            ],
+            "extensions": [],
+            "method": "PUT",
+            "args": {
+              "model": {},
+              "multipath": {},
+              "uh": {},
+              "expand_srs": {}
+            },
+            "isListing": false
+          }
+        ],
+        "r": {
+          "$srname": {
+            "_endpoints": [
+              {
+                "path": "/api/filter/filterpath/r/$srname",
+                "oauth": [
+                  "subscribe"
+                ],
+                "extensions": [],
+                "method": "DELETE",
+                "args": {
+                  "multipath": {},
+                  "srname": {},
+                  "uh": {}
+                },
+                "isListing": false
+              },
+              {
+                "path": "/api/filter/filterpath/r/$srname",
+                "oauth": [
+                  "read"
+                ],
+                "extensions": [],
+                "method": "GET",
+                "args": {
+                  "multipath": {},
+                  "srname": {}
+                },
+                "isListing": false
+              },
+              {
+                "path": "/api/filter/filterpath/r/$srname",
+                "oauth": [
+                  "subscribe"
+                ],
+                "extensions": [],
+                "method": "PUT",
+                "args": {
+                  "model": {},
+                  "multipath": {},
+                  "srname": {},
+                  "uh": {}
+                },
+                "isListing": false
+              }
+            ]
+          }
+        }
+      }
+    },
+    "delete_sr_header": {
+      "_endpoints": [
+        {
+          "path": "/api/delete_sr_header",
+          "oauth": [
+            "modconfig"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "delete_sr_img": {
+      "_endpoints": [
+        {
+          "path": "/api/delete_sr_img",
+          "oauth": [
+            "modconfig"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "img_name": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "recommend": {
+      "sr": {
+        "$srnames": {
+          "_endpoints": [
+            {
+              "path": "/api/recommend/sr/$srnames",
+              "oauth": [
+                "read"
+              ],
+              "extensions": [],
+              "method": "GET",
+              "args": {
+                "omit": {},
+                "srnames": {}
+              },
+              "isListing": false
+            }
+          ]
+        }
+      }
+    },
+    "search_reddit_names.json": {
+      "_endpoints": [
+        {
+          "path": "/api/search_reddit_names.json",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "include_over_18": {},
+            "query": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "site_admin": {
+      "_endpoints": [
+        {
+          "path": "/api/site_admin",
+          "oauth": [
+            "modconfig"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "allow_top": {},
+            "api_type": {},
+            "captcha": {},
+            "collapse_deleted_comments": {},
+            "comment_score_hide_mins": {},
+            "css_on_cname": {},
+            "description": {},
+            "exclude_banned_modqueue": {},
+            "header-title": {},
+            "hide_ads": {},
+            "iden": {},
+            "lang": {},
+            "link_type": {},
+            "name": {},
+            "over_18": {},
+            "public_description": {},
+            "public_traffic": {},
+            "show_cname_sidebar": {},
+            "show_media": {},
+            "spam_comments": {},
+            "spam_links": {},
+            "spam_selfposts": {},
+            "sr": {},
+            "submit_link_label": {},
+            "submit_text": {},
+            "submit_text_label": {},
+            "title": {},
+            "type": {},
+            "uh": {},
+            "wiki_edit_age": {},
+            "wiki_edit_karma": {},
+            "wikimode": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "submit_text.json": {
+      "_endpoints": [
+        {
+          "path": "/api/submit_text.json",
+          "oauth": [
+            "submit"
+          ],
+          "extensions": [],
+          "method": "GET",
+          "args": {},
+          "isListing": false
+        }
+      ]
+    },
+    "$subreddit_stylesheet": {
+      "_endpoints": [
+        {
+          "path": "/api/$subreddit_stylesheet",
+          "oauth": [
+            "modconfig"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "op": {},
+            "reason": {},
+            "stylesheet_contents": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "subreddits_by_topic.json": {
+      "_endpoints": [
+        {
+          "path": "/api/subreddits_by_topic.json",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [],
+          "method": "GET",
+          "args": {
+            "query": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "subscribe": {
+      "_endpoints": [
+        {
+          "path": "/api/subscribe",
+          "oauth": [
+            "subscribe"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "action": {},
+            "sr": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "upload_sr_img": {
+      "_endpoints": [
+        {
+          "path": "/api/upload_sr_img",
+          "oauth": [
+            "modconfig"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "file": {},
+            "formid": {},
+            "header": {},
+            "img_type": {},
+            "name": {},
+            "uh": {},
+            "upload_type": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "friend": {
+      "_endpoints": [
+        {
+          "path": "/api/friend",
+          "oauth": [
+            "any"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "ban_message": {},
+            "container": {},
+            "duration": {},
+            "name": {},
+            "note": {},
+            "permissions": {},
+            "type": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "setpermissions": {
+      "_endpoints": [
+        {
+          "path": "/api/setpermissions",
+          "oauth": [
+            "modothers"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "name": {},
+            "permissions": {},
+            "type": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "unfriend": {
+      "_endpoints": [
+        {
+          "path": "/api/unfriend",
+          "oauth": [
+            "any"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "container": {},
+            "id": {},
+            "name": {},
+            "type": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "username_available.json": {
+      "_endpoints": [
+        {
+          "path": "/api/username_available.json",
+          "oauth": [],
+          "extensions": [],
+          "method": "GET",
+          "args": {
+            "user": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "wiki": {
+      "alloweditor": {
+        "$act": {
+          "_endpoints": [
+            {
+              "path": "/api/wiki/alloweditor/$act",
+              "oauth": [
+                "modwiki"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "act": {},
+                "page": {},
+                "uh": {},
+                "username": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "del": {
+          "_endpoints": [
+            {
+              "path": "/api/wiki/alloweditor/del",
+              "oauth": [
+                "modwiki"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "act": {},
+                "page": {},
+                "uh": {},
+                "username": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "add": {
+          "_endpoints": [
+            {
+              "path": "/api/wiki/alloweditor/add",
+              "oauth": [
+                "modwiki"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "act": {},
+                "page": {},
+                "uh": {},
+                "username": {}
+              },
+              "isListing": false
+            }
+          ]
+        }
+      },
+      "edit": {
+        "_endpoints": [
+          {
+            "path": "/api/wiki/edit",
+            "oauth": [
+              "wikiedit"
+            ],
+            "extensions": [],
+            "method": "POST",
+            "args": {
+              "content": {},
+              "page": {},
+              "previous": {},
+              "reason": {},
+              "uh": {}
+            },
+            "isListing": false
+          }
+        ]
+      },
+      "hide": {
+        "_endpoints": [
+          {
+            "path": "/api/wiki/hide",
+            "oauth": [
+              "modwiki"
+            ],
+            "extensions": [],
+            "method": "POST",
+            "args": {
+              "page": {},
+              "revision": {},
+              "uh": {}
+            },
+            "isListing": false
+          }
+        ]
+      },
+      "revert": {
+        "_endpoints": [
+          {
+            "path": "/api/wiki/revert",
+            "oauth": [
+              "modwiki"
+            ],
+            "extensions": [],
+            "method": "POST",
+            "args": {
+              "page": {},
+              "revision": {},
+              "uh": {}
+            },
+            "isListing": false
+          }
+        ]
+      }
+    },
+    "delete_sr_banner": {
+      "_endpoints": [
+        {
+          "path": "/api/delete_sr_banner",
+          "oauth": [
+            "modconfig"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    },
+    "delete_sr_icon": {
+      "_endpoints": [
+        {
+          "path": "/api/delete_sr_icon",
+          "oauth": [
+            "modconfig"
+          ],
+          "extensions": [],
+          "method": "POST",
+          "args": {
+            "api_type": {},
+            "uh": {}
+          },
+          "isListing": false
+        }
+      ]
+    }
+  },
+  "prefs": {
+    "$where": {
+      "_endpoints": [
+        {
+          "path": "/prefs/$where",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [
+            ".json",
+            ".xml"
+          ],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "show": {}
+          },
+          "isListing": true
+        }
+      ]
+    },
+    "friends": {
+      "_endpoints": [
+        {
+          "path": "/prefs/friends",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [
+            ".json",
+            ".xml"
+          ],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "show": {}
+          },
+          "isListing": true
+        }
+      ]
+    },
+    "blocked": {
+      "_endpoints": [
+        {
+          "path": "/prefs/blocked",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [
+            ".json",
+            ".xml"
+          ],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "show": {}
+          },
+          "isListing": true
+        }
+      ]
+    }
+  },
+  "captcha": {
+    "$iden": {
+      "_endpoints": [
+        {
+          "path": "/captcha/$iden",
+          "oauth": [
+            "any"
+          ],
+          "extensions": [],
+          "method": "GET",
+          "args": {},
+          "isListing": false
+        }
+      ]
+    }
+  },
+  "r": {
+    "$subreddit": {
+      "api": {
+        "clearflairtemplates": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/api/clearflairtemplates",
+              "oauth": [
+                "modflair"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "flair_type": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "deleteflair": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/api/deleteflair",
+              "oauth": [
+                "modflair"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "name": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "deleteflairtemplate": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/api/deleteflairtemplate",
+              "oauth": [
+                "modflair"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "flair_template_id": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "flair": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/api/flair",
+              "oauth": [
+                "modflair"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "css_class": {},
+                "link": {},
+                "name": {},
+                "text": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "flairconfig": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/api/flairconfig",
+              "oauth": [
+                "modflair"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "flair_enabled": {},
+                "flair_position": {},
+                "flair_self_assign_enabled": {},
+                "link_flair_position": {},
+                "link_flair_self_assign_enabled": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "flaircsv": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/api/flaircsv",
+              "oauth": [
+                "modflair"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "flair_csv": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "flairlist": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/api/flairlist",
+              "oauth": [
+                "modflair"
+              ],
+              "extensions": [],
+              "method": "GET",
+              "args": {
+                "after": {},
+                "before": {},
+                "count": {},
+                "limit": {},
+                "name": {},
+                "show": {}
+              },
+              "isListing": true
+            }
+          ]
+        },
+        "flairselector": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/api/flairselector",
+              "oauth": [
+                "flair"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "link": {},
+                "name": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "flairtemplate": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/api/flairtemplate",
+              "oauth": [
+                "modflair"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "css_class": {},
+                "flair_template_id": {},
+                "flair_type": {},
+                "text": {},
+                "text_editable": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "selectflair": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/api/selectflair",
+              "oauth": [
+                "flair"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "flair_template_id": {},
+                "link": {},
+                "name": {},
+                "text": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "setflairenabled": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/api/setflairenabled",
+              "oauth": [
+                "flair"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "flair_enabled": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "info": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/api/info",
+              "oauth": [
+                "read"
+              ],
+              "extensions": [],
+              "method": "GET",
+              "args": {
+                "id": {},
+                "url": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "accept_moderator_invite": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/api/accept_moderator_invite",
+              "oauth": [
+                "modself"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "delete_sr_header": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/api/delete_sr_header",
+              "oauth": [
+                "modconfig"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "delete_sr_img": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/api/delete_sr_img",
+              "oauth": [
+                "modconfig"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "img_name": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "submit_text.json": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/api/submit_text.json",
+              "oauth": [
+                "submit"
+              ],
+              "extensions": [],
+              "method": "GET",
+              "args": {},
+              "isListing": false
+            }
+          ]
+        },
+        "subreddit_stylesheet": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/api/subreddit_stylesheet",
+              "oauth": [
+                "modconfig"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "op": {},
+                "reason": {},
+                "stylesheet_contents": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "upload_sr_img": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/api/upload_sr_img",
+              "oauth": [
+                "modconfig"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "file": {},
+                "formid": {},
+                "header": {},
+                "img_type": {},
+                "name": {},
+                "uh": {},
+                "upload_type": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "friend": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/api/friend",
+              "oauth": [
+                "any"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "ban_message": {},
+                "container": {},
+                "duration": {},
+                "name": {},
+                "note": {},
+                "permissions": {},
+                "type": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "setpermissions": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/api/setpermissions",
+              "oauth": [
+                "modothers"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "name": {},
+                "permissions": {},
+                "type": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "unfriend": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/api/unfriend",
+              "oauth": [
+                "any"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "container": {},
+                "id": {},
+                "name": {},
+                "type": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "wiki": {
+          "alloweditor": {
+            "$act": {
+              "_endpoints": [
+                {
+                  "path": "/r/$subreddit/api/wiki/alloweditor/$act",
+                  "oauth": [
+                    "modwiki"
+                  ],
+                  "extensions": [],
+                  "method": "POST",
+                  "args": {
+                    "act": {},
+                    "page": {},
+                    "uh": {},
+                    "username": {}
+                  },
+                  "isListing": false
+                }
+              ]
+            },
+            "del": {
+              "_endpoints": [
+                {
+                  "path": "/r/$subreddit/api/wiki/alloweditor/del",
+                  "oauth": [
+                    "modwiki"
+                  ],
+                  "extensions": [],
+                  "method": "POST",
+                  "args": {
+                    "act": {},
+                    "page": {},
+                    "uh": {},
+                    "username": {}
+                  },
+                  "isListing": false
+                }
+              ]
+            },
+            "add": {
+              "_endpoints": [
+                {
+                  "path": "/r/$subreddit/api/wiki/alloweditor/add",
+                  "oauth": [
+                    "modwiki"
+                  ],
+                  "extensions": [],
+                  "method": "POST",
+                  "args": {
+                    "act": {},
+                    "page": {},
+                    "uh": {},
+                    "username": {}
+                  },
+                  "isListing": false
+                }
+              ]
+            }
+          },
+          "edit": {
+            "_endpoints": [
+              {
+                "path": "/r/$subreddit/api/wiki/edit",
+                "oauth": [
+                  "wikiedit"
+                ],
+                "extensions": [],
+                "method": "POST",
+                "args": {
+                  "content": {},
+                  "page": {},
+                  "previous": {},
+                  "reason": {},
+                  "uh": {}
+                },
+                "isListing": false
+              }
+            ]
+          },
+          "hide": {
+            "_endpoints": [
+              {
+                "path": "/r/$subreddit/api/wiki/hide",
+                "oauth": [
+                  "modwiki"
+                ],
+                "extensions": [],
+                "method": "POST",
+                "args": {
+                  "page": {},
+                  "revision": {},
+                  "uh": {}
+                },
+                "isListing": false
+              }
+            ]
+          },
+          "revert": {
+            "_endpoints": [
+              {
+                "path": "/r/$subreddit/api/wiki/revert",
+                "oauth": [
+                  "modwiki"
+                ],
+                "extensions": [],
+                "method": "POST",
+                "args": {
+                  "page": {},
+                  "revision": {},
+                  "uh": {}
+                },
+                "isListing": false
+              }
+            ]
+          }
+        },
+        "delete_sr_banner": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/api/delete_sr_banner",
+              "oauth": [
+                "modconfig"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        },
+        "delete_sr_icon": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/api/delete_sr_icon",
+              "oauth": [
+                "modconfig"
+              ],
+              "extensions": [],
+              "method": "POST",
+              "args": {
+                "api_type": {},
+                "uh": {}
+              },
+              "isListing": false
+            }
+          ]
+        }
+      },
+      "comments": {
+        "$article": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/comments/$article",
+              "oauth": [
+                "read"
+              ],
+              "extensions": [
+                ".json",
+                ".xml"
+              ],
+              "method": "GET",
+              "args": {
+                "article": {},
+                "comment": {},
+                "context": {},
+                "depth": {},
+                "limit": {},
+                "showedits": {},
+                "showmore": {},
+                "sort": {}
+              },
+              "isListing": false
+            }
+          ]
+        }
+      },
+      "hot": {
+        "_endpoints": [
+          {
+            "path": "/r/$subreddit/hot",
+            "oauth": [
+              "read"
+            ],
+            "extensions": [
+              ".json",
+              ".xml"
+            ],
+            "method": "GET",
+            "args": {
+              "after": {},
+              "before": {},
+              "count": {},
+              "limit": {},
+              "show": {}
+            },
+            "isListing": true
+          }
+        ]
+      },
+      "new": {
+        "_endpoints": [
+          {
+            "path": "/r/$subreddit/new",
+            "oauth": [
+              "read"
+            ],
+            "extensions": [
+              ".json",
+              ".xml"
+            ],
+            "method": "GET",
+            "args": {
+              "after": {},
+              "before": {},
+              "count": {},
+              "limit": {},
+              "show": {}
+            },
+            "isListing": true
+          }
+        ]
+      },
+      "random": {
+        "_endpoints": [
+          {
+            "path": "/r/$subreddit/random",
+            "oauth": [
+              "read"
+            ],
+            "extensions": [],
+            "method": "GET",
+            "args": {},
+            "isListing": false
+          }
+        ]
+      },
+      "$sort": {
+        "_endpoints": [
+          {
+            "path": "/r/$subreddit/$sort",
+            "oauth": [
+              "read"
+            ],
+            "extensions": [
+              ".json",
+              ".xml"
+            ],
+            "method": "GET",
+            "args": {
+              "t": {},
+              "after": {},
+              "before": {},
+              "count": {},
+              "limit": {},
+              "show": {}
+            },
+            "isListing": true
+          }
+        ]
+      },
+      "top": {
+        "_endpoints": [
+          {
+            "path": "/r/$subreddit/top",
+            "oauth": [
+              "read"
+            ],
+            "extensions": [
+              ".json",
+              ".xml"
+            ],
+            "method": "GET",
+            "args": {
+              "t": {},
+              "after": {},
+              "before": {},
+              "count": {},
+              "limit": {},
+              "show": {}
+            },
+            "isListing": true
+          }
+        ]
+      },
+      "controversial": {
+        "_endpoints": [
+          {
+            "path": "/r/$subreddit/controversial",
+            "oauth": [
+              "read"
+            ],
+            "extensions": [
+              ".json",
+              ".xml"
+            ],
+            "method": "GET",
+            "args": {
+              "t": {},
+              "after": {},
+              "before": {},
+              "count": {},
+              "limit": {},
+              "show": {}
+            },
+            "isListing": true
+          }
+        ]
+      },
+      "about": {
+        "log": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/about/log",
+              "oauth": [
+                "modlog"
+              ],
+              "extensions": [
+                ".json",
+                ".xml"
+              ],
+              "method": "GET",
+              "args": {
+                "after": {},
+                "before": {},
+                "count": {},
+                "limit": {},
+                "mod": {},
+                "show": {},
+                "type": {}
+              },
+              "isListing": true
+            }
+          ]
+        },
+        "$location": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/about/$location",
+              "oauth": [
+                "read"
+              ],
+              "extensions": [],
+              "method": "GET",
+              "args": {
+                "after": {},
+                "before": {},
+                "count": {},
+                "limit": {},
+                "location": {},
+                "only": {},
+                "show": {}
+              },
+              "isListing": true
+            }
+          ]
+        },
+        "reports": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/about/reports",
+              "oauth": [
+                "read"
+              ],
+              "extensions": [],
+              "method": "GET",
+              "args": {
+                "after": {},
+                "before": {},
+                "count": {},
+                "limit": {},
+                "location": {},
+                "only": {},
+                "show": {}
+              },
+              "isListing": true
+            }
+          ]
+        },
+        "spam": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/about/spam",
+              "oauth": [
+                "read"
+              ],
+              "extensions": [],
+              "method": "GET",
+              "args": {
+                "after": {},
+                "before": {},
+                "count": {},
+                "limit": {},
+                "location": {},
+                "only": {},
+                "show": {}
+              },
+              "isListing": true
+            }
+          ]
+        },
+        "modqueue": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/about/modqueue",
+              "oauth": [
+                "read"
+              ],
+              "extensions": [],
+              "method": "GET",
+              "args": {
+                "after": {},
+                "before": {},
+                "count": {},
+                "limit": {},
+                "location": {},
+                "only": {},
+                "show": {}
+              },
+              "isListing": true
+            }
+          ]
+        },
+        "unmoderated": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/about/unmoderated",
+              "oauth": [
+                "read"
+              ],
+              "extensions": [],
+              "method": "GET",
+              "args": {
+                "after": {},
+                "before": {},
+                "count": {},
+                "limit": {},
+                "location": {},
+                "only": {},
+                "show": {}
+              },
+              "isListing": true
+            }
+          ]
+        },
+        "edited": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/about/edited",
+              "oauth": [
+                "read"
+              ],
+              "extensions": [],
+              "method": "GET",
+              "args": {
+                "after": {},
+                "before": {},
+                "count": {},
+                "limit": {},
+                "location": {},
+                "only": {},
+                "show": {}
+              },
+              "isListing": true
+            }
+          ]
+        },
+        "$where": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/about/$where",
+              "oauth": [
+                "read"
+              ],
+              "extensions": [
+                ".json",
+                ".xml"
+              ],
+              "method": "GET",
+              "args": {
+                "after": {},
+                "before": {},
+                "count": {},
+                "limit": {},
+                "show": {},
+                "user": {}
+              },
+              "isListing": true
+            }
+          ]
+        },
+        "banned": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/about/banned",
+              "oauth": [
+                "read"
+              ],
+              "extensions": [
+                ".json",
+                ".xml"
+              ],
+              "method": "GET",
+              "args": {
+                "after": {},
+                "before": {},
+                "count": {},
+                "limit": {},
+                "show": {},
+                "user": {}
+              },
+              "isListing": true
+            }
+          ]
+        },
+        "wikibanned": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/about/wikibanned",
+              "oauth": [
+                "read"
+              ],
+              "extensions": [
+                ".json",
+                ".xml"
+              ],
+              "method": "GET",
+              "args": {
+                "after": {},
+                "before": {},
+                "count": {},
+                "limit": {},
+                "show": {},
+                "user": {}
+              },
+              "isListing": true
+            }
+          ]
+        },
+        "contributors": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/about/contributors",
+              "oauth": [
+                "read"
+              ],
+              "extensions": [
+                ".json",
+                ".xml"
+              ],
+              "method": "GET",
+              "args": {
+                "after": {},
+                "before": {},
+                "count": {},
+                "limit": {},
+                "show": {},
+                "user": {}
+              },
+              "isListing": true
+            }
+          ]
+        },
+        "wikicontributors": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/about/wikicontributors",
+              "oauth": [
+                "read"
+              ],
+              "extensions": [
+                ".json",
+                ".xml"
+              ],
+              "method": "GET",
+              "args": {
+                "after": {},
+                "before": {},
+                "count": {},
+                "limit": {},
+                "show": {},
+                "user": {}
+              },
+              "isListing": true
+            }
+          ]
+        },
+        "moderators": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/about/moderators",
+              "oauth": [
+                "read"
+              ],
+              "extensions": [
+                ".json",
+                ".xml"
+              ],
+              "method": "GET",
+              "args": {
+                "after": {},
+                "before": {},
+                "count": {},
+                "limit": {},
+                "show": {},
+                "user": {}
+              },
+              "isListing": true
+            }
+          ]
+        },
+        "edit.json": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/about/edit.json",
+              "oauth": [
+                "modconfig"
+              ],
+              "extensions": [],
+              "method": "GET",
+              "args": {
+                "created": {},
+                "location": {}
+              },
+              "isListing": false
+            }
+          ]
+        }
+      },
+      "stylesheet": {
+        "_endpoints": [
+          {
+            "path": "/r/$subreddit/stylesheet",
+            "oauth": [
+              "modconfig"
+            ],
+            "extensions": [],
+            "method": "GET",
+            "args": {},
+            "isListing": false
+          }
+        ]
+      },
+      "search": {
+        "_endpoints": [
+          {
+            "path": "/r/$subreddit/search",
+            "oauth": [
+              "read"
+            ],
+            "extensions": [
+              ".json",
+              ".xml"
+            ],
+            "method": "GET",
+            "args": {
+              "after": {},
+              "before": {},
+              "count": {},
+              "limit": {},
+              "q": {},
+              "restrict_sr": {},
+              "show": {},
+              "sort": {},
+              "syntax": {},
+              "t": {}
+            },
+            "isListing": true
+          }
+        ]
+      },
+      "about.json": {
+        "_endpoints": [
+          {
+            "path": "/r/$subreddit/about.json",
+            "oauth": [
+              "read"
+            ],
+            "extensions": [],
+            "method": "GET",
+            "args": {},
+            "isListing": false
+          }
+        ]
+      },
+      "wiki": {
+        "discussions": {
+          "$page": {
+            "_endpoints": [
+              {
+                "path": "/r/$subreddit/wiki/discussions/$page",
+                "oauth": [
+                  "wikiread"
+                ],
+                "extensions": [],
+                "method": "GET",
+                "args": {
+                  "after": {},
+                  "before": {},
+                  "count": {},
+                  "limit": {},
+                  "page": {},
+                  "show": {}
+                },
+                "isListing": true
+              }
+            ]
+          }
+        },
+        "pages": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/wiki/pages",
+              "oauth": [
+                "wikiread"
+              ],
+              "extensions": [],
+              "method": "GET",
+              "args": {},
+              "isListing": false
+            }
+          ]
+        },
+        "revisions": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/wiki/revisions",
+              "oauth": [
+                "wikiread"
+              ],
+              "extensions": [],
+              "method": "GET",
+              "args": {
+                "after": {},
+                "before": {},
+                "count": {},
+                "limit": {},
+                "show": {}
+              },
+              "isListing": true
+            }
+          ],
+          "$page": {
+            "_endpoints": [
+              {
+                "path": "/r/$subreddit/wiki/revisions/$page",
+                "oauth": [
+                  "wikiread"
+                ],
+                "extensions": [],
+                "method": "GET",
+                "args": {
+                  "after": {},
+                  "before": {},
+                  "count": {},
+                  "limit": {},
+                  "page": {},
+                  "show": {}
+                },
+                "isListing": true
+              }
+            ]
+          }
+        },
+        "settings": {
+          "$page": {
+            "_endpoints": [
+              {
+                "path": "/r/$subreddit/wiki/settings/$page",
+                "oauth": [
+                  "modwiki"
+                ],
+                "extensions": [],
+                "method": "GET",
+                "args": {
+                  "page": {}
+                },
+                "isListing": false
+              },
+              {
+                "path": "/r/$subreddit/wiki/settings/$page",
+                "oauth": [
+                  "modwiki"
+                ],
+                "extensions": [],
+                "method": "POST",
+                "args": {
+                  "listed": {},
+                  "page": {},
+                  "permlevel": {},
+                  "uh": {}
+                },
+                "isListing": false
+              }
+            ]
+          }
+        },
+        "$page": {
+          "_endpoints": [
+            {
+              "path": "/r/$subreddit/wiki/$page",
+              "oauth": [
+                "wikiread"
+              ],
+              "extensions": [],
+              "method": "GET",
+              "args": {
+                "page": {},
+                "v": {},
+                "v2": {}
+              },
+              "isListing": false
+            }
+          ]
+        }
+      },
+      "sidebar": {
+        "_endpoints": [
+          {
+            "path": "/r/$subreddit/sidebar",
+            "oauth": [
+              "read"
+            ],
+            "extensions": [],
+            "method": "GET",
+            "args": {},
+            "isListing": false
+          }
+        ]
+      },
+      "sticky": {
+        "_endpoints": [
+          {
+            "path": "/r/$subreddit/sticky",
+            "oauth": [
+              "read"
+            ],
+            "extensions": [],
+            "method": "GET",
+            "args": {},
+            "isListing": false
+          }
+        ]
+      }
+    }
+  },
+  "by_id": {
+    "$names": {
+      "_endpoints": [
+        {
+          "path": "/by_id/$names",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [],
+          "method": "GET",
+          "args": {
+            "names": {}
+          },
+          "isListing": false
+        }
+      ]
+    }
+  },
+  "comments": {
+    "$article": {
+      "_endpoints": [
+        {
+          "path": "/comments/$article",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [
+            ".json",
+            ".xml"
+          ],
+          "method": "GET",
+          "args": {
+            "article": {},
+            "comment": {},
+            "context": {},
+            "depth": {},
+            "limit": {},
+            "showedits": {},
+            "showmore": {},
+            "sort": {}
+          },
+          "isListing": false
+        }
+      ]
+    }
+  },
+  "hot": {
+    "_endpoints": [
+      {
+        "path": "/hot",
+        "oauth": [
+          "read"
+        ],
+        "extensions": [
+          ".json",
+          ".xml"
+        ],
+        "method": "GET",
+        "args": {
+          "after": {},
+          "before": {},
+          "count": {},
+          "limit": {},
+          "show": {}
+        },
+        "isListing": true
+      }
+    ]
+  },
+  "new": {
+    "_endpoints": [
+      {
+        "path": "/new",
+        "oauth": [
+          "read"
+        ],
+        "extensions": [
+          ".json",
+          ".xml"
+        ],
+        "method": "GET",
+        "args": {
+          "after": {},
+          "before": {},
+          "count": {},
+          "limit": {},
+          "show": {}
+        },
+        "isListing": true
+      }
+    ]
+  },
+  "random": {
+    "_endpoints": [
+      {
+        "path": "/random",
+        "oauth": [
+          "read"
+        ],
+        "extensions": [],
+        "method": "GET",
+        "args": {},
+        "isListing": false
+      }
+    ]
+  },
+  "$sort": {
+    "_endpoints": [
+      {
+        "path": "/$sort",
+        "oauth": [
+          "read"
+        ],
+        "extensions": [
+          ".json",
+          ".xml"
+        ],
+        "method": "GET",
+        "args": {
+          "t": {},
+          "after": {},
+          "before": {},
+          "count": {},
+          "limit": {},
+          "show": {}
+        },
+        "isListing": true
+      }
+    ]
+  },
+  "top": {
+    "_endpoints": [
+      {
+        "path": "/top",
+        "oauth": [
+          "read"
+        ],
+        "extensions": [
+          ".json",
+          ".xml"
+        ],
+        "method": "GET",
+        "args": {
+          "t": {},
+          "after": {},
+          "before": {},
+          "count": {},
+          "limit": {},
+          "show": {}
+        },
+        "isListing": true
+      }
+    ]
+  },
+  "controversial": {
+    "_endpoints": [
+      {
+        "path": "/controversial",
+        "oauth": [
+          "read"
+        ],
+        "extensions": [
+          ".json",
+          ".xml"
+        ],
+        "method": "GET",
+        "args": {
+          "t": {},
+          "after": {},
+          "before": {},
+          "count": {},
+          "limit": {},
+          "show": {}
+        },
+        "isListing": true
+      }
+    ]
+  },
+  "live": {
+    "$thread": {
+      "_endpoints": [
+        {
+          "path": "/live/$thread",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [
+            ".json",
+            ".xml"
+          ],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "before": {},
+            "count": {},
+            "is_embed": {},
+            "limit": {},
+            "stylesr": {}
+          },
+          "isListing": false
+        }
+      ],
+      "about.json": {
+        "_endpoints": [
+          {
+            "path": "/live/$thread/about.json",
+            "oauth": [
+              "read"
+            ],
+            "extensions": [],
+            "method": "GET",
+            "args": {},
+            "isListing": false
+          }
+        ]
+      },
+      "contributors.json": {
+        "_endpoints": [
+          {
+            "path": "/live/$thread/contributors.json",
+            "oauth": [
+              "read"
+            ],
+            "extensions": [],
+            "method": "GET",
+            "args": {},
+            "isListing": false
+          }
+        ]
+      },
+      "discussions": {
+        "_endpoints": [
+          {
+            "path": "/live/$thread/discussions",
+            "oauth": [
+              "read"
+            ],
+            "extensions": [
+              ".json",
+              ".xml"
+            ],
+            "method": "GET",
+            "args": {
+              "after": {},
+              "before": {},
+              "count": {},
+              "limit": {},
+              "show": {}
+            },
+            "isListing": true
+          }
+        ]
+      }
+    }
+  },
+  "message": {
+    "$where": {
+      "_endpoints": [
+        {
+          "path": "/message/$where",
+          "oauth": [
+            "privatemessages"
+          ],
+          "extensions": [
+            ".json",
+            ".xml"
+          ],
+          "method": "GET",
+          "args": {
+            "mark": {},
+            "mid": {},
+            "after": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "show": {}
+          },
+          "isListing": true
+        }
+      ]
+    },
+    "inbox": {
+      "_endpoints": [
+        {
+          "path": "/message/inbox",
+          "oauth": [
+            "privatemessages"
+          ],
+          "extensions": [
+            ".json",
+            ".xml"
+          ],
+          "method": "GET",
+          "args": {
+            "mark": {},
+            "mid": {},
+            "after": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "show": {}
+          },
+          "isListing": true
+        }
+      ]
+    },
+    "unread": {
+      "_endpoints": [
+        {
+          "path": "/message/unread",
+          "oauth": [
+            "privatemessages"
+          ],
+          "extensions": [
+            ".json",
+            ".xml"
+          ],
+          "method": "GET",
+          "args": {
+            "mark": {},
+            "mid": {},
+            "after": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "show": {}
+          },
+          "isListing": true
+        }
+      ]
+    },
+    "sent": {
+      "_endpoints": [
+        {
+          "path": "/message/sent",
+          "oauth": [
+            "privatemessages"
+          ],
+          "extensions": [
+            ".json",
+            ".xml"
+          ],
+          "method": "GET",
+          "args": {
+            "mark": {},
+            "mid": {},
+            "after": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "show": {}
+          },
+          "isListing": true
+        }
+      ]
+    }
+  },
+  "about": {
+    "log": {
+      "_endpoints": [
+        {
+          "path": "/about/log",
+          "oauth": [
+            "modlog"
+          ],
+          "extensions": [
+            ".json",
+            ".xml"
+          ],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "mod": {},
+            "show": {},
+            "type": {}
+          },
+          "isListing": true
+        }
+      ]
+    },
+    "$location": {
+      "_endpoints": [
+        {
+          "path": "/about/$location",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "location": {},
+            "only": {},
+            "show": {}
+          },
+          "isListing": true
+        }
+      ]
+    },
+    "reports": {
+      "_endpoints": [
+        {
+          "path": "/about/reports",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "location": {},
+            "only": {},
+            "show": {}
+          },
+          "isListing": true
+        }
+      ]
+    },
+    "spam": {
+      "_endpoints": [
+        {
+          "path": "/about/spam",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "location": {},
+            "only": {},
+            "show": {}
+          },
+          "isListing": true
+        }
+      ]
+    },
+    "modqueue": {
+      "_endpoints": [
+        {
+          "path": "/about/modqueue",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "location": {},
+            "only": {},
+            "show": {}
+          },
+          "isListing": true
+        }
+      ]
+    },
+    "unmoderated": {
+      "_endpoints": [
+        {
+          "path": "/about/unmoderated",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "location": {},
+            "only": {},
+            "show": {}
+          },
+          "isListing": true
+        }
+      ]
+    },
+    "edited": {
+      "_endpoints": [
+        {
+          "path": "/about/edited",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "location": {},
+            "only": {},
+            "show": {}
+          },
+          "isListing": true
+        }
+      ]
+    },
+    "$where": {
+      "_endpoints": [
+        {
+          "path": "/about/$where",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [
+            ".json",
+            ".xml"
+          ],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "show": {},
+            "user": {}
+          },
+          "isListing": true
+        }
+      ]
+    },
+    "banned": {
+      "_endpoints": [
+        {
+          "path": "/about/banned",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [
+            ".json",
+            ".xml"
+          ],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "show": {},
+            "user": {}
+          },
+          "isListing": true
+        }
+      ]
+    },
+    "wikibanned": {
+      "_endpoints": [
+        {
+          "path": "/about/wikibanned",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [
+            ".json",
+            ".xml"
+          ],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "show": {},
+            "user": {}
+          },
+          "isListing": true
+        }
+      ]
+    },
+    "contributors": {
+      "_endpoints": [
+        {
+          "path": "/about/contributors",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [
+            ".json",
+            ".xml"
+          ],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "show": {},
+            "user": {}
+          },
+          "isListing": true
+        }
+      ]
+    },
+    "wikicontributors": {
+      "_endpoints": [
+        {
+          "path": "/about/wikicontributors",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [
+            ".json",
+            ".xml"
+          ],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "show": {},
+            "user": {}
+          },
+          "isListing": true
+        }
+      ]
+    },
+    "moderators": {
+      "_endpoints": [
+        {
+          "path": "/about/moderators",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [
+            ".json",
+            ".xml"
+          ],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "show": {},
+            "user": {}
+          },
+          "isListing": true
+        }
+      ]
+    }
+  },
+  "stylesheet": {
+    "_endpoints": [
+      {
+        "path": "/stylesheet",
+        "oauth": [
+          "modconfig"
+        ],
+        "extensions": [],
+        "method": "GET",
+        "args": {},
+        "isListing": false
+      }
+    ]
+  },
+  "search": {
+    "_endpoints": [
+      {
+        "path": "/search",
+        "oauth": [
+          "read"
+        ],
+        "extensions": [
+          ".json",
+          ".xml"
+        ],
+        "method": "GET",
+        "args": {
+          "after": {},
+          "before": {},
+          "count": {},
+          "limit": {},
+          "q": {},
+          "restrict_sr": {},
+          "show": {},
+          "sort": {},
+          "syntax": {},
+          "t": {}
+        },
+        "isListing": true
+      }
+    ]
+  },
+  "subreddits": {
+    "mine": {
+      "$where": {
+        "_endpoints": [
+          {
+            "path": "/subreddits/mine/$where",
+            "oauth": [
+              "mysubreddits"
+            ],
+            "extensions": [
+              ".json",
+              ".xml"
+            ],
+            "method": "GET",
+            "args": {
+              "after": {},
+              "before": {},
+              "count": {},
+              "limit": {},
+              "show": {}
+            },
+            "isListing": true
+          }
+        ]
+      },
+      "subscriber": {
+        "_endpoints": [
+          {
+            "path": "/subreddits/mine/subscriber",
+            "oauth": [
+              "mysubreddits"
+            ],
+            "extensions": [
+              ".json",
+              ".xml"
+            ],
+            "method": "GET",
+            "args": {
+              "after": {},
+              "before": {},
+              "count": {},
+              "limit": {},
+              "show": {}
+            },
+            "isListing": true
+          }
+        ]
+      },
+      "contributor": {
+        "_endpoints": [
+          {
+            "path": "/subreddits/mine/contributor",
+            "oauth": [
+              "mysubreddits"
+            ],
+            "extensions": [
+              ".json",
+              ".xml"
+            ],
+            "method": "GET",
+            "args": {
+              "after": {},
+              "before": {},
+              "count": {},
+              "limit": {},
+              "show": {}
+            },
+            "isListing": true
+          }
+        ]
+      },
+      "moderator": {
+        "_endpoints": [
+          {
+            "path": "/subreddits/mine/moderator",
+            "oauth": [
+              "mysubreddits"
+            ],
+            "extensions": [
+              ".json",
+              ".xml"
+            ],
+            "method": "GET",
+            "args": {
+              "after": {},
+              "before": {},
+              "count": {},
+              "limit": {},
+              "show": {}
+            },
+            "isListing": true
+          }
+        ]
+      }
+    },
+    "search": {
+      "_endpoints": [
+        {
+          "path": "/subreddits/search",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [
+            ".json",
+            ".xml"
+          ],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "q": {},
+            "show": {}
+          },
+          "isListing": true
+        }
+      ]
+    },
+    "$where": {
+      "_endpoints": [
+        {
+          "path": "/subreddits/$where",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [
+            ".json",
+            ".xml"
+          ],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "show": {}
+          },
+          "isListing": true
+        }
+      ]
+    },
+    "popular": {
+      "_endpoints": [
+        {
+          "path": "/subreddits/popular",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [
+            ".json",
+            ".xml"
+          ],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "show": {}
+          },
+          "isListing": true
+        }
+      ]
+    },
+    "new": {
+      "_endpoints": [
+        {
+          "path": "/subreddits/new",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [
+            ".json",
+            ".xml"
+          ],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "show": {}
+          },
+          "isListing": true
+        }
+      ]
+    },
+    "employee": {
+      "_endpoints": [
+        {
+          "path": "/subreddits/employee",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [
+            ".json",
+            ".xml"
+          ],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "show": {}
+          },
+          "isListing": true
+        }
+      ]
+    },
+    "gold": {
+      "_endpoints": [
+        {
+          "path": "/subreddits/gold",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [
+            ".json",
+            ".xml"
+          ],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "show": {}
+          },
+          "isListing": true
+        }
+      ]
+    }
+  },
+  "user": {
+    "$username": {
+      "about.json": {
+        "_endpoints": [
+          {
+            "path": "/user/$username/about.json",
+            "oauth": [
+              "read"
+            ],
+            "extensions": [],
+            "method": "GET",
+            "args": {
+              "username": {}
+            },
+            "isListing": false
+          }
+        ]
+      },
+      "$where": {
+        "_endpoints": [
+          {
+            "path": "/user/$username/$where",
+            "oauth": [
+              "history"
+            ],
+            "extensions": [
+              ".json",
+              ".xml"
+            ],
+            "method": "GET",
+            "args": {
+              "show": {},
+              "sort": {},
+              "t": {},
+              "username": {},
+              "after": {},
+              "before": {},
+              "count": {},
+              "limit": {}
+            },
+            "isListing": true
+          }
+        ]
+      },
+      "overview": {
+        "_endpoints": [
+          {
+            "path": "/user/$username/overview",
+            "oauth": [
+              "history"
+            ],
+            "extensions": [
+              ".json",
+              ".xml"
+            ],
+            "method": "GET",
+            "args": {
+              "show": {},
+              "sort": {},
+              "t": {},
+              "username": {},
+              "after": {},
+              "before": {},
+              "count": {},
+              "limit": {}
+            },
+            "isListing": true
+          }
+        ]
+      },
+      "submitted": {
+        "_endpoints": [
+          {
+            "path": "/user/$username/submitted",
+            "oauth": [
+              "history"
+            ],
+            "extensions": [
+              ".json",
+              ".xml"
+            ],
+            "method": "GET",
+            "args": {
+              "show": {},
+              "sort": {},
+              "t": {},
+              "username": {},
+              "after": {},
+              "before": {},
+              "count": {},
+              "limit": {}
+            },
+            "isListing": true
+          }
+        ]
+      },
+      "comments": {
+        "_endpoints": [
+          {
+            "path": "/user/$username/comments",
+            "oauth": [
+              "history"
+            ],
+            "extensions": [
+              ".json",
+              ".xml"
+            ],
+            "method": "GET",
+            "args": {
+              "show": {},
+              "sort": {},
+              "t": {},
+              "username": {},
+              "after": {},
+              "before": {},
+              "count": {},
+              "limit": {}
+            },
+            "isListing": true
+          }
+        ]
+      },
+      "liked": {
+        "_endpoints": [
+          {
+            "path": "/user/$username/liked",
+            "oauth": [
+              "history"
+            ],
+            "extensions": [
+              ".json",
+              ".xml"
+            ],
+            "method": "GET",
+            "args": {
+              "show": {},
+              "sort": {},
+              "t": {},
+              "username": {},
+              "after": {},
+              "before": {},
+              "count": {},
+              "limit": {}
+            },
+            "isListing": true
+          }
+        ]
+      },
+      "disliked": {
+        "_endpoints": [
+          {
+            "path": "/user/$username/disliked",
+            "oauth": [
+              "history"
+            ],
+            "extensions": [
+              ".json",
+              ".xml"
+            ],
+            "method": "GET",
+            "args": {
+              "show": {},
+              "sort": {},
+              "t": {},
+              "username": {},
+              "after": {},
+              "before": {},
+              "count": {},
+              "limit": {}
+            },
+            "isListing": true
+          }
+        ]
+      },
+      "hidden": {
+        "_endpoints": [
+          {
+            "path": "/user/$username/hidden",
+            "oauth": [
+              "history"
+            ],
+            "extensions": [
+              ".json",
+              ".xml"
+            ],
+            "method": "GET",
+            "args": {
+              "show": {},
+              "sort": {},
+              "t": {},
+              "username": {},
+              "after": {},
+              "before": {},
+              "count": {},
+              "limit": {}
+            },
+            "isListing": true
+          }
+        ]
+      },
+      "saved": {
+        "_endpoints": [
+          {
+            "path": "/user/$username/saved",
+            "oauth": [
+              "history"
+            ],
+            "extensions": [
+              ".json",
+              ".xml"
+            ],
+            "method": "GET",
+            "args": {
+              "show": {},
+              "sort": {},
+              "t": {},
+              "username": {},
+              "after": {},
+              "before": {},
+              "count": {},
+              "limit": {}
+            },
+            "isListing": true
+          }
+        ]
+      },
+      "gilded": {
+        "_endpoints": [
+          {
+            "path": "/user/$username/gilded",
+            "oauth": [
+              "history"
+            ],
+            "extensions": [
+              ".json",
+              ".xml"
+            ],
+            "method": "GET",
+            "args": {
+              "show": {},
+              "sort": {},
+              "t": {},
+              "username": {},
+              "after": {},
+              "before": {},
+              "count": {},
+              "limit": {}
+            },
+            "isListing": true
+          }
+        ]
+      }
+    }
+  },
+  "wiki": {
+    "discussions": {
+      "$page": {
+        "_endpoints": [
+          {
+            "path": "/wiki/discussions/$page",
+            "oauth": [
+              "wikiread"
+            ],
+            "extensions": [],
+            "method": "GET",
+            "args": {
+              "after": {},
+              "before": {},
+              "count": {},
+              "limit": {},
+              "page": {},
+              "show": {}
+            },
+            "isListing": true
+          }
+        ]
+      }
+    },
+    "pages": {
+      "_endpoints": [
+        {
+          "path": "/wiki/pages",
+          "oauth": [
+            "wikiread"
+          ],
+          "extensions": [],
+          "method": "GET",
+          "args": {},
+          "isListing": false
+        }
+      ]
+    },
+    "revisions": {
+      "_endpoints": [
+        {
+          "path": "/wiki/revisions",
+          "oauth": [
+            "wikiread"
+          ],
+          "extensions": [],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "show": {}
+          },
+          "isListing": true
+        }
+      ],
+      "$page": {
+        "_endpoints": [
+          {
+            "path": "/wiki/revisions/$page",
+            "oauth": [
+              "wikiread"
+            ],
+            "extensions": [],
+            "method": "GET",
+            "args": {
+              "after": {},
+              "before": {},
+              "count": {},
+              "limit": {},
+              "page": {},
+              "show": {}
+            },
+            "isListing": true
+          }
+        ]
+      }
+    },
+    "settings": {
+      "$page": {
+        "_endpoints": [
+          {
+            "path": "/wiki/settings/$page",
+            "oauth": [
+              "modwiki"
+            ],
+            "extensions": [],
+            "method": "GET",
+            "args": {
+              "page": {}
+            },
+            "isListing": false
+          },
+          {
+            "path": "/wiki/settings/$page",
+            "oauth": [
+              "modwiki"
+            ],
+            "extensions": [],
+            "method": "POST",
+            "args": {
+              "listed": {},
+              "page": {},
+              "permlevel": {},
+              "uh": {}
+            },
+            "isListing": false
+          }
+        ]
+      }
+    },
+    "$page": {
+      "_endpoints": [
+        {
+          "path": "/wiki/$page",
+          "oauth": [
+            "wikiread"
+          ],
+          "extensions": [],
+          "method": "GET",
+          "args": {
+            "page": {},
+            "v": {},
+            "v2": {}
+          },
+          "isListing": false
+        }
+      ]
+    }
+  },
+  "$article": {
+    "duplicates": {
+      "_endpoints": [
+        {
+          "path": "/$article/duplicates",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "article": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "show": {}
+          },
+          "isListing": true
+        }
+      ]
+    },
+    "related": {
+      "_endpoints": [
+        {
+          "path": "/$article/related",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "article": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "show": {}
+          },
+          "isListing": true
+        }
+      ]
+    }
+  },
+  "sidebar": {
+    "_endpoints": [
+      {
+        "path": "/sidebar",
+        "oauth": [
+          "read"
+        ],
+        "extensions": [],
+        "method": "GET",
+        "args": {},
+        "isListing": false
+      }
+    ]
+  },
+  "sticky": {
+    "_endpoints": [
+      {
+        "path": "/sticky",
+        "oauth": [
+          "read"
+        ],
+        "extensions": [],
+        "method": "GET",
+        "args": {},
+        "isListing": false
+      }
+    ]
+  },
+  "duplicates": {
+    "$article": {
+      "_endpoints": [
+        {
+          "path": "/duplicates/$article",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [
+            ".json",
+            ".xml"
+          ],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "article": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "show": {}
+          },
+          "isListing": true
+        }
+      ]
+    }
+  },
+  "related": {
+    "$article": {
+      "_endpoints": [
+        {
+          "path": "/related/$article",
+          "oauth": [
+            "read"
+          ],
+          "extensions": [],
+          "method": "GET",
+          "args": {
+            "after": {},
+            "article": {},
+            "before": {},
+            "count": {},
+            "limit": {},
+            "show": {}
+          },
+          "isListing": true
+        }
+      ]
+    }
   }
-]
+}
 },{}],3:[function(require,module,exports){
 /*!
  * The buffer module from node.js, for the browser.
@@ -16522,6 +17612,8 @@ oauth.getImplicitAuthUrl = function(options) {
  */
 oauth.getAuthData = function(type, options) {
 
+  console.log('oauth.js:::', type, options);
+
   // parameters to send to reddit when requesting the access_token
   var params = {};
 
@@ -16534,41 +17626,43 @@ oauth.getAuthData = function(type, options) {
   }
   // This AuthData is for a logged out user
   else if (options.applicationOnly) {
+    console.log('oh hey! (3)');
     switch(type) {
       case 'script':
       case 'installed': // web & installed for backwards compatability
       case 'web':
       case 'explicit':
-	params.grant_type = 'client_credentials';
-	break;
+        params.grant_type = 'client_credentials';
+        break;
       case 'implicit':
-	params.grant_type = 'https://oauth.reddit.com/grants/installed_client';
-	params.device_id = options.deviceId || 'DO_NOT_TRACK_THIS_DEVICE';
-	break;
+        console.log('yay (4)');
+        params.grant_type = 'https://oauth.reddit.com/grants/installed_client';
+        params.device_id = options.deviceId || 'DO_NOT_TRACK_THIS_DEVICE';
+        break;
       default:
-	return when.reject(new Error('Invalid OAuth type specified (Application only OAuth).'));
+        return when.reject(new Error('Invalid OAuth type specified (Application only OAuth).'));
     }
   }
   // This AuthData is for an actual logged in user
   else {
     switch (type) {
       case 'script':
-	params.grant_type = 'password';
-	params.username = options.username;
-	params.password = options.password;
-	break;
+        params.grant_type = 'password';
+        params.username = options.username;
+        params.password = options.password;
+        break;
       case 'web': // web & installed for backwards compatability
       case 'installed':
       case 'explicit':
-	params.grant_type = 'authorization_code';
-	params.client_id = options.key;
-	params.redirect_uri = options.redirectUri;
-	params.code = options.authorizationCode;
-	break;
+        params.grant_type = 'authorization_code';
+        params.client_id = options.key;
+        params.redirect_uri = options.redirectUri;
+        params.code = options.authorizationCode;
+        break;
       case 'refresh':
-	break;
+        break;
       default:
-	return when.reject(new Error('Invalid OAuth type specified (Authenticated OAuth).'));
+        return when.reject(new Error('Invalid OAuth type specified (Authenticated OAuth).'));
     }
   }
 
@@ -16854,10 +17948,14 @@ var form = require('./form');
 
 exports.https = function(options, formData) {
 
+  console.log('REQUEST OPTIONS::::::', options);
+
   options = options || {};
   options.headers = options.headers || {};
 
   var data = form.getData(formData);
+
+  console.log('BUFFER DATA>>>', data.buffer.toString());
 
   options.headers['Content-Type'] = data.contentType;
 
@@ -16867,30 +17965,47 @@ exports.https = function(options, formData) {
       // https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest
       var x = new XMLHttpRequest();
 
+      x.withCredentials = true;
+
       var url = 'https://' + options.hostname + options.path;
 
       // append the form data to the end of the url
-      if (options.method === 'GET') {
-	url += '?' + data.buffer.toString();
+      if (options.method === 'GET' && data.buffer.toString() !== '') {
+        url += '?' + data.buffer.toString();
       }
 
       x.open(options.method, url, true);
 
       Object.keys(options.headers).forEach(function(headerKey) {
-	x.setRequestHeader(headerKey, options.headers[headerKey]);
+        x.setRequestHeader(headerKey, options.headers[headerKey]);
       });
 
       x.onreadystatechange = function() {
-	if (x.readyState > 3) {
-	  // Normalize the result to match how requestNode.js works
-	  return resolve({
-	    _body: x.responseText,
-	    _status: x.status
-	  });
-	}
+        if (x.readyState > 3) {
+          // Normalize the result to match how requestNode.js works
+
+          var normStatus = x.status;
+
+          // We can sometimes have a response status of 0
+          //
+          // This usually occurs when the browser comes back with
+          // a cross origin error (e.g. we're not authenticated properly)
+          if (normStatus < 100) {
+            normStatus = 403; // make it a client error.
+          }
+
+          return resolve({
+            _body: x.responseText,
+            _status: normStatus
+          });
+        }
       };
 
-      x.send(options.method === 'GET' ? null : data.buffer.toString());
+      if (options.method === 'GET') {
+        x.send();
+      } else {
+        x.send(data.buffer.toString());
+      }
 
     } catch (e) {
       return reject(e);
@@ -16903,14 +18018,29 @@ exports.https = function(options, formData) {
 },{"./form":74,"when":70}],77:[function(require,module,exports){
 // Files that will be tested on the browser
 
+var when = require('when');
+
+var config = require('./config');
+
 describe('Snoocore Browser Tests', function() {
+
+  this.timeout(config.testTimeout);
+
+  before(function() {
+    return when.resolve().delay(10000);
+  });
+
+  after(function() {
+    return when.resolve().delay(1000000);
+  });
+
   require('./src/snoocore-behavior-noauth-test');
   require('./src/request-test');
   require('./src/snoocore-internal-test');
   require('./src/snoocore-listings-test');
 });
 
-},{"./src/request-test":79,"./src/snoocore-behavior-noauth-test":80,"./src/snoocore-internal-test":81,"./src/snoocore-listings-test":82}],78:[function(require,module,exports){
+},{"./config":78,"./src/request-test":79,"./src/snoocore-behavior-noauth-test":80,"./src/snoocore-internal-test":81,"./src/snoocore-listings-test":82,"when":70}],78:[function(require,module,exports){
 (function (process){
 
 // By default it will read from the environment 
@@ -17028,10 +18158,10 @@ var util = require('./util');
 describe('Snoocore Behavior Test (noauth)', function () {
 
   this.timeout(config.testTimeout);
+  
+  it.only('should GET resources while not logged in', function() {
 
-  it('should GET resources while not logged in', function() {
-
-    var reddit = util.getScriptInstance([ 'read' ]);
+    var reddit = util.getImplicitInstance([ 'read' ]);
 
     return reddit('/r/$subreddit/new').get({
       $subreddit: 'pcmasterrace'
@@ -17377,6 +18507,20 @@ describe('Snoocore Internal Tests', function () {
 		   });
     });
 
+    it('should call a raw route just using a path', function() {
+      var reddit = util.getScriptInstance([ 'read' ]);
+      return reddit.raw('/r/netsec/hot.json').get().then(function(result) {
+	expect(result).to.haveOwnProperty('kind', 'Listing');
+      });
+    });
+
+    it('it should redirect to reddit.raw when the path is unknown in `reddit(path)`', function() {
+      var reddit = util.getScriptInstance([ 'read' ]);
+      return reddit('/.json').get().then(function(result) {
+	expect(result).to.haveOwnProperty('kind', 'Listing');
+      });
+    });
+
   });
 
   describe('#path()', function() {
@@ -17399,13 +18543,6 @@ describe('Snoocore Internal Tests', function () {
 		       .then(function(result) {
 			 expect(result).to.haveOwnProperty('kind', 'Listing');
 		       });
-    });
-
-    it('should crash if an invalid endpoint is provided', function() {
-      var reddit = util.getScriptInstance([ 'read' ]);
-      expect(function() {
-        return reddit.path('/invalid/endpoint');
-      }).to.throw();
     });
 
     it('should allow a "path" syntax (where reddit === path fn)', function() {

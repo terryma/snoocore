@@ -8,9 +8,8 @@ var he = require('he');
 var when = require('when');
 var delay = require('when/delay');
 
-var endpointTree = require('./build/endpointTree');
+var Endpoint = require('./endpoint');
 var utils = require('./utils');
-
 var pkg = require('./package');
 
 module.exports = Snoocore;
@@ -22,6 +21,10 @@ Snoocore.request = require('./request');
 Snoocore.file = require('./request/file');
 
 Snoocore.when = when;
+
+
+// - - -
+
 
 util.inherits(Snoocore, events.EventEmitter);
 function Snoocore(config) {
@@ -50,7 +53,7 @@ function Snoocore(config) {
   self._refreshToken = ''; // Set when calling `refresh` and when duration: 'permanent'
 
   self._oauth = thisOrThat(config.oauth, {});
-  self._oauth.scope = thisOrThat(self._oauth.scope, [ 'identity' ]); // Default scope for reddit
+  self._oauth.scope = thisOrThat(self._oauth.scope, []);
   self._oauth.deviceId = thisOrThat(self._oauth.deviceId, 'DO_NOT_TRACK_THIS_DEVICE');
   self._oauth.type = thisOrThrow(self._oauth.type, missingMsg + '`oauth.type`');
   self._oauth.key = thisOrThrow(self._oauth.key, missingMsg + '`oauth.key`');
@@ -62,6 +65,7 @@ function Snoocore(config) {
   if (isOAuthType('explicit') || isOAuthType('script')) {
     self._oauth.secret = thisOrThrow(self._oauth.secret, missingMsg + '`oauth.secret` for type explicit/script');
   }
+
 
   if (isOAuthType('script')) {
     self._oauth.username = thisOrThrow(self._oauth.username,  missingMsg + '`oauth.username` for type script');
@@ -169,29 +173,6 @@ function Snoocore(config) {
   }
 
   /*
-     Checks if a given endpoint needs scopes that were not defined
-     in the configuration.
-   */
-  self._test.hasMissingScopes = hasMissingScopes;
-  function hasMissingScopes(endpoint) {
-    // Check that the correct scopes have been requested
-    var requiredScope;
-    var missingScope;
-    var i = endpoint.oauth.length - 1;
-    for (; i >= 0; --i) {
-      requiredScope = endpoint.oauth[i];
-      missingScope = (
-        (self._oauth.scope || []).indexOf(requiredScope) === -1 &&
-        requiredScope !== 'any');
-
-      if (missingScope) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /*
      Takes an url, and an object of url parameters and replaces
      them, e.g.
 
@@ -226,50 +207,26 @@ function Snoocore(config) {
   }
 
   /*
-     Adds the appropriate url extension to a url if it is available.
-
-     Currently, we only care about ".json" extensions. If an endpoint
-     url has a ".json" extension, we return a new url with '.json'
-     attached to the end.
-   */
-  self._test.addUrlExtension = addUrlExtension;
-  function addUrlExtension(endpointUrl, endpointExtensions) {
-    endpointExtensions = endpointExtensions || [];
-    // add ".json" if we have an url path that needs it specified
-    if (endpointExtensions.length === 0) { return endpointUrl; }
-
-    if (endpointExtensions.indexOf('.json') === -1) {
-      throw new Error(
-        'Invalid extension types specified, unable to use ' +
-        'this endpoint!');
-    }
-
-    endpointUrl += '.json';
-    return endpointUrl;
-  }
-
-  /*
      Builds the URL that we will query reddit with.
    */
   self._test.buildUrl = buildUrl;
   function buildUrl(givenArgs, endpoint, options) {
     options = options || {};
     var serverOAuth = thisOrThat(options.serverOAuth, self._serverOAuth);
+
     var url = 'https://' + serverOAuth + endpoint.path;
     url = replaceUrlParams(url, givenArgs);
-    url = addUrlExtension(url, endpoint.extensions);
     return url;
   }
 
   /*
      Build the arguments that we will send to reddit in our
-     request. These customize the request / what reddit will
-     send back.
+     request. These customize the request that we send to reddit
    */
   self._test.buildArgs = buildArgs;
   function buildArgs(endpointArgs, endpoint) {
 
-    endpoint = endpoint || {};
+    endpointArgs = endpointArgs || {};
     var args = {};
 
     // Skip any url parameters (e.g. items that begin with $)
@@ -281,70 +238,11 @@ function Snoocore(config) {
 
     var apiType = thisOrThat(endpointArgs.api_type, self._apiType);
 
-    // If we have an api type (not false), and the endpoint requires it
-    // go ahead and set it in the args.
-    if (apiType && endpoint.args && typeof endpoint.args.api_type !== 'undefined') {
-      args.api_type = 'json';
+    if (endpoint.needsApiTypeJson) {
+      args.api_type = apiType;
     }
 
     return args;
-  }
-
-  /*
-     Returns an object containing the restful verb that is needed to
-     call the reddit API. That verb is a function call to `callRedditApi`
-     with the necessary normalization modifications setup in options.
-   */
-  self._test.buildCall = buildCall;
-  function buildCall(endpoints, options) {
-
-    options = options || {};
-    var methods = {};
-
-    // normalize the arguments given by the user to conform to the
-    // endpoint tree
-    function fixGivenArgs(givenArgs) {
-      givenArgs = givenArgs || {};
-
-      // replace any of the user alias place holders with the actual ones
-      Object.keys(options.urlParamAlias || []).forEach(function(providedAlias) {
-        // e.g. '$subreddit' vs '$sub'
-        var actualAlias = options.urlParamAlias[providedAlias];
-        // set the givenArgs to matche the actual alias value with the value that
-        // the user gave
-        givenArgs[actualAlias] = givenArgs[providedAlias];
-        // remove the provided alias
-        delete givenArgs[providedAlias];
-      });
-
-      // replace any of the url parameters with values embedded into the
-      // path into the givenArguments
-      Object.keys(options.urlParamValue || []).forEach(function(providedValue) {
-        // e.g. '$subreddit' vs 'aww'
-        var actualAlias = options.urlParamValue[providedValue];
-        // add the correct argument to givenArgs with the value provided
-        givenArgs[actualAlias] = providedValue;
-      });
-
-      return givenArgs;
-    }
-
-    endpoints.forEach(function(endpoint) {
-      methods[endpoint.method.toLowerCase()] = function(givenArgs, callOptions) {
-        givenArgs = fixGivenArgs(givenArgs);
-        return callRedditApi(endpoint, givenArgs, callOptions);
-      };
-
-      // Listings can only be 'GET' requests
-      if (endpoint.method === 'GET' && endpoint.isListing) {
-        methods.listing = function(givenArgs, callOptions) {
-          givenArgs = fixGivenArgs(givenArgs);
-          return getListing(endpoint, givenArgs, callOptions);
-        };
-      }
-    });
-
-    return methods;
   }
 
   /*
@@ -505,7 +403,8 @@ function Snoocore(config) {
       data = he.decode(data);
     }
 
-    try { // Attempt to parse some JSON, otherwise continue on (may be empty, or text)
+    // Attempt to parse some JSON, otherwise continue on (may be empty, or text)
+    try {
       data = JSON.parse(data);
     } catch(e) {}
 
@@ -555,10 +454,6 @@ function Snoocore(config) {
    */
   self._test.callRedditApi = callRedditApi;
   function callRedditApi(endpoint, givenArgs, callContextOptions) {
-
-    if (hasMissingScopes(endpoint)) {
-      return when.reject(new Error('missing required scope(s): ' + endpoint.oauth.join(', ')));
-    }
 
     callContextOptions = normalizeCallContextOptions(callContextOptions);
 
@@ -691,100 +586,39 @@ function Snoocore(config) {
   }
 
   /*
-     Build support for the raw API calls
+     Enable path syntax support, e.g. reddit('/path/to/$endpoint/etc')
+
+     Can take an url as well, but the first part of the url is chopped
+     off because it is not needed. We will always use the server oauth
+     to call the API...
+
+     e.g. https://www.example.com/api/v1/me
+
+     will only use the path: /api/v1/me
    */
-  self.raw = function(urlOrPath) {
+  self.path = function(urlOrPath) {
 
     var parsed = urlLib.parse(urlOrPath);
+    var path = parsed.pathname;
 
-    function getEndpoint(method) {
-      return {
-        path: parsed.pathname,
-        method: method,
-        oauth: [],
-        isListing: true
+    var calls = {};
+
+    ['get', 'post', 'put', 'patch', 'delete', 'update'].forEach(function(verb) {
+      calls[verb] = function(givenArgs, callContextOptions) {
+        return callRedditApi(new Endpoint(verb, path),
+                             givenArgs,
+                             callContextOptions);
       };
-    }
+    });
 
-    var endpoints = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'UPDATE'].map(getEndpoint);
-
-    return buildCall(endpoints);
-  };
-
-
-  /*
-     Enable path syntax support, e.g. reddit('/path/to/$endpoint/etc')
-   */
-  self.path = function(path) {
-
-    // remove leading slash if any
-    var sections = path.replace(/^\//, '').split('/');
-    var leaf = endpointTree; // the top level of the endpoint tree that we will traverse down
-
-    // Adjust how this call is built if necessary
-    var buildCallOptions = {
-      urlParamAlias: {}, // aliases for url parameters
-      urlParamValue: {} // values for url parameters (included in the url vs. using $placeholder)
+    // Add listing support
+    calls.listing = function(givenArgs, callContextOptions) {
+      return getListing(new Endpoint('get', path),
+                        givenArgs,
+                        callContextOptions);
     };
 
-    // Travel down the endpoint tree until we get to the endpoint that we want
-    for (var i = 0, len = sections.length; i < len; ++i) {
-
-      // The section of the url path provided
-      var providedSection = sections[i];
-      var nextSection = sections[i + 1];
-
-      // The *real* section should the provided section not exist
-      var actualSection = providedSection;
-
-      // If the user provided section does not exist in our endpoint tree
-      // this means that they are using their own placeholder, or an actual
-      // value of the url parameter
-      if (typeof leaf[providedSection] === 'undefined') {
-
-        var leafKeys = Object.keys(leaf);
-
-        for (var j = 0, jlen = leafKeys.length; j < jlen; ++j) {
-          // Return the section that represents a placeholder
-          if (leafKeys[j].substring(0, 1) === '$') {
-            actualSection = leafKeys[j]; // The actual value, e.g. '$subreddit'
-
-            // If this section is the actual section, the next section of
-            // this path should be valid as well if we have a next session
-            if (nextSection && leaf[actualSection][nextSection]) {
-              break;
-            }
-
-            // continue until we find a valid section
-          }
-        }
-
-        // The user is using their own alias
-        if (providedSection.substring(0, 1) === '$') {
-          buildCallOptions.urlParamAlias[providedSection] = actualSection;
-        }
-        // looks like they used a value instead of the placeholder
-        else {
-          buildCallOptions.urlParamValue[providedSection] = actualSection;
-        }
-
-      }
-
-      // Check that the actual section is a valid one
-      if (typeof leaf[actualSection] === 'undefined') {
-        return self.raw(path); // Assume that this is a raw endpoint.
-      }
-
-      // move down the endpoint tree
-      leaf = leaf[actualSection];
-    }
-
-    // Check that our leaf is an endpoint before building the call
-    if (typeof leaf._endpoints === 'undefined') {
-      return self.raw(path); // Assume that this is a raw endpoint
-    }
-
-    return buildCall(leaf._endpoints, buildCallOptions);
+    return calls;
   };
 
   /*

@@ -13,13 +13,13 @@ var Snoocore = require('../../Snoocore');
 var config = require('../config');
 var util = require('./util');
 
-describe('Snoocore Behavior Test (noauth)', function () {
+describe.only('Snoocore Behavior Test (noauth)', function () {
 
   this.timeout(config.testTimeout);
-
+  
   it('should GET resources while not logged in', function() {
 
-    var reddit = util.getScriptInstance([ 'read' ]);
+    var reddit = util.getImplicitInstance([ 'read' ]);
 
     return reddit('/r/$subreddit/new').get({
       $subreddit: 'pcmasterrace'

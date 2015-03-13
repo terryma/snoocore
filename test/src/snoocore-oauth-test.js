@@ -31,7 +31,7 @@ describe('Snoocore OAuth Test', function () {
 
   });
 
-  describe.only('Explicit internal configuration (duration permanent)', function() {
+  describe('Explicit internal configuration (duration permanent)', function() {
 
     it('should auth, get refresh token, deauth, use refresh token to reauth, deauth(true) -> refresh', function() {
 
