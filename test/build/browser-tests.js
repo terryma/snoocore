@@ -14,7 +14,7 @@ var utils = require('./utils');
 
 module.exports = Snoocore;
 
-Snoocore.version = '2.7.2';
+Snoocore.version = '2.7.3';
 
 Snoocore.oauth = require('./oauth');
 Snoocore.request = require('./request');
@@ -69,7 +69,6 @@ function Snoocore(config) {
   // @TODO move this into a build step in ./run.js, no need to build
   // this every time we load the library
   self._endpointTree = buildEndpointTree(rawApi);
-
 
   // The current throttle delay before a request will go through
   // increments every time a call is made, and is reduced when a
@@ -577,7 +576,11 @@ function Snoocore(config) {
 
       // push the endpoint to this section of the tree
       if (typeof leaf[pathSections[i]] === 'undefined') {
-        leaf[pathSections[i]] = { _endpoints: [] };
+        leaf[pathSections[i]] = {};
+      }
+
+      if (typeof leaf[pathSections[i]]._endpoints === 'undefined') {
+        leaf[pathSections[i]]._endpoints = [];
       }
 
       leaf[pathSections[i]]._endpoints.push(endpoint);
@@ -1082,10 +1085,7 @@ module.exports=[
     "oauth": [
       "read"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "after": {},
@@ -1101,10 +1101,7 @@ module.exports=[
     "oauth": [
       "read"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "after": {},
@@ -1120,10 +1117,7 @@ module.exports=[
     "oauth": [
       "read"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "after": {},
@@ -1139,10 +1133,7 @@ module.exports=[
     "oauth": [
       "read"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "after": {},
@@ -2032,10 +2023,7 @@ module.exports=[
     "oauth": [
       "read"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "t": {},
@@ -2052,10 +2040,7 @@ module.exports=[
     "oauth": [
       "read"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "t": {},
@@ -2072,10 +2057,7 @@ module.exports=[
     "oauth": [
       "read"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "t": {},
@@ -2092,10 +2074,7 @@ module.exports=[
     "oauth": [
       "read"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "t": {},
@@ -2464,10 +2443,7 @@ module.exports=[
     "oauth": [
       "privatemessages"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "mark": {},
@@ -2485,10 +2461,7 @@ module.exports=[
     "oauth": [
       "privatemessages"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "mark": {},
@@ -2506,10 +2479,7 @@ module.exports=[
     "oauth": [
       "privatemessages"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "mark": {},
@@ -3277,10 +3247,7 @@ module.exports=[
     "oauth": [
       "read"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "after": {},
@@ -3297,10 +3264,7 @@ module.exports=[
     "oauth": [
       "read"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "after": {},
@@ -3317,10 +3281,7 @@ module.exports=[
     "oauth": [
       "read"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "after": {},
@@ -3337,10 +3298,7 @@ module.exports=[
     "oauth": [
       "read"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "after": {},
@@ -3357,10 +3315,7 @@ module.exports=[
     "oauth": [
       "read"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "after": {},
@@ -3377,10 +3332,7 @@ module.exports=[
     "oauth": [
       "read"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "after": {},
@@ -3397,10 +3349,7 @@ module.exports=[
     "oauth": [
       "read"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "after": {},
@@ -3417,10 +3366,7 @@ module.exports=[
     "oauth": [
       "read"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "after": {},
@@ -3437,10 +3383,7 @@ module.exports=[
     "oauth": [
       "read"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "after": {},
@@ -3457,10 +3400,7 @@ module.exports=[
     "oauth": [
       "read"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "after": {},
@@ -3756,10 +3696,7 @@ module.exports=[
     "oauth": [
       "mysubreddits"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "after": {},
@@ -3775,10 +3712,7 @@ module.exports=[
     "oauth": [
       "mysubreddits"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "after": {},
@@ -3794,10 +3728,7 @@ module.exports=[
     "oauth": [
       "mysubreddits"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "after": {},
@@ -3852,10 +3783,7 @@ module.exports=[
     "oauth": [
       "read"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "after": {},
@@ -3871,10 +3799,7 @@ module.exports=[
     "oauth": [
       "read"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "after": {},
@@ -4086,10 +4011,7 @@ module.exports=[
     "oauth": [
       "history"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "show": {},
@@ -4108,10 +4030,7 @@ module.exports=[
     "oauth": [
       "history"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "show": {},
@@ -4130,10 +4049,7 @@ module.exports=[
     "oauth": [
       "history"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "show": {},
@@ -4152,10 +4068,7 @@ module.exports=[
     "oauth": [
       "history"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "show": {},
@@ -4174,10 +4087,7 @@ module.exports=[
     "oauth": [
       "history"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "show": {},
@@ -4196,10 +4106,7 @@ module.exports=[
     "oauth": [
       "history"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "show": {},
@@ -4218,10 +4125,7 @@ module.exports=[
     "oauth": [
       "history"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "show": {},
@@ -4240,10 +4144,7 @@ module.exports=[
     "oauth": [
       "history"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "show": {},
@@ -4736,10 +4637,7 @@ module.exports=[
     "oauth": [
       "read"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "after": {},
@@ -4824,10 +4722,7 @@ module.exports=[
     "oauth": [
       "read"
     ],
-    "extensions": [
-      ".json",
-      ".xml"
-    ],
+    "extensions": [],
     "method": "GET",
     "args": {
       "after": {},
@@ -4835,6 +4730,580 @@ module.exports=[
       "count": {},
       "limit": {},
       "show": {}
+    },
+    "isListing": true
+  },
+  {
+    "path": "/prefs/$wherersssupport",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "after": {},
+      "before": {},
+      "count": {},
+      "limit": {},
+      "show": {}
+    },
+    "isListing": true
+  },
+  {
+    "path": "/api/needs_captcha",
+    "oauth": [
+      "any"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {},
+    "isListing": false
+  },
+  {
+    "path": "/api/saved_categories",
+    "oauth": [
+      "save"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {},
+    "isListing": false
+  },
+  {
+    "path": "/comments/$articlersssupport",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "article": {},
+      "comment": {},
+      "context": {},
+      "depth": {},
+      "limit": {},
+      "showedits": {},
+      "showmore": {},
+      "sort": {}
+    },
+    "isListing": false
+  },
+  {
+    "path": "/r/$subreddit/comments/$articlersssupport",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "article": {},
+      "comment": {},
+      "context": {},
+      "depth": {},
+      "limit": {},
+      "showedits": {},
+      "showmore": {},
+      "sort": {}
+    },
+    "isListing": false
+  },
+  {
+    "path": "/duplicates/$articlersssupport",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "after": {},
+      "article": {},
+      "before": {},
+      "count": {},
+      "limit": {},
+      "show": {}
+    },
+    "isListing": true
+  },
+  {
+    "path": "/hotrsssupport",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "after": {},
+      "before": {},
+      "count": {},
+      "limit": {},
+      "show": {}
+    },
+    "isListing": true
+  },
+  {
+    "path": "/r/$subreddit/hotrsssupport",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "after": {},
+      "before": {},
+      "count": {},
+      "limit": {},
+      "show": {}
+    },
+    "isListing": true
+  },
+  {
+    "path": "/newrsssupport",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "after": {},
+      "before": {},
+      "count": {},
+      "limit": {},
+      "show": {}
+    },
+    "isListing": true
+  },
+  {
+    "path": "/r/$subreddit/newrsssupport",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "after": {},
+      "before": {},
+      "count": {},
+      "limit": {},
+      "show": {}
+    },
+    "isListing": true
+  },
+  {
+    "path": "/$sortrsssupport",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "t": {},
+      "after": {},
+      "before": {},
+      "count": {},
+      "limit": {},
+      "show": {}
+    },
+    "isListing": true
+  },
+  {
+    "path": "/r/$subreddit/$sortrsssupport",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "t": {},
+      "after": {},
+      "before": {},
+      "count": {},
+      "limit": {},
+      "show": {}
+    },
+    "isListing": true
+  },
+  {
+    "path": "/live/$threadrsssupport",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "after": {},
+      "before": {},
+      "count": {},
+      "is_embed": {},
+      "limit": {},
+      "stylesr": {}
+    },
+    "isListing": false
+  },
+  {
+    "path": "/live/$thread/about",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {},
+    "isListing": false
+  },
+  {
+    "path": "/live/$thread/contributors",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {},
+    "isListing": false
+  },
+  {
+    "path": "/live/$thread/discussionsrsssupport",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "after": {},
+      "before": {},
+      "count": {},
+      "limit": {},
+      "show": {}
+    },
+    "isListing": true
+  },
+  {
+    "path": "/message/$wherersssupport",
+    "oauth": [
+      "privatemessages"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "mark": {},
+      "mid": {},
+      "after": {},
+      "before": {},
+      "count": {},
+      "limit": {},
+      "show": {}
+    },
+    "isListing": true
+  },
+  {
+    "path": "/about/logrsssupport",
+    "oauth": [
+      "modlog"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "after": {},
+      "before": {},
+      "count": {},
+      "limit": {},
+      "mod": {},
+      "show": {},
+      "type": {}
+    },
+    "isListing": true
+  },
+  {
+    "path": "/r/$subreddit/about/logrsssupport",
+    "oauth": [
+      "modlog"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "after": {},
+      "before": {},
+      "count": {},
+      "limit": {},
+      "mod": {},
+      "show": {},
+      "type": {}
+    },
+    "isListing": true
+  },
+  {
+    "path": "/api/multi/copy",
+    "oauth": [
+      "subscribe"
+    ],
+    "extensions": [],
+    "method": "POST",
+    "args": {
+      "display_name": {},
+      "from": {},
+      "to": {},
+      "uh": {}
+    },
+    "isListing": false
+  },
+  {
+    "path": "/api/multi/rename",
+    "oauth": [
+      "subscribe"
+    ],
+    "extensions": [],
+    "method": "POST",
+    "args": {
+      "display_name": {},
+      "from": {},
+      "to": {},
+      "uh": {}
+    },
+    "isListing": false
+  },
+  {
+    "path": "/api/multi/user/$username",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "expand_srs": {},
+      "username": {}
+    },
+    "isListing": false
+  },
+  {
+    "path": "/searchrsssupport",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "after": {},
+      "before": {},
+      "count": {},
+      "limit": {},
+      "q": {},
+      "restrict_sr": {},
+      "show": {},
+      "sort": {},
+      "syntax": {},
+      "t": {}
+    },
+    "isListing": true
+  },
+  {
+    "path": "/r/$subreddit/searchrsssupport",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "after": {},
+      "before": {},
+      "count": {},
+      "limit": {},
+      "q": {},
+      "restrict_sr": {},
+      "show": {},
+      "sort": {},
+      "syntax": {},
+      "t": {}
+    },
+    "isListing": true
+  },
+  {
+    "path": "/about/$wherersssupport",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "after": {},
+      "before": {},
+      "count": {},
+      "limit": {},
+      "show": {},
+      "user": {}
+    },
+    "isListing": true
+  },
+  {
+    "path": "/r/$subreddit/about/$wherersssupport",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "after": {},
+      "before": {},
+      "count": {},
+      "limit": {},
+      "show": {},
+      "user": {}
+    },
+    "isListing": true
+  },
+  {
+    "path": "/api/search_reddit_names",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [],
+    "method": "POST",
+    "args": {
+      "exact": {},
+      "include_over_18": {},
+      "query": {}
+    },
+    "isListing": false
+  },
+  {
+    "path": "/api/submit_text",
+    "oauth": [
+      "submit"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {},
+    "isListing": false
+  },
+  {
+    "path": "/r/$subreddit/api/submit_text",
+    "oauth": [
+      "submit"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {},
+    "isListing": false
+  },
+  {
+    "path": "/api/subreddits_by_topic",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "query": {}
+    },
+    "isListing": false
+  },
+  {
+    "path": "/r/$subreddit/about",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {},
+    "isListing": false
+  },
+  {
+    "path": "/r/$subreddit/about/edit",
+    "oauth": [
+      "modconfig"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "created": {},
+      "location": {}
+    },
+    "isListing": false
+  },
+  {
+    "path": "/subreddits/mine/$wherersssupport",
+    "oauth": [
+      "mysubreddits"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "after": {},
+      "before": {},
+      "count": {},
+      "limit": {},
+      "show": {}
+    },
+    "isListing": true
+  },
+  {
+    "path": "/subreddits/searchrsssupport",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "after": {},
+      "before": {},
+      "count": {},
+      "limit": {},
+      "q": {},
+      "show": {}
+    },
+    "isListing": true
+  },
+  {
+    "path": "/subreddits/$wherersssupport",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "after": {},
+      "before": {},
+      "count": {},
+      "limit": {},
+      "show": {}
+    },
+    "isListing": true
+  },
+  {
+    "path": "/api/username_available",
+    "oauth": [],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "user": {}
+    },
+    "isListing": false
+  },
+  {
+    "path": "/user/$username/about",
+    "oauth": [
+      "read"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "username": {}
+    },
+    "isListing": false
+  },
+  {
+    "path": "/user/$username/$wherersssupport",
+    "oauth": [
+      "history"
+    ],
+    "extensions": [],
+    "method": "GET",
+    "args": {
+      "show": {},
+      "sort": {},
+      "t": {},
+      "username": {},
+      "after": {},
+      "before": {},
+      "count": {},
+      "limit": {}
     },
     "isListing": true
   }
@@ -8805,6 +9274,10 @@ function hasOwnProperty(obj, prop) {
         assertion.then = promise.then.bind(promise);
     };
 
+    chaiAsPromised.transformAsserterArgs = function (values) {
+        return values;
+    };
+
     function chaiAsPromised(chai, utils) {
         var Assertion = chai.Assertion;
         var assert = chai.assert;
@@ -9079,6 +9552,9 @@ function hasOwnProperty(obj, prop) {
                 // just the base Chai code that we get to via the short-circuit above.
                 assertion._obj = value;
                 utils.flag(assertion, "eventually", false);
+
+                return args ? chaiAsPromised.transformAsserterArgs(args) : args;
+            }).then(function (args) {
                 asserter.apply(assertion, args);
 
                 // Because asserters, for example `property`, can change the value of `_obj` (i.e. change the "object"
@@ -17160,7 +17636,7 @@ describe('Snoocore Internal Tests', function () {
       var endpoint = { args: { api_type: '' } };
 
       expect(reddit._test.buildArgs(args, endpoint)).to.eql({
-	api_type: 'json'
+        api_type: 'json'
       });
     });
 
@@ -17170,7 +17646,7 @@ describe('Snoocore Internal Tests', function () {
       // will get the default reddit behavior. This is generally
       // what most users want to avoid.
       reddit = new Snoocore({
-	apiType: false
+        apiType: false
       });
 
       var args = {};
@@ -17186,19 +17662,19 @@ describe('Snoocore Internal Tests', function () {
     it('should call a raw route', function() {
       var reddit = util.getRawInstance();
       return reddit.raw('https://www.reddit.com/r/netsec/hot.json')
-		   .get()
-		   .then(function(result) {
-		     expect(result).to.haveOwnProperty('kind', 'Listing');
-		   });
+                   .get()
+                   .then(function(result) {
+                     expect(result).to.haveOwnProperty('kind', 'Listing');
+                   });
     });
 
     it('should call a raw route (with parameters)', function() {
       var reddit = util.getRawInstance();
       return reddit.raw('https://www.reddit.com/r/$subreddit/hot.json')
-		   .get({ $subreddit: 'netsec' })
-		   .then(function(result) {
-		     expect(result).to.haveOwnProperty('kind', 'Listing');
-		   });
+                   .get({ $subreddit: 'netsec' })
+                   .then(function(result) {
+                     expect(result).to.haveOwnProperty('kind', 'Listing');
+                   });
     });
 
   });
@@ -17208,21 +17684,21 @@ describe('Snoocore Internal Tests', function () {
     it('should allow a "path" syntax', function() {
       var reddit = util.getRawInstance();
       return reddit
-		       .path('/r/$subreddit/hot')
-		       .get({ $subreddit: 'aww' })
-		       .then(function(result) {
-			 expect(result).to.haveOwnProperty('kind', 'Listing');
-		       });
+                       .path('/r/$subreddit/hot')
+                       .get({ $subreddit: 'aww' })
+                       .then(function(result) {
+                         expect(result).to.haveOwnProperty('kind', 'Listing');
+                       });
     });
 
     it('should tolerate a missing beginning slash', function() {
       var reddit = util.getRawInstance();
       return reddit
-		       .path('r/$subreddit/hot')
-		       .get({ $subreddit: 'aww' })
-		       .then(function(result) {
-			 expect(result).to.haveOwnProperty('kind', 'Listing');
-		       });
+                       .path('r/$subreddit/hot')
+                       .get({ $subreddit: 'aww' })
+                       .then(function(result) {
+                         expect(result).to.haveOwnProperty('kind', 'Listing');
+                       });
     });
 
     it('should crash if an invalid endpoint is provided', function() {
@@ -17235,41 +17711,43 @@ describe('Snoocore Internal Tests', function () {
     it('should allow a "path" syntax (where reddit === path fn)', function() {
       var reddit = util.getRawInstance();
       return reddit('/r/$subreddit/hot')
-		       .get({ $subreddit: 'aww' })
-		       .then(function(result) {
-			 expect(result).to.haveOwnProperty('kind', 'Listing');
-		       });
+                       .get({ $subreddit: 'aww' })
+                       .then(function(result) {
+                         expect(result).to.haveOwnProperty('kind', 'Listing');
+                       });
     });
 
     it('should allow for alternate placeholder names', function() {
       var reddit = util.getRawInstance();
       return reddit('/r/$sub/hot').get({ $sub: 'aww' }).then(function(result) {
-	expect(result).to.haveOwnProperty('kind', 'Listing');
+        expect(result).to.haveOwnProperty('kind', 'Listing');
       });
     });
 
     it('should allow for embedding of url parameters', function() {
       var reddit = util.getRawInstance();
       return reddit('/r/aww/hot').get().then(function(result) {
-	expect(result).to.haveOwnProperty('kind', 'Listing');
+        expect(result).to.haveOwnProperty('kind', 'Listing');
       });
     });
 
     it('should allow for embedding of url parameters (listings)', function() {
-      var reddit = util.getRawInstance();
-      return reddit('/user/kemitche/comments').listing({
-	sort: 'new'
+      var reddit = util.getScriptInstance([ 'history' ]);
+
+      return reddit.auth().then(function() {
+        return reddit('/user/kemitche/comments').listing({ sort: 'new' });
       }).then(function(result) {
-	expect(result).to.haveOwnProperty('empty', false);
+        expect(result).to.haveOwnProperty('empty', false);
       });
+
     });
 
     it('should allow a variable at the beginning of a path', function() {
       var reddit = util.getRawInstance();
       return reddit('/$sort').get({
-	$sort: 'top'
+        $sort: 'top'
       }).then(function(result) {
-	expect(result).to.haveOwnProperty('kind', 'Listing');
+        expect(result).to.haveOwnProperty('kind', 'Listing');
       });
     });
 
