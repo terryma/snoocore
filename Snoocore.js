@@ -69,7 +69,6 @@ function Snoocore(config) {
   // this every time we load the library
   self._endpointTree = buildEndpointTree(rawApi);
 
-
   // The current throttle delay before a request will go through
   // increments every time a call is made, and is reduced when a
   // call finishes.
@@ -576,7 +575,11 @@ function Snoocore(config) {
 
       // push the endpoint to this section of the tree
       if (typeof leaf[pathSections[i]] === 'undefined') {
-        leaf[pathSections[i]] = { _endpoints: [] };
+        leaf[pathSections[i]] = {};
+      }
+
+      if (typeof leaf[pathSections[i]]._endpoints === 'undefined') {
+        leaf[pathSections[i]]._endpoints = [];
       }
 
       leaf[pathSections[i]]._endpoints.push(endpoint);

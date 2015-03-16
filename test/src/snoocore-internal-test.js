@@ -166,7 +166,7 @@ describe('Snoocore Internal Tests', function () {
       var endpoint = { args: { api_type: '' } };
 
       expect(reddit._test.buildArgs(args, endpoint)).to.eql({
-	api_type: 'json'
+        api_type: 'json'
       });
     });
 
@@ -176,7 +176,7 @@ describe('Snoocore Internal Tests', function () {
       // will get the default reddit behavior. This is generally
       // what most users want to avoid.
       reddit = new Snoocore({
-	apiType: false
+        apiType: false
       });
 
       var args = {};
@@ -192,19 +192,19 @@ describe('Snoocore Internal Tests', function () {
     it('should call a raw route', function() {
       var reddit = util.getRawInstance();
       return reddit.raw('https://www.reddit.com/r/netsec/hot.json')
-		   .get()
-		   .then(function(result) {
-		     expect(result).to.haveOwnProperty('kind', 'Listing');
-		   });
+                   .get()
+                   .then(function(result) {
+                     expect(result).to.haveOwnProperty('kind', 'Listing');
+                   });
     });
 
     it('should call a raw route (with parameters)', function() {
       var reddit = util.getRawInstance();
       return reddit.raw('https://www.reddit.com/r/$subreddit/hot.json')
-		   .get({ $subreddit: 'netsec' })
-		   .then(function(result) {
-		     expect(result).to.haveOwnProperty('kind', 'Listing');
-		   });
+                   .get({ $subreddit: 'netsec' })
+                   .then(function(result) {
+                     expect(result).to.haveOwnProperty('kind', 'Listing');
+                   });
     });
 
   });
@@ -214,21 +214,21 @@ describe('Snoocore Internal Tests', function () {
     it('should allow a "path" syntax', function() {
       var reddit = util.getRawInstance();
       return reddit
-		       .path('/r/$subreddit/hot')
-		       .get({ $subreddit: 'aww' })
-		       .then(function(result) {
-			 expect(result).to.haveOwnProperty('kind', 'Listing');
-		       });
+                       .path('/r/$subreddit/hot')
+                       .get({ $subreddit: 'aww' })
+                       .then(function(result) {
+                         expect(result).to.haveOwnProperty('kind', 'Listing');
+                       });
     });
 
     it('should tolerate a missing beginning slash', function() {
       var reddit = util.getRawInstance();
       return reddit
-		       .path('r/$subreddit/hot')
-		       .get({ $subreddit: 'aww' })
-		       .then(function(result) {
-			 expect(result).to.haveOwnProperty('kind', 'Listing');
-		       });
+                       .path('r/$subreddit/hot')
+                       .get({ $subreddit: 'aww' })
+                       .then(function(result) {
+                         expect(result).to.haveOwnProperty('kind', 'Listing');
+                       });
     });
 
     it('should crash if an invalid endpoint is provided', function() {
@@ -241,41 +241,43 @@ describe('Snoocore Internal Tests', function () {
     it('should allow a "path" syntax (where reddit === path fn)', function() {
       var reddit = util.getRawInstance();
       return reddit('/r/$subreddit/hot')
-		       .get({ $subreddit: 'aww' })
-		       .then(function(result) {
-			 expect(result).to.haveOwnProperty('kind', 'Listing');
-		       });
+                       .get({ $subreddit: 'aww' })
+                       .then(function(result) {
+                         expect(result).to.haveOwnProperty('kind', 'Listing');
+                       });
     });
 
     it('should allow for alternate placeholder names', function() {
       var reddit = util.getRawInstance();
       return reddit('/r/$sub/hot').get({ $sub: 'aww' }).then(function(result) {
-	expect(result).to.haveOwnProperty('kind', 'Listing');
+        expect(result).to.haveOwnProperty('kind', 'Listing');
       });
     });
 
     it('should allow for embedding of url parameters', function() {
       var reddit = util.getRawInstance();
       return reddit('/r/aww/hot').get().then(function(result) {
-	expect(result).to.haveOwnProperty('kind', 'Listing');
+        expect(result).to.haveOwnProperty('kind', 'Listing');
       });
     });
 
     it('should allow for embedding of url parameters (listings)', function() {
-      var reddit = util.getRawInstance();
-      return reddit('/user/kemitche/comments').listing({
-	sort: 'new'
+      var reddit = util.getScriptInstance([ 'history' ]);
+
+      return reddit.auth().then(function() {
+        return reddit('/user/kemitche/comments').listing({ sort: 'new' });
       }).then(function(result) {
-	expect(result).to.haveOwnProperty('empty', false);
+        expect(result).to.haveOwnProperty('empty', false);
       });
+
     });
 
     it('should allow a variable at the beginning of a path', function() {
       var reddit = util.getRawInstance();
       return reddit('/$sort').get({
-	$sort: 'top'
+        $sort: 'top'
       }).then(function(result) {
-	expect(result).to.haveOwnProperty('kind', 'Listing');
+        expect(result).to.haveOwnProperty('kind', 'Listing');
       });
     });
 
