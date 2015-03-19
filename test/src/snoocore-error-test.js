@@ -23,7 +23,7 @@ describe('Snoocore Error Test', function () {
   it('should get a proper response error', function() {
     var reddit = util.getScriptInstance([ 'identity', 'modconfig' ]);
 
-    var responseError = reddit._test.getResponseError({
+    var responseError = reddit._test.getResponseError('', {
       _status: 200,
       _body: 300
     }, 'someurl', { some: 'args' });
@@ -45,7 +45,7 @@ describe('Snoocore Error Test', function () {
 
     return reddit.auth().then(function() {
       return reddit('/r/$subreddit/about/edit.json').get({
-	$subreddit: config.reddit.testSubreddit
+        $subreddit: config.reddit.testSubreddit
       });
     }).then(function(result) {
 
@@ -68,11 +68,11 @@ describe('Snoocore Error Test', function () {
 
     return reddit.auth().then(function() {
       return reddit('/r/$subreddit/api/upload_sr_img').post({
-	$subreddit: config.reddit.testSubreddit,
-	file: Snoocore.file('fakename', 'image/png', 'fake image data'),
-	header: 0,
-	img_type: 'png',
-	name: 'test'
+        $subreddit: config.reddit.testSubreddit,
+        file: Snoocore.file('fakename', 'image/png', 'fake image data'),
+        header: 0,
+        img_type: 'png',
+        name: 'test'
       });
     }).catch(function(error) {
       expect(error.message.indexOf('IMAGE_ERROR')).to.not.equal(-1);
@@ -80,20 +80,20 @@ describe('Snoocore Error Test', function () {
 
   });
 
-  it('should explain what scope was missing', function() {
+  it('should explain that a scope or reddit gold is missing', function() {
 
     var reddit = util.getScriptInstance([ 'identity' ]);
 
     return reddit.auth().then(function() {
       return reddit('/comments/$article').get({
-	sort: 'hot',
-	context: 8,
-	$article: '2j8u16'
+        sort: 'hot',
+        context: 8,
+        $article: '2j8u16'
       });
     }).then(function() {
       throw new Error('expected this to fail with invalid scope');
     }).catch(function(error) {
-      return expect(error.message.indexOf('missing required scope(s): read')).to.not.equal(-1);
+      return expect(error.message.indexOf('Missing a required scope or this call requires reddit gold')).to.not.equal(-1);
     });
   });
 
@@ -102,9 +102,9 @@ describe('Snoocore Error Test', function () {
 
     return reddit.auth().then(function() {
       return reddit('/comments/$article').get({
-	sort: 'hot',
-	context: 8,
-	$article: 'invalid_article_error'
+        sort: 'hot',
+        context: 8,
+        $article: 'invalid_article_error'
       });
     }).then(function() {
       throw new Error('expected this to fail with invalid scope');
@@ -112,6 +112,8 @@ describe('Snoocore Error Test', function () {
       expect(error.message.indexOf('Response Body')).to.not.equal(-1);
       expect(error.message.indexOf('Endpoint URL')).to.not.equal(-1);
       expect(error.message.indexOf('Arguments')).to.not.equal(-1);
+
+      console.log(error);
 
       expect(error.status).to.eql(404);
     });
@@ -135,33 +137,33 @@ describe('Snoocore Error Test', function () {
       reddit._serverWWW = 'localhost:' + config.testServer.serverErrorPort;
 
       return when.promise(function(resolve, reject) {
-	var hotPromise;
+        var hotPromise;
 
-	// resolve once we get the server error instance
-	reddit.on('server_error', function(error) {
+        // resolve once we get the server error instance
+        reddit.on('server_error', function(error) {
 
-	  expect(error instanceof Error);
-	  expect(error.retryAttemptsLeft).to.equal(59);
-	  expect(error.status).to.equal(500);
-	  expect(error.url).to.equal('https://localhost:3001/hot.json');
-	  expect(error.args).to.eql({});
-	  expect(error.body).to.equal('');
+          expect(error instanceof Error);
+          expect(error.retryAttemptsLeft).to.equal(59);
+          expect(error.status).to.equal(500);
+          expect(error.url).to.equal('https://localhost:3001/hot');
+          expect(error.args).to.eql({});
+          expect(error.body).to.equal('');
 
-	  // don't allow self signed certs again
-	  delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+          // don't allow self signed certs again
+          delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
 
-	  // switch to the proper reddit servers
-	  reddit._serverWWW = redditWWW;
-	  reddit._serverOAuth = redditOAuth;
+          // switch to the proper reddit servers
+          reddit._serverWWW = redditWWW;
+          reddit._serverOAuth = redditOAuth;
 
-	  expect(reddit._serverWWW).to.eql(redditWWW);
-	  expect(reddit._serverOAuth).to.eql(redditOAuth);
+          expect(reddit._serverWWW).to.eql(redditWWW);
+          expect(reddit._serverOAuth).to.eql(redditOAuth);
 
-	  // this should resolve now that the servers are correct
-	  hotPromise.done(resolve);
-	});
+          // this should resolve now that the servers are correct
+          hotPromise.done(resolve);
+        });
 
-	hotPromise = reddit('/hot').get();
+        hotPromise = reddit('/hot').get();
       });
 
     });
@@ -183,27 +185,27 @@ describe('Snoocore Error Test', function () {
       var retryAttempts = 3; // let's only retry 3 times to keep it short
 
       return when.promise(function(resolve, reject) {
-	var hotPromise;
+        var hotPromise;
 
-	// resolve once we get the server error instance
-	reddit.on('server_error', function(error) {
+        // resolve once we get the server error instance
+        reddit.on('server_error', function(error) {
 
-	  expect(error instanceof Error);
-	  expect(error.retryAttemptsLeft).to.equal(--retryAttempts);
-	  expect(error.status).to.equal(500);
-	  expect(error.url).to.equal('https://localhost:3001/hot.json');
-	  expect(error.args).to.eql({});
-	  expect(error.body).to.equal('');
+          expect(error instanceof Error);
+          expect(error.retryAttemptsLeft).to.equal(--retryAttempts);
+          expect(error.status).to.equal(500);
+          expect(error.url).to.equal('https://localhost:3001/hot');
+          expect(error.args).to.eql({});
+          expect(error.body).to.equal('');
 
-	  // resolve once we have reached our retry attempt and get an error
-	  // we should not resolve this promise! We expect it to fail!!
-	  hotPromise.done(reject, resolve);
-	});
+          // resolve once we have reached our retry attempt and get an error
+          // we should not resolve this promise! We expect it to fail!!
+          hotPromise.done(reject, resolve);
+        });
 
-	hotPromise = reddit('/hot').get(void 0, {
-	  retryAttempts: retryAttempts,
-	  retryDelay: 500 // no need to make this take longer than necessary
-	});
+        hotPromise = reddit('/hot').get(void 0, {
+          retryAttempts: retryAttempts,
+          retryDelay: 500 // no need to make this take longer than necessary
+        });
       });
 
     }).then(function(error) {

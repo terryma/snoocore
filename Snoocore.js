@@ -3,6 +3,7 @@
 var urlLib = require('url');
 var events = require('events');
 var util = require('util');
+var path = require('path');
 
 var he = require('he');
 var when = require('when');
@@ -214,7 +215,7 @@ function Snoocore(config) {
     options = options || {};
     var serverOAuth = thisOrThat(options.serverOAuth, self._serverOAuth);
 
-    var url = 'https://' + serverOAuth + endpoint.path;
+    var url = 'https://' + path.join(serverOAuth, endpoint.path);
     url = replaceUrlParams(url, givenArgs);
     return url;
   }
@@ -238,7 +239,7 @@ function Snoocore(config) {
 
     var apiType = thisOrThat(endpointArgs.api_type, self._apiType);
 
-    if (endpoint.needsApiTypeJson) {
+    if (apiType && endpoint.needsApiTypeJson) {
       args.api_type = apiType;
     }
 
@@ -277,9 +278,10 @@ function Snoocore(config) {
      Returns a uniform error for all response errors.
    */
   self._test.getResponseError = getResponseError;
-  function getResponseError(response, url, args) {
+  function getResponseError(message, response, url, args) {
 
     var responseError = new Error([
+      message,
       '>>> Response Status: ' + response._status,
       '>>> Endpoint URL: '+ url,
       '>>> Arguments: ' + JSON.stringify(args, null, 2),
@@ -308,7 +310,7 @@ function Snoocore(config) {
     var args = buildArgs(givenArgs, endpoint);
     var url = buildUrl(givenArgs, endpoint, callContextOptions);
 
-    var responseError = getResponseError(response, url, args);
+    var responseError = getResponseError('Server Error Response', response, url, args);
     responseError.retryAttemptsLeft = callContextOptions.retryAttemptsLeft;
     self.emit('server_error', responseError);
 
@@ -357,8 +359,28 @@ function Snoocore(config) {
       return when.reject(new Error('Must be authenticated with a user to make a call to this endpoint.'));
     }
 
-    var shouldAuthenticate = response._status === 401 || response._status === 403;
-    if (shouldAuthenticate) {
+    // If a call to an `any` OAuth scope returns a 4xx status, we need to
+    // authenticate. Else, the user has probably forgotten a scope or the
+    // endpoint requires reddit gold
+    var requestOptions = {
+      method: endpoint.method.toUpperCase(),
+      hostname: self._serverOAuth,
+      path: '/api/needs_captcha',
+      headers: buildHeaders(callContextOptions)
+    };
+
+    return Snoocore.request.https(requestOptions).then(function(anyResponse) {
+      // If we can successfuly make a call to the `any` OAuth scope
+      // then the origional call is invalid. Let the user know
+      if (String(anyResponse._status).substring(0, 1) !== '4') {
+        // make the error with the origional response object
+        return when.reject(getResponseError(
+          'Missing a required scope or this call requires reddit gold',
+          response,
+          url,
+          args));
+      }
+
       --callContextOptions.reauthAttemptsLeft;
 
       if (callContextOptions.reauthAttemptsLeft <= 0) {
@@ -381,15 +403,12 @@ function Snoocore(config) {
       return reauth.then(function() {
         return callRedditApi(endpoint, givenArgs, callContextOptions);
       });
-    }
 
-    // Reject with a response error that has info on the call made
-    return when.reject(getResponseError(response, url, args));
+    });
   }
 
   /*
-     Handle reddit response status of 2xx. This does *not* mean that we are in the
-     clear. We need to check for errors from reddit's end.
+     Handle reddit response status of 2xx.
 
      Finally return the data if there were no problems.
    */
@@ -434,6 +453,7 @@ function Snoocore(config) {
    */
   self._test.buildHeaders = buildHeaders;
   function buildHeaders(callContextOptions) {
+    callContextOptions = callContextOptions || {};
     var headers = {};
 
     if (self._isNode) {

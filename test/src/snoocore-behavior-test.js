@@ -44,15 +44,15 @@ describe('Snoocore Behavior Test', function () {
 
     return reddit.auth().then(function() {
       return reddit('/r/$subreddit/api/delete_sr_header').post({
-	$subreddit: config.reddit.testSubreddit
+        $subreddit: config.reddit.testSubreddit
       });
     }).then(function() {
       return reddit('/r/$subreddit/api/upload_sr_img').post({
-	$subreddit: config.reddit.testSubreddit,
-	file: Snoocore.file('appicon.png', 'image/png', fs.readFileSync(appIcon)),
-	header: 1,
-	img_type: 'png',
-	name: 'test-foo-bar'
+        $subreddit: config.reddit.testSubreddit,
+        file: Snoocore.file('appicon.png', 'image/png', fs.readFileSync(appIcon)),
+        header: 1,
+        img_type: 'png',
+        name: 'test-foo-bar'
       });
     });
   });
@@ -62,24 +62,26 @@ describe('Snoocore Behavior Test', function () {
     var reddit = util.getScriptInstance([ 'read', 'subscribe' ]);
 
     return reddit.auth().then(function() {
-      return reddit('/r/$subreddit/about.json').get({
-	$subreddit: config.reddit.testSubreddit
+      return reddit('/r/$subreddit/about').get({
+        $subreddit: config.reddit.testSubreddit
       });
     }).then(function(response) {
 
       var subName = response.data.name;
       var isSubbed = response.data.user_is_subscriber;
 
+
+
       return reddit('api/subscribe').post({
-	action: isSubbed ? 'unsub' : 'sub',
-	sr: subName
+        action: isSubbed ? 'unsub' : 'sub',
+        sr: subName
       }).then(function() {
-	return reddit('/r/$subreddit/about.json').get({
-	  $subreddit: config.reddit.testSubreddit
-	});
+        return reddit('/r/$subreddit/about').get({
+          $subreddit: config.reddit.testSubreddit
+        });
       }).then(function(secondResp) {
-	// should have subbed / unsubbed from the subreddit
-	expect(secondResp.data.user_is_subscriber).to.equal(!isSubbed);
+        // should have subbed / unsubbed from the subreddit
+        expect(secondResp.data.user_is_subscriber).to.equal(!isSubbed);
       });
     });
 
@@ -91,7 +93,7 @@ describe('Snoocore Behavior Test', function () {
 
     return reddit.auth().then(function() {
       return reddit('/r/$subreddit/about/edit.json').get({
-	$subreddit: config.reddit.testSubreddit
+        $subreddit: config.reddit.testSubreddit
       });
     }).then(function(result) {
       var data = result.data;
@@ -101,7 +103,7 @@ describe('Snoocore Behavior Test', function () {
     });
   });
 
-  // Can only test this in node based environments. The browser tests 
+  // Can only test this in node based environments. The browser tests
   // are unable to unset the cookies (when using user/pass auth).
   //
   // Browsers are unable to authenticate anyway, unless using a chrome
@@ -112,30 +114,34 @@ describe('Snoocore Behavior Test', function () {
     var reddit = util.getScriptInstance([ 'read', 'subscribe' ]);
 
     return reddit.auth().then(function() {
-      return reddit('/r/$subreddit/about.json').get({
-	$subreddit: config.reddit.testSubreddit
+      console.log('[[[[[[[[[ 1 ]]]]]]]]]');
+      return reddit('/r/$subreddit/about').get({
+        $subreddit: config.reddit.testSubreddit
       });
     }).then(function(response) {
       var subName = response.data.name;
       var isSubbed = response.data.user_is_subscriber;
 
       // make sure the user is subscribed
+      console.log('[[[[[[[[[ 2 ]]]]]]]]]');
       return isSubbed ? when.resolve() : reddit('/api/subscribe').post({
-	action: 'sub',
-	sr: subName
+        action: 'sub',
+        sr: subName
       });
 
     }).then(function() {
-      return reddit('/r/$subreddit/about.json').get({
-	$subreddit: config.reddit.testSubreddit
+      console.log('[[[[[[[[[ 3 ]]]]]]]]]');
+      return reddit('/r/$subreddit/about').get({
+        $subreddit: config.reddit.testSubreddit
       });
     }).then(function(result) {
       // check that they are subscribed!
       expect(result.data.user_is_subscriber).to.equal(true);
       // run another request, but make it unauthenticated (bypass)
-      return reddit('/r/$subreddit/about.json').get(
-	{ $subreddit: config.reddit.testSubreddit },
-	{ bypassAuth: true });
+      console.log('[[[[[[[[[ 4 ]]]]]]]]]');
+      return reddit('/r/$subreddit/about').get(
+        { $subreddit: config.reddit.testSubreddit },
+        { bypassAuth: true });
     }).then(function(result) {
       expect(result.data.user_is_subscriber).to.not.equal(true);
     });

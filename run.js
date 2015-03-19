@@ -55,7 +55,7 @@ exports.buildEndpointProperties = function(done) {
       if (properties !== '') {
         // go ahead and replace placeholders just with "$"
         var path = endpoint.path.replace(/\$\w+/g, '$');
-        endpointProperties[endpoint.method + path] = properties;
+        endpointProperties[endpoint.method.toLowerCase() + path] = properties;
       }
     });
 

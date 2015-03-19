@@ -12,9 +12,9 @@ var form = require('./form');
    Form data can be a raw string, or an object containing key/value pairs
  */
 exports.https = function(options, formData) {
-  // console.log('\n\n\n\n');
-  // console.log('>>> request');
-  // console.log(options.method + ': ' + options.hostname + options.path);
+  console.log('\n\n\n\n');
+  console.log('>>> request');
+  console.log(options.method + ': ' + options.hostname + options.path);
 
   options = options || {};
   options.headers = options.headers || {};
@@ -29,7 +29,7 @@ exports.https = function(options, formData) {
     options.headers['Content-Length'] = data.contentLength;
   }
 
-  // console.log('\n>>> headers\n', options.headers);
+  console.log('\n>>> headers\n', options.headers);
 
   // stick the data at the end of the path. It is going to b
   if (options.method === 'GET' && data.buffer.toString() !== '') {
@@ -49,6 +49,9 @@ exports.https = function(options, formData) {
       res.on('end', function() {
         res._body = body; // attach the response body to the object
         res._status = res.statusCode;
+
+        console.log('\n>>> body\n', body);
+        console.log('\n>>> status\n', res.statusCode);
         return resolve(res);
       });
     });

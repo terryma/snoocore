@@ -1,5 +1,5 @@
 
-// By default it will read from the environment 
+// By default it will read from the environment
 // variables. If they do not exist, it will then
 // use the value specified
 
@@ -31,10 +31,16 @@ module.exports = {
     serverErrorPort: process.env.REDDIT_ERROR_SERVER_PORT || 3001
   },
 
+  // What servers to make requests with to the API
+  requestServer: {
+    oauth: 'https://oauth.reddit.com',
+    www: 'https://www.reddit.com'
+  },
+
   reddit: {
     // Must have same port as testServer
     // All app-types *must* use the same redirect uri
-    redirectUri: process.env.REDDIT_REDIRECT_URI || "https://localhost:3000", 
+    redirectUri: process.env.REDDIT_REDIRECT_URI || "https://localhost:3000",
 
     // What subreddit to run our test cases in when needed
     testSubreddit: 'snoocoreTest', // feel free to use 'snoocoreTest' for this
@@ -64,4 +70,3 @@ module.exports = {
 
   }
 };
-
