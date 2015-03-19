@@ -20,5 +20,5 @@
     "snoocore"
   ],
   "dependencies": {},
-  "main": "Snoocore.js"
+  "main": "dist/Snoocore-browser.js"
 }

@@ -2,7 +2,7 @@
   "name": "snoocore",
   "version": "2.6.0",
   "description": "A minimal and complete JavaScript driver for the Reddit API.",
-  "main": "Snoocore.js",
+  "main": "dist/Snoocore-node.js",
   "repository": {
     "type": "git",
     "url": "git://github.com/trevorsenior/snoocore.git"
@@ -38,7 +38,8 @@
     "reddit",
     "api",
     "snoocore",
-    "wrapper"
+    "wrapper",
+    "client"
   ],
   "scripts": {
     "test": "./run.js mocha"
