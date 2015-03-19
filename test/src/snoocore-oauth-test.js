@@ -8,10 +8,11 @@ var chaiAsPromised = require('chai-as-promised');
 chai.use(chaiAsPromised);
 var expect = chai.expect;
 
-var Snoocore = require('../../Snoocore');
 var config = require('../config');
 var tsi = require('./testServerInstance');
 var util = require('./util');
+
+var Snoocore = require('../../src/Snoocore');
 
 describe('Snoocore OAuth Test', function () {
 

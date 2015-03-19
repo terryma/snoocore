@@ -12,9 +12,10 @@ var chaiAsPromised = require('chai-as-promised');
 chai.use(chaiAsPromised);
 var expect = chai.expect;
 
-var Snoocore = require('../../Snoocore');
 var config = require('../config');
 var util = require('./util');
+
+var Snoocore = require('../../src/Snoocore');
 
 describe('Snoocore Error Test', function () {
 
@@ -112,9 +113,6 @@ describe('Snoocore Error Test', function () {
       expect(error.message.indexOf('Response Body')).to.not.equal(-1);
       expect(error.message.indexOf('Endpoint URL')).to.not.equal(-1);
       expect(error.message.indexOf('Arguments')).to.not.equal(-1);
-
-      console.log(error);
-
       expect(error.status).to.eql(404);
     });
   });

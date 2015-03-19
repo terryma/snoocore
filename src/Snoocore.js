@@ -11,7 +11,8 @@ var delay = require('when/delay');
 
 var Endpoint = require('./endpoint');
 var utils = require('./utils');
-var pkg = require('./package');
+
+var pkg = require('../package');
 
 module.exports = Snoocore;
 

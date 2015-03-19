@@ -10,7 +10,8 @@ var expect = chai.expect;
 var tsi = require('./testServerInstance');
 var util = require('./util');
 var config = require('../config');
-var oauth = require('../../oauth');
+
+var oauth = require('../../src/oauth');
 
 
 describe('OAuth Module Test', function (require) {
@@ -20,10 +21,10 @@ describe('OAuth Module Test', function (require) {
   describe('#getExplicitAuthUrl()', function() {
     it('should get a proper authorization url (WEB/INSTALLED)', function() {
       var url = oauth.getExplicitAuthUrl({
-	key: config.reddit.web.key,
-	redirectUri: config.reddit.redirectUri,
-	state: 'foo',
-	serverWWW: 'www.reddit.com'
+        key: config.reddit.web.key,
+        redirectUri: config.reddit.redirectUri,
+        state: 'foo',
+        serverWWW: 'www.reddit.com'
       });
 
       expect(url.indexOf('https://www.reddit.com/api/v1/authorize?')).to.not.equal(-1);
@@ -37,11 +38,11 @@ describe('OAuth Module Test', function (require) {
 
     it('should get a proper authorization url (mobile friendly) (WEB/INSTALLED)', function() {
       var url = oauth.getExplicitAuthUrl({
-	key: config.reddit.web.key,
-	redirectUri: config.reddit.redirectUri,
-	state: 'foo',
-	mobile: true,
-	serverWWW: 'www.reddit.com'
+        key: config.reddit.web.key,
+        redirectUri: config.reddit.redirectUri,
+        state: 'foo',
+        mobile: true,
+        serverWWW: 'www.reddit.com'
       });
 
       expect(url.indexOf('https://www.reddit.com/api/v1/authorize.compact?')).to.not.equal(-1);
@@ -55,11 +56,11 @@ describe('OAuth Module Test', function (require) {
 
     it('should get back a proper authorization url (multiple scopes) (WEB/INSTALLED)', function() {
       var url = oauth.getExplicitAuthUrl({
-	key: config.reddit.web.key,
-	redirectUri: config.reddit.redirectUri,
-	state: 'foo',
-	scope: [ 'identity', 'read', 'subscribe' ],
-	serverWWW: 'www.reddit.com'
+        key: config.reddit.web.key,
+        redirectUri: config.reddit.redirectUri,
+        state: 'foo',
+        scope: [ 'identity', 'read', 'subscribe' ],
+        serverWWW: 'www.reddit.com'
       });
 
       expect(url.indexOf('https://www.reddit.com/api/v1/authorize?')).to.not.equal(-1);
@@ -76,10 +77,10 @@ describe('OAuth Module Test', function (require) {
   describe('#getImplicitAuthUrl()', function() {
     it('should get back an implicit grant authorization url', function() {
       var url = oauth.getImplicitAuthUrl({
-	key: config.reddit.installed.key,
-	redirectUri: config.reddit.redirectUri,
-	state: 'foo',
-	serverWWW: 'www.reddit.com'
+        key: config.reddit.installed.key,
+        redirectUri: config.reddit.redirectUri,
+        state: 'foo',
+        serverWWW: 'www.reddit.com'
       });
 
       expect(url.indexOf('https://www.reddit.com/api/v1/authorize?')).to.not.equal(-1);
@@ -96,36 +97,36 @@ describe('OAuth Module Test', function (require) {
     it('(Explicit) it should get an access token', function() {
 
       var url = oauth.getExplicitAuthUrl({
-	key: config.reddit.web.key,
-	redirectUri: config.reddit.redirectUri,
-	state: 'foo',
-	serverWWW: 'www.reddit.com'
+        key: config.reddit.web.key,
+        redirectUri: config.reddit.redirectUri,
+        state: 'foo',
+        serverWWW: 'www.reddit.com'
       });
 
       return tsi.standardServer.allowAuthUrl(url).then(function(params) {
 
-	if (params.error) { throw new Error(params.error); }
+        if (params.error) { throw new Error(params.error); }
 
-	expect(params.state).to.equal('foo');
-	expect(params.code).to.be.a('string');
+        expect(params.state).to.equal('foo');
+        expect(params.code).to.be.a('string');
 
-	var authorizationCode = params.code;
+        var authorizationCode = params.code;
 
-	return oauth.getAuthData('explicit', {
-	  key: config.reddit.web.key,
-	  secret: config.reddit.web.secret,
-	  authorizationCode: authorizationCode,
-	  redirectUri: config.reddit.redirectUri,
-	  serverWWW: 'www.reddit.com'
-	});
+        return oauth.getAuthData('explicit', {
+          key: config.reddit.web.key,
+          secret: config.reddit.web.secret,
+          authorizationCode: authorizationCode,
+          redirectUri: config.reddit.redirectUri,
+          serverWWW: 'www.reddit.com'
+        });
       }).then(function(authData) {
-	expect(authData).to.be.an('object');
-	if (authData.error) { throw new Error(authData.error); }
+        expect(authData).to.be.an('object');
+        if (authData.error) { throw new Error(authData.error); }
 
-	expect(authData.access_token).to.be.a('string');
-	expect(authData.token_type).to.equal('bearer');
-	expect(authData.expires_in).to.equal(3600);
-	expect(authData.scope).to.equal('identity');
+        expect(authData.access_token).to.be.a('string');
+        expect(authData.token_type).to.equal('bearer');
+        expect(authData.expires_in).to.equal(3600);
+        expect(authData.scope).to.equal('identity');
       });
     });
 
@@ -136,7 +137,7 @@ describe('OAuth Module Test', function (require) {
         secret: config.reddit.script.secret,
         username: config.reddit.login.username,
         password: config.reddit.login.password,
-	serverWWW: 'www.reddit.com'
+        serverWWW: 'www.reddit.com'
       }).then(function(authData) {
         expect(authData).to.be.an('object');
 
@@ -152,12 +153,12 @@ describe('OAuth Module Test', function (require) {
     it('(Script + 1 scope string) should get an access token', function() {
 
       return oauth.getAuthData('script', {
-	key: config.reddit.script.key,
+        key: config.reddit.script.key,
         secret: config.reddit.script.secret,
         username: config.reddit.login.username,
         password: config.reddit.login.password,
         scope: 'flair',
-	serverWWW: 'www.reddit.com'
+        serverWWW: 'www.reddit.com'
       }).then(function(authData) {
         expect(authData).to.be.an('object');
 
@@ -173,12 +174,12 @@ describe('OAuth Module Test', function (require) {
     it('(Script + 1 scope array) should get an access token', function() {
 
       return oauth.getAuthData('script', {
-	key: config.reddit.script.key,
+        key: config.reddit.script.key,
         secret: config.reddit.script.secret,
         username: config.reddit.login.username,
         password: config.reddit.login.password,
         scope: [ 'flair' ],
-	serverWWW: 'www.reddit.com'
+        serverWWW: 'www.reddit.com'
       }).then(function(authData) {
         expect(authData).to.be.an('object');
 
@@ -194,12 +195,12 @@ describe('OAuth Module Test', function (require) {
     it('(Script + multi scope array) should get an access token', function() {
 
       return oauth.getAuthData('script', {
-	key: config.reddit.script.key,
+        key: config.reddit.script.key,
         secret: config.reddit.script.secret,
         username: config.reddit.login.username,
         password: config.reddit.login.password,
         scope: [ 'flair', 'identity' ],
-	serverWWW: 'www.reddit.com'
+        serverWWW: 'www.reddit.com'
       }).then(function(authData) {
         expect(authData).to.be.an('object');
 
@@ -214,16 +215,16 @@ describe('OAuth Module Test', function (require) {
 
     it('(Application only implicit) should get Application only access token', function() {
       return oauth.getAuthData('implicit', {
-	key: config.reddit.installed.key,
-	applicationOnly: true,
-	serverWWW: 'www.reddit.com'
+        key: config.reddit.installed.key,
+        applicationOnly: true,
+        serverWWW: 'www.reddit.com'
       }).then(function(authData) {
-	expect(authData).to.be.an('object');
+        expect(authData).to.be.an('object');
 
-	if (authData.error) { throw new Error(authData.error); }
+        if (authData.error) { throw new Error(authData.error); }
 
-	expect(authData.access_token).to.be.a('string');
-	expect(authData.token_type).to.equal('bearer');
+        expect(authData.access_token).to.be.a('string');
+        expect(authData.token_type).to.equal('bearer');
         expect(authData.expires_in).to.equal(3600);
         expect(authData.scope).to.equal('identity');
       });
@@ -231,17 +232,17 @@ describe('OAuth Module Test', function (require) {
 
     it('(Application only script/web) should get Application only access token', function() {
       return oauth.getAuthData('script', {
-	key: config.reddit.script.key,
-	secret: config.reddit.script.secret,
-	applicationOnly: true,
-	serverWWW: 'www.reddit.com'
+        key: config.reddit.script.key,
+        secret: config.reddit.script.secret,
+        applicationOnly: true,
+        serverWWW: 'www.reddit.com'
       }).then(function(authData) {
-	expect(authData).to.be.an('object');
+        expect(authData).to.be.an('object');
 
-	if (authData.error) { throw new Error(authData.error); }
+        if (authData.error) { throw new Error(authData.error); }
 
-	expect(authData.access_token).to.be.a('string');
-	expect(authData.token_type).to.equal('bearer');
+        expect(authData.access_token).to.be.a('string');
+        expect(authData.token_type).to.equal('bearer');
         expect(authData.expires_in).to.equal(3600);
         expect(authData.scope).to.equal('identity');
       });

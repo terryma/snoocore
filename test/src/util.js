@@ -1,10 +1,11 @@
 
-var Snoocore = require('../../Snoocore');
+var Snoocore = require('../../src/Snoocore');
+
 var config = require('../config');
 
 var USER_AGENT = exports.USER_AGENT = 'Snoocore v.' + Snoocore.version +
-				      ' /u/' + config.reddit.login.username +
-				      ' << AUTOMATED TEST SUITE >>';
+                                      ' /u/' + config.reddit.login.username +
+                                      ' << AUTOMATED TEST SUITE >>';
 
 exports.isNode = function() {
   return (typeof require === 'function' &&

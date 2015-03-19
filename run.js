@@ -72,9 +72,9 @@ exports.buildNodeStandalone = function(done) {
   return exec(path.join(__dirname, 'node_modules', '.bin', 'browserify') +
               ' --standalone Snoocore' +
               ' --exclude request/requestBrowser.js' +
-              ' --outfile dist/Snoocore-nodejs-standalone.js' +
+              ' --outfile dist/Snoocore.js' +
               ' Snoocore.js',
-              { cwd: __dirname },
+              { cwd: path.join(__dirname, 'src') },
               function(error, stdout, stderr) {
                 return done(error);
               });
@@ -85,9 +85,9 @@ exports.buildBrowserStandalone = function(done) {
   return exec(path.join(__dirname, 'node_modules', '.bin', 'browserify') +
               ' --standalone Snoocore' +
               ' --exclude request/requestNode.js' +
-              ' --outfile dist/Snoocore-standalone.js' +
+              ' --outfile dist/Snoocore-browser.js' +
               ' Snoocore.js',
-              { cwd: __dirname },
+              { cwd: path.join(__dirname, 'src') },
               function(error, stdout, stderr) {
                 return done(error);
               });

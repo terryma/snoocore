@@ -10,9 +10,10 @@ var chaiAsPromised = require('chai-as-promised');
 chai.use(chaiAsPromised);
 var expect = chai.expect;
 
-var Snoocore = require('../../Snoocore');
 var config = require('../config');
 var util = require('./util');
+
+var Snoocore = require('../../src/Snoocore');
 
 describe('Snoocore Behavior Test', function () {
 
@@ -114,7 +115,6 @@ describe('Snoocore Behavior Test', function () {
     var reddit = util.getScriptInstance([ 'read', 'subscribe' ]);
 
     return reddit.auth().then(function() {
-      console.log('[[[[[[[[[ 1 ]]]]]]]]]');
       return reddit('/r/$subreddit/about').get({
         $subreddit: config.reddit.testSubreddit
       });
@@ -123,14 +123,12 @@ describe('Snoocore Behavior Test', function () {
       var isSubbed = response.data.user_is_subscriber;
 
       // make sure the user is subscribed
-      console.log('[[[[[[[[[ 2 ]]]]]]]]]');
       return isSubbed ? when.resolve() : reddit('/api/subscribe').post({
         action: 'sub',
         sr: subName
       });
 
     }).then(function() {
-      console.log('[[[[[[[[[ 3 ]]]]]]]]]');
       return reddit('/r/$subreddit/about').get({
         $subreddit: config.reddit.testSubreddit
       });
@@ -138,7 +136,6 @@ describe('Snoocore Behavior Test', function () {
       // check that they are subscribed!
       expect(result.data.user_is_subscriber).to.equal(true);
       // run another request, but make it unauthenticated (bypass)
-      console.log('[[[[[[[[[ 4 ]]]]]]]]]');
       return reddit('/r/$subreddit/about').get(
         { $subreddit: config.reddit.testSubreddit },
         { bypassAuth: true });

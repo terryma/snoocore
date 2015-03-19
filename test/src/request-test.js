@@ -6,7 +6,8 @@ chai.use(chaiAsPromised);
 var expect = chai.expect;
 
 var config = require('../config');
-var Snoocore = require('../../Snoocore');
+
+var Snoocore = require('../../src/Snoocore');
 
 describe('Request Test', function () {
 

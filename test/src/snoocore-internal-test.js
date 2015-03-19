@@ -5,11 +5,11 @@ var chaiAsPromised = require('chai-as-promised');
 chai.use(chaiAsPromised);
 var expect = chai.expect;
 
-var Snoocore = require('../../Snoocore');
-var Endpoint = require('../../Endpoint');
-
 var config = require('../config');
 var util = require('./util');
+
+var Snoocore = require('../../src/Snoocore');
+var Endpoint = require('../../src/Endpoint');
 
 describe('Snoocore Internal Tests', function () {
 

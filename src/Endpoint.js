@@ -1,5 +1,5 @@
 // Precompiled list of properties for specific endpoints
-var endpointProperties = require('./build/endpointProperties');
+var endpointProperties = require('../build/endpointProperties');
 // Build a more parseable tree for the properties. Built here vs. simply
 // requireing to save on bytes
 var PROPERTY_TREE = buildPropertyTree(endpointProperties);
