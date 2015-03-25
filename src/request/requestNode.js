@@ -31,7 +31,7 @@ exports.https = function(options, formData) {
 
   // console.log('\n>>> headers\n', options.headers);
 
-  // stick the data at the end of the path. It is going to b
+  // stick the data at the end of the url for GET requests
   if (options.method === 'GET' && data.buffer.toString() !== '') {
     options.path += '?' + data.buffer.toString();
   }
@@ -49,6 +49,7 @@ exports.https = function(options, formData) {
       res.on('end', function() {
         res._body = body; // attach the response body to the object
         res._status = res.statusCode;
+        res._headers = res.headers;
 
         // console.log('\n>>> body\n', body);
         // console.log('\n>>> status\n', res.statusCode);

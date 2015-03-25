@@ -17,7 +17,7 @@ var Snoocore = require('../../src/Snoocore');
 describe('Snoocore Behavior Test (noauth)', function () {
 
   this.timeout(config.testTimeout);
-  
+
   it('should GET resources while not logged in', function() {
 
     var reddit = util.getImplicitInstance([ 'read' ]);
@@ -54,16 +54,16 @@ describe('Snoocore Behavior Test (noauth)', function () {
       userAgent: 'foobar',
       decodeHtmlEntities: true,
       oauth: {
-	type: 'implicit',
-	key: config.reddit.installed.key,
-	redirectUri: '_',
-	scope: [ 'read' ]
+        type: 'implicit',
+        key: config.reddit.installed.key,
+        redirectUri: '_',
+        scope: [ 'read' ]
       }
     });
 
     return secondReddit('/r/snoocoreTest/about.json').get().then(function(result) {
       expect(result.data.description_html.indexOf('</p>')).to.not.equal(-1);
-      
+
       // override global 'true'
       return reddit('/r/snoocoreTest/about.json').get(null, { decodeHtmlEntities: false });
     }).then(function(result) {

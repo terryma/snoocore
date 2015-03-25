@@ -6,6 +6,9 @@ var when = require('when');
 
 var form = require('./form');
 
+// https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest#getAllResponseHeaders()
+throw new Error('@TODO normalize the request headers to match node.js');
+
 exports.https = function(options, formData) {
 
   options = options || {};
@@ -37,9 +40,11 @@ exports.https = function(options, formData) {
       x.onreadystatechange = function() {
         if (x.readyState > 3) {
           // Normalize the result to match how requestNode.js works
+
           return resolve({
             _body: x.responseText,
-            _status: x.status
+            _status: x.status,
+            _headers: x.getAllResponseHeaders()
           });
         }
       };

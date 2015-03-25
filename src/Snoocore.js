@@ -1,20 +1,23 @@
 "use strict";
 
+// Node.js libraries
 var urlLib = require('url');
 var events = require('events');
 var util = require('util');
 var path = require('path');
 
+// npm modules
 var he = require('he');
 var when = require('when');
 var delay = require('when/delay');
 
-var Endpoint = require('./endpoint');
+// Our modules
 var utils = require('./utils');
-
+var Endpoint = require('./endpoint');
+var Throttle = require('./throttle');
+var UserConfig = require('./userconfig');
 var pkg = require('../package');
 
-module.exports = Snoocore;
 
 Snoocore.version = pkg.version;
 
@@ -26,91 +29,25 @@ Snoocore.when = when;
 
 
 // - - -
-
-
+module.exports = Snoocore;
 util.inherits(Snoocore, events.EventEmitter);
-function Snoocore(config) {
+function Snoocore(userConfiguration) {
 
   var self = this;
 
   events.EventEmitter.call(self);
+  self._userConfig = new UserConfig(userConfiguration);
+  self._throttle = new Throttle(self._userConfig.throttle);
+
+  // Set if Authenticated with OAuth
+  self._authenticatedAuthData = {};
+  // Set if authenticated with Application Only OAuth
+  self._applicationOnlyAuthData = {};
+
+  // Set when calling `refresh` and when duration: 'permanent'
+  self._refreshToken = '';
 
   self._test = {}; // expose internal functions for testing
-
-  self._serverOAuth = thisOrThat(config.serverOAuth, 'oauth.reddit.com');
-  self._serverWWW = thisOrThat(config.serverWWW, 'www.reddit.com');
-
-  var missingMsg = 'Missing required config value ';
-
-  self._userAgent = thisOrThrow(config.userAgent, 'Missing required config value `userAgent`');
-  self._isNode = thisOrThat(config.browser, utils.isNode());
-  self._apiType = thisOrThat(config.apiType, 'json');
-  self._decodeHtmlEntities = thisOrThat(config.decodeHtmlEntities, false);
-  self._retryAttempts = thisOrThat(config.retryAttempts, 60);
-  self._retryDelay = thisOrThat(config.retryDelay, 5000);
-
-  self._authenticatedAuthData = {}; // Set if Authenticated with OAuth
-  self._applicationOnlyAuthData = {}; // Set if authenticated with Application Only OAuth
-
-  self._refreshToken = ''; // Set when calling `refresh` and when duration: 'permanent'
-
-  self._oauth = thisOrThat(config.oauth, {});
-  self._oauth.scope = thisOrThat(self._oauth.scope, []);
-  self._oauth.deviceId = thisOrThat(self._oauth.deviceId, 'DO_NOT_TRACK_THIS_DEVICE');
-  self._oauth.type = thisOrThrow(self._oauth.type, missingMsg + '`oauth.type`');
-  self._oauth.key = thisOrThrow(self._oauth.key, missingMsg + '`oauth.key`');
-
-  if (!isOAuthType('explicit') && !isOAuthType('implicit') && !isOAuthType('script')) {
-    throw new Error('Invalid `oauth.type`. Must be one of: explicit, implicit, or script');
-  }
-
-  if (isOAuthType('explicit') || isOAuthType('script')) {
-    self._oauth.secret = thisOrThrow(self._oauth.secret, missingMsg + '`oauth.secret` for type explicit/script');
-  }
-
-
-  if (isOAuthType('script')) {
-    self._oauth.username = thisOrThrow(self._oauth.username,  missingMsg + '`oauth.username` for type script');
-    self._oauth.password = thisOrThrow(self._oauth.password, missingMsg + '`oauth.password` for type script');
-  }
-
-  if (isOAuthType('implicit') || isOAuthType('explicit')) {
-    self._oauth.redirectUri = thisOrThrow(self._oauth.redirectUri,
-                                          missingMsg + '`oauth.redirectUri` for type implicit/explicit');
-  }
-
-  //
-  //--- end of initial configuration
-  //
-
-  /*
-     The current throttle delay before a request will go through
-     increments every time a call is made, and is reduced when a
-     call finishes.
-
-     Time is added & removed based on the throttle variable.
-   */
-  self._throttleDelay = 1;
-
-
-  self._test.getThrottle = getThrottle;
-  function getThrottle() {
-    return 1000; // OAuth only requires 1000ms
-  }
-
-  /*
-     Return the value of `tryThis` unless it's undefined, then return `that`
-   */
-  self._test.thisOrThat = thisOrThat;
-  function thisOrThat(tryThis, that) {
-    return (typeof tryThis !== 'undefined') ? tryThis : that;
-  }
-
-  self._test.thisOrThrow = thisOrThrow;
-  function thisOrThrow(tryThis, orThrowMessage) {
-    if (typeof tryThis !== 'undefined') { return tryThis; }
-    throw new Error(orThrowMessage);
-  }
 
   /*
      Have we authorized with OAuth?
@@ -128,16 +65,6 @@ function Snoocore(config) {
   function hasApplicationOnlyData() {
     return (typeof self._applicationOnlyAuthData.access_token !== 'undefined' &&
       typeof self._applicationOnlyAuthData.token_type !== 'undefined');
-  }
-
-  /*
-     Checks if the oauth is of a specific type, e.g.
-
-     isOAuthType('script')
-   */
-  self._test.isOAuthType = isOAuthType;
-  function isOAuthType(type) {
-    return self._oauth.type === type;
   }
 
   /*
@@ -163,7 +90,9 @@ function Snoocore(config) {
    */
   self._test.getApplicationOnlyAuthorizationHeader = getApplicationOnlyAuthorizationHeader;
   function getApplicationOnlyAuthorizationHeader() {
-    return self._applicationOnlyAuthData.token_type + ' ' + self._applicationOnlyAuthData.access_token;
+    var bearer = self._applicationOnlyAuthData.token_type || 'bearer';
+    var accessToken = self._applicationOnlyAuthData.access_token || 'invalid_token';
+    return (bearer + ' ' + accessToken);
   }
 
   /*
@@ -171,129 +100,52 @@ function Snoocore(config) {
    */
   self._test.getAuthenticatedAuthorizationHeader = getAuthenticatedAuthorizationHeader;
   function getAuthenticatedAuthorizationHeader() {
-    return self._authenticatedAuthData.token_type + ' ' + self._authenticatedAuthData.access_token;
+    var bearer = self._authenticatedAuthData.token_type || 'bearer';
+    var accessToken = self._authenticatedAuthData.access_token || 'invalid_token';
+    return (bearer + ' ' + accessToken);
   }
 
   /*
-     Takes an url, and an object of url parameters and replaces
-     them, e.g.
-
-     endpointUrl:
-     'http://example.com/$foo/$bar/test.html'
-
-     givenArgs: { $foo: 'hello', $bar: 'world' }
-
-     would output:
-
-     'http://example.com/hello/world/test.html'
+     Builds up the headers for an endpoint.
    */
-  self._test.replaceUrlParams = replaceUrlParams;
-  function replaceUrlParams(endpointUrl, givenArgs) {
-    // nothing to replace!
-    if (endpointUrl.indexOf('$') === -1) {
-      return endpointUrl;
+  self._test.buildHeaders = buildHeaders;
+  function buildHeaders(endpoint) {
+    var headers = {};
+
+    if (self._userConfig.isNode) {
+      // Can't set User-Agent in browser
+      headers['User-Agent'] = self._userConfig.userAgent;
     }
 
-    // pull out variables from the url
-    var params = endpointUrl.match(/\$[\w\.]+/g);
-
-    // replace with the argument provided
-    params.forEach(function(param) {
-      if (typeof givenArgs[param] === 'undefined') {
-        throw new Error('missing required url parameter ' + param);
-      }
-      endpointUrl = endpointUrl.replace(param, givenArgs[param]);
-    });
-
-    return endpointUrl;
-  }
-
-  /*
-     Builds the URL that we will query reddit with.
-   */
-  self._test.buildUrl = buildUrl;
-  function buildUrl(givenArgs, endpoint, options) {
-    options = options || {};
-    var serverOAuth = thisOrThat(options.serverOAuth, self._serverOAuth);
-
-    var url = 'https://' + path.join(serverOAuth, endpoint.path);
-    url = replaceUrlParams(url, givenArgs);
-    return url;
-  }
-
-  /*
-     Build the arguments that we will send to reddit in our
-     request. These customize the request that we send to reddit
-   */
-  self._test.buildArgs = buildArgs;
-  function buildArgs(endpointArgs, endpoint) {
-
-    endpointArgs = endpointArgs || {};
-    var args = {};
-
-    // Skip any url parameters (e.g. items that begin with $)
-    for (var key in endpointArgs) {
-      if (key.substring(0, 1) !== '$') {
-        args[key] = endpointArgs[key];
-      }
+    if (endpoint.contextOptions.bypassAuth || isApplicationOnly()) {
+      headers['Authorization'] = getApplicationOnlyAuthorizationHeader();
+    } else {
+      headers['Authorization'] = getAuthenticatedAuthorizationHeader();
     }
 
-    var apiType = thisOrThat(endpointArgs.api_type, self._apiType);
-
-    if (apiType && endpoint.needsApiTypeJson) {
-      args.api_type = apiType;
-    }
-
-    return args;
+    return headers;
   }
-
-  /*
-     Returns a set of options that effect how each call to reddit behaves.
-   */
-  self._test.normalizeCallContextOptions = normalizeCallContextOptions;
-  function normalizeCallContextOptions(callContextOptions) {
-
-    var ccOptions = callContextOptions || {};
-
-    // by default we do not bypass authentication
-    ccOptions.bypassAuth = thisOrThat(ccOptions.bypassAuth, false);
-
-    // decode html enntities for this call?
-    ccOptions.decodeHtmlEntities = thisOrThat(ccOptions.decodeHtmlEntities, self._decodeHtmlEntities);
-
-    // how many attempts left do we have to retry an endpoint?
-    ccOptions.retryAttemptsLeft = thisOrThat(ccOptions.retryAttemptsLeft, ccOptions.retryAttempts);
-    ccOptions.retryAttemptsLeft = thisOrThat(ccOptions.retryAttemptsLeft, self._retryAttempts);
-
-    // delay between retrying an endpoint
-    ccOptions.retryDelay = thisOrThat(ccOptions.retryDelay, self._retryDelay);
-
-    // how many reauthentication attempts do we have left?
-    ccOptions.reauthAttemptsLeft = thisOrThat(ccOptions.reauthAttemptsLeft, ccOptions.retryAttemptsLeft);
-
-    return ccOptions;
-  }
-
 
   /*
      Returns a uniform error for all response errors.
    */
   self._test.getResponseError = getResponseError;
-  function getResponseError(message, response, url, args) {
+  function getResponseError(message, response, endpoint) {
 
     var responseError = new Error([
       message,
       '>>> Response Status: ' + response._status,
-      '>>> Endpoint URL: '+ url,
-      '>>> Arguments: ' + JSON.stringify(args, null, 2),
+      '>>> Endpoint URL: '+ endpoint.url,
+      '>>> Arguments: ' + JSON.stringify(endpoint.args, null, 2),
       '>>> Response Body:',
       response._body
     ].join('\n\n'));
 
-    responseError.url = url;
-    responseError.args = args;
+    responseError.url = endpoint.url;
+    responseError.args = endpoint.args;
     responseError.status = response._status;
     responseError.body = response._body;
+    responseError.endpoint = endpoint;
 
     return responseError;
   }
@@ -304,108 +156,133 @@ function Snoocore(config) {
      will reject the promise with the error.
    */
   self._test.handleServerErrorResponse = handleServerErrorResponse;
-  function handleServerErrorResponse(response, endpoint, givenArgs, callContextOptions) {
+  function handleServerErrorResponse(response, endpoint) {
 
-    --callContextOptions.retryAttemptsLeft;
+    endpoint.contextOptions.retryAttemptsLeft--;
 
-    var args = buildArgs(givenArgs, endpoint);
-    var url = buildUrl(givenArgs, endpoint, callContextOptions);
+    var responseError = getResponseError('Server Error Response',
+                                         response,
+                                         endpoint);
 
-    var responseError = getResponseError('Server Error Response', response, url, args);
-    responseError.retryAttemptsLeft = callContextOptions.retryAttemptsLeft;
+    responseError.retryAttemptsLeft = endpoint.contextOptions.retryAttemptsLeft;
+
     self.emit('server_error', responseError);
 
-    if (callContextOptions.retryAttemptsLeft <= 0) {
-      responseError.message = 'All retry attempts exhausted.\n\n' + responseError.message;
+    if (endpoint.contextOptions.retryAttemptsLeft <= 0) {
+      responseError.message = ('All retry attempts exhausted.\n\n' +
+                               responseError.message);
       return when.reject(responseError);
     }
 
-    return delay(callContextOptions.retryDelay).then(function() {
-      return callRedditApi(endpoint, givenArgs, callContextOptions);
+    return delay(endpoint.contextOptions.retryDelay).then(function() {
+      return callRedditApi(endpoint);
     });
   }
 
   /*
-     Handle a reddit 400 / client error. This is usually caused when our access_token
-     has expired.
+     Handle a reddit 4xx / client error. This is usually caused when our
+     access_token has expired.
 
-     If we can't renew our access token, we throw an error / emit the 'access_token_expired'
-     event that users can then handle to re-authenticatet clients
+     If we can't renew our access token, we throw an error / emit the
+     'access_token_expired' event that users can then handle to
+     re-authenticatet clients
 
-     If we can renew our access token, we try to reauthenticate, and call the reddit
-     endpoint again.
+     If we can renew our access token, we try to reauthenticate, and call the
+     reddit endpoint again.
    */
   self._test.handleClientErrorResponse = handleClientErrorResponse;
-  function handleClientErrorResponse(response, endpoint, givenArgs, callContextOptions) {
+  function handleClientErrorResponse(response, endpoint) {
 
-    var args = buildArgs(givenArgs, endpoint);
-    var url = buildUrl(givenArgs, endpoint, callContextOptions);
+    // - - -
+    // Check headers for more specific errors.
 
-    // If we are *not* application only oauth and can't renew the access token
-    // then we should throw an error
-    if (!isApplicationOnly() && !hasRefreshToken() && !isOAuthType('script')) {
-      self.emit('access_token_expired');
-      return when.reject(new Error('Access token has expired. Listen for ' +
-                                   'the "access_token_expired" event to handle ' +
-                                   'this gracefully in your app.'));
+    var wwwAuth = response._headers['www-authenticate'];
 
+    if (wwwAuth && wwwAuth.indexOf('insufficient_scope') !== -1) {
+      return when.reject(getResponseError(
+        'Insufficient scopes provided for this call',
+        response,
+        endpoint));
     }
 
-    // Check reddit's response and throw a more specific error if possible
+    // - - -
+    // Parse the response for more specific errors.
+
     try {
       var data = JSON.parse(response._body);
-    } catch(e) {} // do nothing, may be unauthenticated
 
-    if (typeof data === 'object' && data.reason === 'USER_REQUIRED') {
-      return when.reject(new Error('Must be authenticated with a user to make a call to this endpoint.'));
+      if (data.reason === 'USER_REQUIRED') {
+        var msg = 'Must be authenticated with a user to make this call'
+        return when.reject(getResponseError(msg, response, endpoint));
+      }
+
+    } catch(e) {}
+
+    // - - -
+    // Access token has expired
+
+    if (response._status === 401) {
+
+      var canRenewAccessToken = (isApplicationOnly() ||
+                                 hasRefreshToken() ||
+                                 self._userConfig.isOAuthType('script'));
+
+      if (!canRenewAccessToken) {
+        self.emit('access_token_expired');
+        var msg = ('Access token has expired. Listen for ' +
+                   'the "access_token_expired" event to ' +
+                   'handle this gracefully in your app.');
+        return when.reject(getResponseError(msg, response, endpoint));
+      } else {
+
+        // Renew our access token
+
+        --endpoint.contextOptions.reauthAttemptsLeft;
+
+        if (endpoint.contextOptions.reauthAttemptsLeft <= 0) {
+          return when.reject(getResponseError(
+            'Unable to refresh the access_token.',
+            response,
+            endpoint));
+        }
+
+        var reauth;
+
+        // If we are application only, or are bypassing authentication
+        // therefore we're using application only OAuth
+        if (isApplicationOnly() || endpoint.contextOptions.bypassAuth) {
+          reauth = self.applicationOnlyAuth();
+        } else {
+
+          // If we have been authenticated with a permanent refresh token use it
+          if (hasRefreshToken()) {
+            reauth = self.refresh(self._refreshToken);
+          }
+
+          // If we are OAuth type script we can call `.auth` again
+          if (self._userConfig.isOAuthType('script')) {
+            reauth = self.auth();
+          }
+
+        }
+
+        return reauth.then(function() {
+          return callRedditApi(endpoint);
+        });
+
+      }
     }
 
-    // If a call to an `any` OAuth scope returns a 4xx status, we need to
-    // authenticate. Else, the user has probably forgotten a scope or the
-    // endpoint requires reddit gold
-    var requestOptions = {
-      method: endpoint.method.toUpperCase(),
-      hostname: self._serverOAuth,
-      path: '/api/needs_captcha',
-      headers: buildHeaders(callContextOptions)
-    };
-
-    return Snoocore.request.https(requestOptions).then(function(anyResponse) {
-      // If we can successfuly make a call to the `any` OAuth scope
-      // then the origional call is invalid. Let the user know
-      if (String(anyResponse._status).substring(0, 1) !== '4') {
-        // make the error with the origional response object
-        return when.reject(getResponseError(
-          'Missing a required scope or this call requires reddit gold',
-          response,
-          url,
-          args));
-      }
-
-      --callContextOptions.reauthAttemptsLeft;
-
-      if (callContextOptions.reauthAttemptsLeft <= 0) {
-        return when.reject(new Error('Unable to refresh the access_token.'));
-      }
-
-      var reauth;
-
-      // If we are application only, or are bypassing authentication for a call
-      // go ahead and use application only OAuth
-      if (isApplicationOnly() || callContextOptions.bypassAuth) {
-        reauth = self.applicationOnlyAuth();
-      } else {
-        // If we have been authenticated with a permanent refresh token
-        if (hasRefreshToken()) { reauth = self.refresh(self._refreshToken); }
-        // If we are OAuth type script and not implicit authenticated
-        if (isOAuthType('script')) { reauth = self.auth(); }
-      }
-
-      return reauth.then(function() {
-        return callRedditApi(endpoint, givenArgs, callContextOptions);
-      });
-
-    });
+    // - - -
+    // At the end of the day, we just throw an error stating that there
+    // is nothing we can do & give general advice
+    return when.reject(getResponseError(
+      ('This call failed. ' +
+       'Is the user missing reddit gold? ' +
+       'Trying to change a subreddit that the user does not moderate? ' +
+       'This is an unrecoverable error.'),
+      response,
+      endpoint));
   }
 
   /*
@@ -414,12 +291,10 @@ function Snoocore(config) {
      Finally return the data if there were no problems.
    */
   self._test.handleSuccessResponse = handleSuccessResponse;
-  function handleSuccessResponse(response, endpoint, givenArgs, callContextOptions) {
-    var data = response._body || {};
-    var args = buildArgs(givenArgs, endpoint);
-    var url = buildUrl(givenArgs, endpoint, callContextOptions);
+  function handleSuccessResponse(response, endpoint) {
+    var data = response._body || '';
 
-    if (callContextOptions.decodeHtmlEntities) {
+    if (endpoint.contextOptions.decodeHtmlEntities) {
       data = he.decode(data);
     }
 
@@ -435,105 +310,61 @@ function Snoocore(config) {
      Handles various reddit response cases.
    */
   self._test.handleRedditResponse = handleRedditResponse;
-  function handleRedditResponse(response, endpoint, givenArgs, callContextOptions) {
+  function handleRedditResponse(response, endpoint) {
 
     switch(String(response._status).substring(0, 1)) {
       case '5':
-        return handleServerErrorResponse(response, endpoint, givenArgs, callContextOptions);
+        return handleServerErrorResponse(response, endpoint);
       case '4':
-        return handleClientErrorResponse(response, endpoint, givenArgs, callContextOptions);
+        return handleClientErrorResponse(response, endpoint);
       case '2':
-        return handleSuccessResponse(response, endpoint, givenArgs, callContextOptions);
+        return handleSuccessResponse(response, endpoint);
     }
 
     return when.reject(new Error('Invalid reddit response status of ' + response._status));
   }
 
   /*
-     Builds up the headers for a call to reddit.
-   */
-  self._test.buildHeaders = buildHeaders;
-  function buildHeaders(callContextOptions) {
-    callContextOptions = callContextOptions || {};
-    var headers = {};
-
-    if (self._isNode) {
-      headers['User-Agent'] = self._userAgent; // Can't set User-Agent in browser
-    }
-
-    if (callContextOptions.bypassAuth || isApplicationOnly()) {
-      headers['Authorization'] = getApplicationOnlyAuthorizationHeader();
-    } else {
-      headers['Authorization'] = getAuthenticatedAuthorizationHeader();
-    }
-
-    return headers;
-  }
-
-  /*
      Call the reddit api.
    */
   self._test.callRedditApi = callRedditApi;
-  function callRedditApi(endpoint, givenArgs, callContextOptions) {
+  function callRedditApi(endpoint) {
 
-    callContextOptions = normalizeCallContextOptions(callContextOptions);
-
-    var args = buildArgs(givenArgs, endpoint);
-    var url = buildUrl(givenArgs, endpoint, callContextOptions);
-    var parsedUrl = urlLib.parse(url);
+    var parsedUrl = urlLib.parse(endpoint.url);
 
     var requestOptions = {
       method: endpoint.method.toUpperCase(),
       hostname: parsedUrl.hostname,
       path: parsedUrl.path,
-      headers: buildHeaders(callContextOptions)
+      headers: buildHeaders(endpoint)
     };
 
     if (parsedUrl.port) {
       requestOptions.port = parsedUrl.port;
     }
 
-    var throttle = getThrottle();
-    var startCallTime = Date.now();
-    self._throttleDelay += throttle;
-
-    // Wait for the throttle delay amount, then call the Reddit API
-    return delay(self._throttleDelay - throttle).then(function() {
-      return Snoocore.request.https(requestOptions, args);
+    return self._throttle.wait().then(function() {
+      return Snoocore.request.https(requestOptions, endpoint.args);
     }).then(function(response) {
-      return handleRedditResponse(response, endpoint, givenArgs, callContextOptions);
-    }).finally(function() {
-      // decrement the throttle delay. If the call is quick and snappy, we
-      // only decrement the total time that it took to make the call.
-      var endCallTime = Date.now();
-      var callDuration = endCallTime - startCallTime;
-
-      if (callDuration < throttle) {
-        self._throttleDelay -= callDuration;
-      } else {
-        self._throttleDelay -= throttle;
-      }
+      return handleRedditResponse(response, endpoint);
     });
-
   }
 
   /*
      Listing support.
    */
-  function getListing(endpoint, givenArgs, options) {
-
-    givenArgs = givenArgs || {};
-    options = options || {};
+  function getListing(endpoint) {
 
     // number of results that we have loaded so far. It will
     // increase / decrease when calling next / previous.
     var count = 0;
-    var limit = givenArgs.limit || 25;
+    var limit = endpoint.args.limit || 25;
     // keep a reference to the start of this listing
-    var start = givenArgs.after || null;
+    var start = endpoint.args.after || null;
 
-    function getSlice(givenArgs) {
-      return callRedditApi(endpoint, givenArgs, options).then(function(result) {
+    function getSlice(endpoint) {
+
+      return callRedditApi(endpoint).then(function(result) {
 
         var slice = {};
         var listing = result || {};
@@ -541,11 +372,11 @@ function Snoocore(config) {
         slice.get = result || {};
 
         if (result instanceof Array) {
-          if (typeof options.listingIndex === 'undefined') {
+          if (typeof endpoint.contextOptions.listingIndex === 'undefined') {
             throw new Error('Must specify a `listingIndex` for this listing.');
           }
 
-          listing = result[options.listingIndex];
+          listing = result[endpoint.contextOptions.listingIndex];
         }
 
         slice.count = count;
@@ -567,35 +398,47 @@ function Snoocore(config) {
         slice.next = function() {
           count += limit;
 
-          var args = givenArgs;
-          args.before = null;
-          args.after = slice.children[slice.children.length - 1].data.name;
-          args.count = count;
-          return getSlice(args);
+          var newArgs = endpoint.args;
+          newArgs.before = null;
+          newArgs.after = slice.children[slice.children.length - 1].data.name;
+          newArgs.count = count;
+          return getSlice(new Endpoint(self._userConfig,
+                                       endpoint.method,
+                                       endpoint.path,
+                                       newArgs,
+                                       endpoint.contextOptions));
         };
 
         slice.previous = function() {
           count -= limit;
 
-          var args = givenArgs;
-          args.before = slice.children[0].data.name;
-          args.after = null;
-          args.count = count;
-          return getSlice(args);
+          var newArgs = endpoint.args;
+          newArgs.before = slice.children[0].data.name;
+          newArgs.after = null;
+          newArgs.count = count;
+          return getSlice(new Endpoint(self._userConfig,
+                                       endpoint.method,
+                                       endpoint.path,
+                                       newArgs,
+                                       endpoint.contextOptions));
         };
 
         slice.start = function() {
           count = 0;
 
-          var args = givenArgs;
-          args.before = null;
-          args.after = start;
-          args.count = count;
-          return getSlice(args);
+          var newArgs = endpoint.args;
+          newArgs.before = null;
+          newArgs.after = start;
+          newArgs.count = count;
+          return getSlice(new Endpoint(self._userConfig,
+                                       endpoint.method,
+                                       endpoint.path,
+                                       newArgs,
+                                       endpoint.contextOptions));
         };
 
         slice.requery = function() {
-          return getSlice(givenArgs);
+          return getSlice(endpoint);
         };
 
         return slice;
@@ -603,7 +446,7 @@ function Snoocore(config) {
 
     }
 
-    return getSlice(givenArgs);
+    return getSlice(endpoint);
   }
 
   /*
@@ -625,18 +468,22 @@ function Snoocore(config) {
     var calls = {};
 
     ['get', 'post', 'put', 'patch', 'delete', 'update'].forEach(function(verb) {
-      calls[verb] = function(givenArgs, callContextOptions) {
-        return callRedditApi(new Endpoint(verb, path),
-                             givenArgs,
-                             callContextOptions);
+      calls[verb] = function(userGivenArgs, userContextOptions) {
+        return callRedditApi(new Endpoint(self._userConfig,
+                                          verb,
+                                          path,
+                                          userGivenArgs,
+                                          userContextOptions));
       };
     });
 
     // Add listing support
-    calls.listing = function(givenArgs, callContextOptions) {
-      return getListing(new Endpoint('get', path),
-                        givenArgs,
-                        callContextOptions);
+    calls.listing = function(userGivenArgs, userContextOptions) {
+      return getListing(new Endpoint(self._userConfig,
+                                     'get',
+                                     path,
+                                     userGivenArgs,
+                                     userContextOptions));
     };
 
     return calls;
@@ -646,9 +493,10 @@ function Snoocore(config) {
      Get the Explicit Auth Url
    */
   self.getExplicitAuthUrl = function(state, options) {
-    var options = self._oauth;
+    var options = self._userConfig.oauth;
     options.state = state || Math.ceil(Math.random() * 1000);
-    options.serverWWW = thisOrThat(options.serverWWW, self._serverWWW);
+    options.serverWWW = utils.thisOrThat(options.serverWWW,
+                                         self._userConfig.serverWWW);
     return Snoocore.oauth.getExplicitAuthUrl(options);
   };
 
@@ -656,9 +504,10 @@ function Snoocore(config) {
      Get the Implicit Auth Url
    */
   self.getImplicitAuthUrl = function(state, options) {
-    var options = self._oauth;
+    var options = self._userConfig.oauth;
     options.state = state || Math.ceil(Math.random() * 1000);
-    options.serverWWW = thisOrThat(options.serverWWW, self._serverWWW);
+    options.serverWWW = utils.thisOrThat(options.serverWWW,
+                                         self._userConfig.serverWWW);
     return Snoocore.oauth.getImplicitAuthUrl(options);
   };
 
@@ -667,14 +516,15 @@ function Snoocore(config) {
    */
   self.refresh = function(refreshToken, options) {
     options = options || {};
-    var serverWWW = thisOrThat(options.serverWWW, self._serverWWW);
+    var serverWWW = utils.thisOrThat(options.serverWWW,
+                                     self._userConfig.serverWWW);
 
     return Snoocore.oauth.getAuthData('refresh', {
       refreshToken: refreshToken,
-      key: self._oauth.key,
-      secret: self._oauth.secret,
-      redirectUri: self._oauth.redirectUri,
-      scope: self._oauth.scope,
+      key: self._userConfig.oauth.key,
+      secret: self._userConfig.oauth.secret,
+      redirectUri: self._userConfig.oauth.redirectUri,
+      scope: self._userConfig.oauth.scope,
       serverWWW: serverWWW
     }).then(function(authDataResult) {
       // only set the internal refresh token if reddit
@@ -696,33 +546,37 @@ function Snoocore(config) {
      - Access Token (request_type = "token") / Implicit OAuth
      - Application Only. (void 0, true);
    */
-  self.auth = function(authDataOrAuthCodeOrAccessToken, isApplicationOnly, options) {
-
+  self.auth = function(authDataOrAuthCodeOrAccessToken,
+                       isApplicationOnly,
+                       options)
+  {
     options = options || {};
-    var serverWWW = thisOrThat(options.serverWWW, self._serverWWW);
+    var serverWWW = utils.thisOrThat(options.serverWWW,
+                                     self._userConfig.serverWWW);
 
     var authData;
 
-    switch(self._oauth.type) {
+    switch(self._userConfig.oauth.type) {
       case 'script':
-        authData = Snoocore.oauth.getAuthData(self._oauth.type, {
-          key: self._oauth.key,
-          secret: self._oauth.secret,
-          scope: self._oauth.scope,
-          username: self._oauth.username,
-          password: self._oauth.password,
+        authData = Snoocore.oauth.getAuthData(self._userConfig.oauth.type, {
+          key: self._userConfig.oauth.key,
+          secret: self._userConfig.oauth.secret,
+          scope: self._userConfig.oauth.scope,
+          username: self._userConfig.oauth.username,
+          password: self._userConfig.oauth.password,
           applicationOnly: isApplicationOnly,
           serverWWW: serverWWW
         });
         break;
 
       case 'explicit':
-        authData = Snoocore.oauth.getAuthData(self._oauth.type, {
-          authorizationCode: authDataOrAuthCodeOrAccessToken, // auth code in this case
-          key: self._oauth.key,
-          secret: self._oauth.secret,
-          redirectUri: self._oauth.redirectUri,
-          scope: self._oauth.scope,
+        authData = Snoocore.oauth.getAuthData(self._userConfig.oauth.type, {
+          // auth code in this case
+          authorizationCode: authDataOrAuthCodeOrAccessToken,
+          key: self._userConfig.oauth.key,
+          secret: self._userConfig.oauth.secret,
+          redirectUri: self._userConfig.oauth.redirectUri,
+          scope: self._userConfig.oauth.scope,
           applicationOnly: isApplicationOnly,
           serverWWW: serverWWW
         });
@@ -730,9 +584,9 @@ function Snoocore(config) {
 
       case 'implicit':
         if (isApplicationOnly) {
-          authData = Snoocore.oauth.getAuthData(self._oauth.type, {
-            key: self._oauth.key,
-            scope: self._oauth.scope,
+          authData = Snoocore.oauth.getAuthData(self._userConfig.oauth.type, {
+            key: self._userConfig.oauth.key,
+            scope: self._userConfig.oauth.scope,
             applicationOnly: true,
             serverWWW: serverWWW
           });
@@ -740,10 +594,11 @@ function Snoocore(config) {
           // Set the access token, no need to make another call to reddit
           // using the `Snoocore.oauth.getAuthData` call
           authData = {
-            access_token: authDataOrAuthCodeOrAccessToken, // access token in this case
+            // access token in this case
+            access_token: authDataOrAuthCodeOrAccessToken,
             token_type: 'bearer',
             expires_in: 3600,
-            scope: self._oauth.scope
+            scope: self._userConfig.oauth.scope
           };
         }
         break;
@@ -794,7 +649,8 @@ function Snoocore(config) {
   self.deauth = function(refreshToken, options) {
 
     options = options || {};
-    var serverWWW = thisOrThat(options.serverWWW, self._serverWWW);
+    var serverWWW = utils.thisOrThat(options.serverWWW,
+                                     self._userConfig.serverWWW);
 
     // no need to deauth if not authenticated
     if (!hasAuthenticatedData()) {
@@ -805,14 +661,14 @@ function Snoocore(config) {
     var token = isRefreshToken ? refreshToken : self._authenticatedAuthData.access_token;
 
     return Snoocore.oauth.revokeToken(token, isRefreshToken, {
-      key: self._oauth.key,
-      secret: self._oauth.secret,
+      key: self._userConfig.oauth.key,
+      secret: self._userConfig.oauth.secret,
       serverWWW: serverWWW
     }).then(function() {
-      self._authenticatedAuthData = {}; // clear internal authenticated auth data.
+      // clear internal authenticated auth data.
+      self._authenticatedAuthData = {};
     });
   };
-
 
 
   /*

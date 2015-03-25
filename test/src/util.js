@@ -1,9 +1,10 @@
 
 var Snoocore = require('../../src/Snoocore');
+var UserConfig = require('../../src/UserConfig');
 
 var config = require('../config');
 
-var USER_AGENT = exports.USER_AGENT = 'Snoocore v.' + Snoocore.version +
+var USER_AGENT = exports.USER_AGENT = 'Snoocore wip-' + Snoocore.version +
                                       ' /u/' + config.reddit.login.username +
                                       ' << AUTOMATED TEST SUITE >>';
 
@@ -13,6 +14,21 @@ exports.isNode = function() {
     typeof module === 'object' &&
     typeof window === 'undefined');
 }
+
+exports.getScriptUserConfig = function() {
+  return new UserConfig({
+    userAgent: USER_AGENT,
+    oauth: {
+      type: 'script',
+      key: config.reddit.script.key,
+      secret: config.reddit.script.secret,
+      scope: [],
+      username: config.reddit.login.username,
+      password: config.reddit.login.password
+    }
+  });
+};
+
 
 exports.getExplicitInstance = function(scopes, duration) {
   return new Snoocore({

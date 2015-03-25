@@ -1,5955 +1,63 @@
 (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
-"use strict";
-
-var urlLib = require('url');
-var events = require('events');
-var util = require('util');
-
-var he = require('he');
-var when = require('when');
-var delay = require('when/delay');
-
-var endpointTree = require('./build/endpointTree');
-var utils = require('./utils');
-
-var pkg = require('./package');
-
-module.exports = Snoocore;
-
-Snoocore.version = pkg.version;
-
-Snoocore.oauth = require('./oauth');
-Snoocore.request = require('./request');
-Snoocore.file = require('./request/file');
-
-Snoocore.when = when;
-
-util.inherits(Snoocore, events.EventEmitter);
-function Snoocore(config) {
-
-  var self = this;
-
-  events.EventEmitter.call(self);
-
-  self._test = {}; // expose internal functions for testing
-
-  self._serverOAuth = thisOrThat(config.serverOAuth, 'oauth.reddit.com');
-  self._serverWWW = thisOrThat(config.serverWWW, 'www.reddit.com');
-
-  var missingMsg = 'Missing required config value ';
-
-  self._userAgent = thisOrThrow(config.userAgent, 'Missing required config value `userAgent`');
-  self._isNode = thisOrThat(config.browser, utils.isNode());
-  self._apiType = thisOrThat(config.apiType, 'json');
-  self._decodeHtmlEntities = thisOrThat(config.decodeHtmlEntities, false);
-  self._retryAttempts = thisOrThat(config.retryAttempts, 60);
-  self._retryDelay = thisOrThat(config.retryDelay, 5000);
-
-  self._authenticatedAuthData = {}; // Set if Authenticated with OAuth
-  self._applicationOnlyAuthData = {}; // Set if authenticated with Application Only OAuth
-
-  self._refreshToken = ''; // Set when calling `refresh` and when duration: 'permanent'
-
-  self._oauth = thisOrThat(config.oauth, {});
-  self._oauth.scope = thisOrThat(self._oauth.scope, [ 'identity' ]); // Default scope for reddit
-  self._oauth.deviceId = thisOrThat(self._oauth.deviceId, 'DO_NOT_TRACK_THIS_DEVICE');
-  self._oauth.type = thisOrThrow(self._oauth.type, missingMsg + '`oauth.type`');
-  self._oauth.key = thisOrThrow(self._oauth.key, missingMsg + '`oauth.key`');
-
-  if (!isOAuthType('explicit') && !isOAuthType('implicit') && !isOAuthType('script')) {
-    throw new Error('Invalid `oauth.type`. Must be one of: explicit, implicit, or script');
-  }
-
-  if (isOAuthType('explicit') || isOAuthType('script')) {
-    self._oauth.secret = thisOrThrow(self._oauth.secret, missingMsg + '`oauth.secret` for type explicit/script');
-  }
-
-  if (isOAuthType('script')) {
-    self._oauth.username = thisOrThrow(self._oauth.username,  missingMsg + '`oauth.username` for type script');
-    self._oauth.password = thisOrThrow(self._oauth.password, missingMsg + '`oauth.password` for type script');
-  }
-
-  if (isOAuthType('implicit') || isOAuthType('explicit')) {
-    self._oauth.redirectUri = thisOrThrow(self._oauth.redirectUri,
-                                          missingMsg + '`oauth.redirectUri` for type implicit/explicit');
-  }
-
-  //
-  //--- end of initial configuration
-  //
-
-  /*
-     The current throttle delay before a request will go through
-     increments every time a call is made, and is reduced when a
-     call finishes.
-
-     Time is added & removed based on the throttle variable.
-   */
-  self._throttleDelay = 1;
-
-
-  self._test.getThrottle = getThrottle;
-  function getThrottle() {
-    return 1000; // OAuth only requires 1000ms
-  }
-
-  /*
-     Return the value of `tryThis` unless it's undefined, then return `that`
-   */
-  self._test.thisOrThat = thisOrThat;
-  function thisOrThat(tryThis, that) {
-    return (typeof tryThis !== 'undefined') ? tryThis : that;
-  }
-
-  self._test.thisOrThrow = thisOrThrow;
-  function thisOrThrow(tryThis, orThrowMessage) {
-    if (typeof tryThis !== 'undefined') { return tryThis; }
-    throw new Error(orThrowMessage);
-  }
-
-  /*
-     Have we authorized with OAuth?
-   */
-  self._test.hasAuthenticatedData = hasAuthenticatedData;
-  function hasAuthenticatedData() {
-    return (typeof self._authenticatedAuthData.access_token !== 'undefined' &&
-      typeof self._authenticatedAuthData.token_type !== 'undefined');
-  }
-
-  /*
-     Have we authenticated with application only OAuth?
-   */
-  self._test.hasApplicationOnlyData = hasApplicationOnlyData;
-  function hasApplicationOnlyData() {
-    return (typeof self._applicationOnlyAuthData.access_token !== 'undefined' &&
-      typeof self._applicationOnlyAuthData.token_type !== 'undefined');
-  }
-
-  /*
-     Checks if the oauth is of a specific type, e.g.
-
-     isOAuthType('script')
-   */
-  self._test.isOAuthType = isOAuthType;
-  function isOAuthType(type) {
-    return self._oauth.type === type;
-  }
-
-  /*
-     Do we have a refresh token defined?
-   */
-  self._test.hasRefreshToken = hasRefreshToken;
-  function hasRefreshToken() {
-    return self._refreshToken !== '';
-  }
-
-  /*
-     Are we in application only mode?
-     Has the user not called `.auth()` yet?
-     Or has the user called `.deauth()`?
-   */
-  self._test.isApplicationOnly = isApplicationOnly;
-  function isApplicationOnly() {
-    return !hasAuthenticatedData();
-  }
-
-  /*
-     Gets the authorization header for when we are using application only OAuth
-   */
-  self._test.getApplicationOnlyAuthorizationHeader = getApplicationOnlyAuthorizationHeader;
-  function getApplicationOnlyAuthorizationHeader() {
-    return self._applicationOnlyAuthData.token_type + ' ' + self._applicationOnlyAuthData.access_token;
-  }
-
-  /*
-     Gets the authorization header for when we are authenticated with OAuth
-   */
-  self._test.getAuthenticatedAuthorizationHeader = getAuthenticatedAuthorizationHeader;
-  function getAuthenticatedAuthorizationHeader() {
-    return self._authenticatedAuthData.token_type + ' ' + self._authenticatedAuthData.access_token;
-  }
-
-  /*
-     Checks if a given endpoint needs scopes that were not defined
-     in the configuration.
-   */
-  self._test.hasMissingScopes = hasMissingScopes;
-  function hasMissingScopes(endpoint) {
-    // Check that the correct scopes have been requested
-    var requiredScope;
-    var missingScope;
-    var i = endpoint.oauth.length - 1;
-    for (; i >= 0; --i) {
-      requiredScope = endpoint.oauth[i];
-      missingScope = (
-        (self._oauth.scope || []).indexOf(requiredScope) === -1 &&
-        requiredScope !== 'any');
-
-      if (missingScope) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /*
-     Takes an url, and an object of url parameters and replaces
-     them, e.g.
-
-     endpointUrl:
-     'http://example.com/$foo/$bar/test.html'
-
-     givenArgs: { $foo: 'hello', $bar: 'world' }
-
-     would output:
-
-     'http://example.com/hello/world/test.html'
-   */
-  self._test.replaceUrlParams = replaceUrlParams;
-  function replaceUrlParams(endpointUrl, givenArgs) {
-    // nothing to replace!
-    if (endpointUrl.indexOf('$') === -1) {
-      return endpointUrl;
-    }
-
-    // pull out variables from the url
-    var params = endpointUrl.match(/\$[\w\.]+/g);
-
-    // replace with the argument provided
-    params.forEach(function(param) {
-      if (typeof givenArgs[param] === 'undefined') {
-        throw new Error('missing required url parameter ' + param);
-      }
-      endpointUrl = endpointUrl.replace(param, givenArgs[param]);
-    });
-
-    return endpointUrl;
-  }
-
-  /*
-     Adds the appropriate url extension to a url if it is available.
-
-     Currently, we only care about ".json" extensions. If an endpoint
-     url has a ".json" extension, we return a new url with '.json'
-     attached to the end.
-   */
-  self._test.addUrlExtension = addUrlExtension;
-  function addUrlExtension(endpointUrl, endpointExtensions) {
-    endpointExtensions = endpointExtensions || [];
-    // add ".json" if we have an url path that needs it specified
-    if (endpointExtensions.length === 0) { return endpointUrl; }
-
-    if (endpointExtensions.indexOf('.json') === -1) {
-      throw new Error(
-        'Invalid extension types specified, unable to use ' +
-        'this endpoint!');
-    }
-
-    endpointUrl += '.json';
-    return endpointUrl;
-  }
-
-  /*
-     Builds the URL that we will query reddit with.
-   */
-  self._test.buildUrl = buildUrl;
-  function buildUrl(givenArgs, endpoint, options) {
-    options = options || {};
-    var serverOAuth = thisOrThat(options.serverOAuth, self._serverOAuth);
-    var url = 'https://' + serverOAuth + endpoint.path;
-    url = replaceUrlParams(url, givenArgs);
-    url = addUrlExtension(url, endpoint.extensions);
-    return url;
-  }
-
-  /*
-     Build the arguments that we will send to reddit in our
-     request. These customize the request / what reddit will
-     send back.
-   */
-  self._test.buildArgs = buildArgs;
-  function buildArgs(endpointArgs, endpoint) {
-
-    endpoint = endpoint || {};
-    var args = {};
-
-    // Skip any url parameters (e.g. items that begin with $)
-    for (var key in endpointArgs) {
-      if (key.substring(0, 1) !== '$') {
-        args[key] = endpointArgs[key];
-      }
-    }
-
-    var apiType = thisOrThat(endpointArgs.api_type, self._apiType);
-
-    // If we have an api type (not false), and the endpoint requires it
-    // go ahead and set it in the args.
-    if (apiType && endpoint.args && typeof endpoint.args.api_type !== 'undefined') {
-      args.api_type = 'json';
-    }
-
-    return args;
-  }
-
-  /*
-     Returns an object containing the restful verb that is needed to
-     call the reddit API. That verb is a function call to `callRedditApi`
-     with the necessary normalization modifications setup in options.
-   */
-  self._test.buildCall = buildCall;
-  function buildCall(endpoints, options) {
-
-    options = options || {};
-    var methods = {};
-
-    // normalize the arguments given by the user to conform to the
-    // endpoint tree
-    function fixGivenArgs(givenArgs) {
-      givenArgs = givenArgs || {};
-
-      // replace any of the user alias place holders with the actual ones
-      Object.keys(options.urlParamAlias || []).forEach(function(providedAlias) {
-        // e.g. '$subreddit' vs '$sub'
-        var actualAlias = options.urlParamAlias[providedAlias];
-        // set the givenArgs to matche the actual alias value with the value that
-        // the user gave
-        givenArgs[actualAlias] = givenArgs[providedAlias];
-        // remove the provided alias
-        delete givenArgs[providedAlias];
-      });
-
-      // replace any of the url parameters with values embedded into the
-      // path into the givenArguments
-      Object.keys(options.urlParamValue || []).forEach(function(providedValue) {
-        // e.g. '$subreddit' vs 'aww'
-        var actualAlias = options.urlParamValue[providedValue];
-        // add the correct argument to givenArgs with the value provided
-        givenArgs[actualAlias] = providedValue;
-      });
-
-      return givenArgs;
-    }
-
-    endpoints.forEach(function(endpoint) {
-      methods[endpoint.method.toLowerCase()] = function(givenArgs, callOptions) {
-        givenArgs = fixGivenArgs(givenArgs);
-        return callRedditApi(endpoint, givenArgs, callOptions);
-      };
-
-      // Listings can only be 'GET' requests
-      if (endpoint.method === 'GET' && endpoint.isListing) {
-        methods.listing = function(givenArgs, callOptions) {
-          givenArgs = fixGivenArgs(givenArgs);
-          return getListing(endpoint, givenArgs, callOptions);
-        };
-      }
-    });
-
-    return methods;
-  }
-
-  /*
-     Returns a set of options that effect how each call to reddit behaves.
-   */
-  self._test.normalizeCallContextOptions = normalizeCallContextOptions;
-  function normalizeCallContextOptions(callContextOptions) {
-
-    var ccOptions = callContextOptions || {};
-
-    // by default we do not bypass authentication
-    ccOptions.bypassAuth = thisOrThat(ccOptions.bypassAuth, false);
-
-    // decode html enntities for this call?
-    ccOptions.decodeHtmlEntities = thisOrThat(ccOptions.decodeHtmlEntities, self._decodeHtmlEntities);
-
-    // how many attempts left do we have to retry an endpoint?
-    ccOptions.retryAttemptsLeft = thisOrThat(ccOptions.retryAttemptsLeft, ccOptions.retryAttempts);
-    ccOptions.retryAttemptsLeft = thisOrThat(ccOptions.retryAttemptsLeft, self._retryAttempts);
-
-    // delay between retrying an endpoint
-    ccOptions.retryDelay = thisOrThat(ccOptions.retryDelay, self._retryDelay);
-
-    // how many reauthentication attempts do we have left?
-    ccOptions.reauthAttemptsLeft = thisOrThat(ccOptions.reauthAttemptsLeft, ccOptions.retryAttemptsLeft);
-
-    return ccOptions;
-  }
-
-
-  /*
-     Returns a uniform error for all response errors.
-   */
-  self._test.getResponseError = getResponseError;
-  function getResponseError(response, url, args) {
-
-    var responseError = new Error([
-      '>>> Response Status: ' + response._status,
-      '>>> Endpoint URL: '+ url,
-      '>>> Arguments: ' + JSON.stringify(args, null, 2),
-      '>>> Response Body:',
-      response._body
-    ].join('\n\n'));
-
-    responseError.url = url;
-    responseError.args = args;
-    responseError.status = response._status;
-    responseError.body = response._body;
-
-    return responseError;
-  }
-
-  /*
-     Handle a reddit 500 / server error. This will try to call the endpoint again
-     after the given retryDelay. If we do not have any retry attempts left, it
-     will reject the promise with the error.
-   */
-  self._test.handleServerErrorResponse = handleServerErrorResponse;
-  function handleServerErrorResponse(response, endpoint, givenArgs, callContextOptions) {
-
-    --callContextOptions.retryAttemptsLeft;
-
-    var args = buildArgs(givenArgs, endpoint);
-    var url = buildUrl(givenArgs, endpoint, callContextOptions);
-
-    var responseError = getResponseError(response, url, args);
-    responseError.retryAttemptsLeft = callContextOptions.retryAttemptsLeft;
-    self.emit('server_error', responseError);
-
-    if (callContextOptions.retryAttemptsLeft <= 0) {
-      responseError.message = 'All retry attempts exhausted.\n\n' + responseError.message;
-      return when.reject(responseError);
-    }
-
-    return delay(callContextOptions.retryDelay).then(function() {
-      return callRedditApi(endpoint, givenArgs, callContextOptions);
-    });
-  }
-
-  /*
-     Handle a reddit 400 / client error. This is usually caused when our access_token
-     has expired.
-
-     If we can't renew our access token, we throw an error / emit the 'access_token_expired'
-     event that users can then handle to re-authenticatet clients
-
-     If we can renew our access token, we try to reauthenticate, and call the reddit
-     endpoint again.
-   */
-  self._test.handleClientErrorResponse = handleClientErrorResponse;
-  function handleClientErrorResponse(response, endpoint, givenArgs, callContextOptions) {
-
-    var args = buildArgs(givenArgs, endpoint);
-    var url = buildUrl(givenArgs, endpoint, callContextOptions);
-
-    // If we are *not* application only oauth and can't renew the access token
-    // then we should throw an error
-    if (!isApplicationOnly() && !hasRefreshToken() && !isOAuthType('script')) {
-      self.emit('access_token_expired');
-      return when.reject(new Error('Access token has expired. Listen for ' +
-                                   'the "access_token_expired" event to handle ' +
-                                   'this gracefully in your app.'));
-
-    }
-
-    // Check reddit's response and throw a more specific error if possible
-    try {
-      var data = JSON.parse(response._body);
-    } catch(e) {} // do nothing, may be unauthenticated
-
-    if (typeof data === 'object' && data.reason === 'USER_REQUIRED') {
-      return when.reject(new Error('Must be authenticated with a user to make a call to this endpoint.'));
-    }
-
-    var shouldAuthenticate = response._status === 401 || response._status === 403;
-    if (shouldAuthenticate) {
-      --callContextOptions.reauthAttemptsLeft;
-
-      if (callContextOptions.reauthAttemptsLeft <= 0) {
-        return when.reject(new Error('Unable to refresh the access_token.'));
-      }
-
-      var reauth;
-
-      // If we are application only, or are bypassing authentication for a call
-      // go ahead and use application only OAuth
-      if (isApplicationOnly() || callContextOptions.bypassAuth) {
-        console.log('oh hey');
-        reauth = self.applicationOnlyAuth();
-      } else {
-        // If we have been authenticated with a permanent refresh token
-        if (hasRefreshToken()) { reauth = self.refresh(self._refreshToken); }
-        // If we are OAuth type script and not implicit authenticated
-        if (isOAuthType('script')) { reauth = self.auth(); }
-      }
-
-      return reauth.then(function() {
-        return callRedditApi(endpoint, givenArgs, callContextOptions);
-      });
-    }
-
-    // Reject with a response error that has info on the call made
-    return when.reject(getResponseError(response, url, args));
-  }
-
-  /*
-     Handle reddit response status of 2xx. This does *not* mean that we are in the
-     clear. We need to check for errors from reddit's end.
-
-     Finally return the data if there were no problems.
-   */
-  self._test.handleSuccessResponse = handleSuccessResponse;
-  function handleSuccessResponse(response, endpoint, givenArgs, callContextOptions) {
-    var data = response._body || {};
-    var args = buildArgs(givenArgs, endpoint);
-    var url = buildUrl(givenArgs, endpoint, callContextOptions);
-
-    if (callContextOptions.decodeHtmlEntities) {
-      data = he.decode(data);
-    }
-
-    try { // Attempt to parse some JSON, otherwise continue on (may be empty, or text)
-      data = JSON.parse(data);
-    } catch(e) {}
-
-    return when.resolve(data);
-  }
-
-  /*
-     Handles various reddit response cases.
-   */
-  self._test.handleRedditResponse = handleRedditResponse;
-  function handleRedditResponse(response, endpoint, givenArgs, callContextOptions) {
-
-    switch(String(response._status).substring(0, 1)) {
-      case '5':
-        return handleServerErrorResponse(response, endpoint, givenArgs, callContextOptions);
-      case '4':
-        return handleClientErrorResponse(response, endpoint, givenArgs, callContextOptions);
-      case '2':
-        return handleSuccessResponse(response, endpoint, givenArgs, callContextOptions);
-    }
-
-    return when.reject(new Error('Invalid reddit response status of ' + response._status));
-  }
-
-  /*
-     Builds up the headers for a call to reddit.
-   */
-  self._test.buildHeaders = buildHeaders;
-  function buildHeaders(callContextOptions) {
-    var headers = {};
-
-    if (self._isNode) {
-      headers['User-Agent'] = self._userAgent; // Can't set User-Agent in browser
-    }
-
-    if (callContextOptions.bypassAuth || isApplicationOnly()) {
-      headers['Authorization'] = getApplicationOnlyAuthorizationHeader();
-    } else {
-      headers['Authorization'] = getAuthenticatedAuthorizationHeader();
-    }
-
-    return headers;
-  }
-
-  /*
-     Call the reddit api.
-   */
-  self._test.callRedditApi = callRedditApi;
-  function callRedditApi(endpoint, givenArgs, callContextOptions) {
-
-    if (hasMissingScopes(endpoint)) {
-      return when.reject(new Error('missing required scope(s): ' + endpoint.oauth.join(', ')));
-    }
-
-    callContextOptions = normalizeCallContextOptions(callContextOptions);
-
-    var args = buildArgs(givenArgs, endpoint);
-    var url = buildUrl(givenArgs, endpoint, callContextOptions);
-    var parsedUrl = urlLib.parse(url);
-
-    var requestOptions = {
-      method: endpoint.method.toUpperCase(),
-      hostname: parsedUrl.hostname,
-      path: parsedUrl.path,
-      headers: buildHeaders(callContextOptions)
-    };
-
-    if (parsedUrl.port) {
-      requestOptions.port = parsedUrl.port;
-    }
-
-    var throttle = getThrottle();
-    var startCallTime = Date.now();
-    self._throttleDelay += throttle;
-
-    // Wait for the throttle delay amount, then call the Reddit API
-    return delay(self._throttleDelay - throttle).then(function() {
-      return Snoocore.request.https(requestOptions, args);
-    }).then(function(response) {
-      console.log(requestOptions, args);
-      console.log(response);
-      return handleRedditResponse(response, endpoint, givenArgs, callContextOptions);
-    }).finally(function() {
-      // decrement the throttle delay. If the call is quick and snappy, we
-      // only decrement the total time that it took to make the call.
-      var endCallTime = Date.now();
-      var callDuration = endCallTime - startCallTime;
-
-      if (callDuration < throttle) {
-        self._throttleDelay -= callDuration;
-      } else {
-        self._throttleDelay -= throttle;
-      }
-    });
-
-  }
-
-  /*
-     Listing support.
-   */
-  function getListing(endpoint, givenArgs, options) {
-
-    givenArgs = givenArgs || {};
-    options = options || {};
-
-    // number of results that we have loaded so far. It will
-    // increase / decrease when calling next / previous.
-    var count = 0;
-    var limit = givenArgs.limit || 25;
-    // keep a reference to the start of this listing
-    var start = givenArgs.after || null;
-
-    function getSlice(givenArgs) {
-      return callRedditApi(endpoint, givenArgs, options).then(function(result) {
-
-        var slice = {};
-        var listing = result || {};
-
-        slice.get = result || {};
-
-        if (result instanceof Array) {
-          if (typeof options.listingIndex === 'undefined') {
-            throw new Error('Must specify a `listingIndex` for this listing.');
-          }
-
-          listing = result[options.listingIndex];
-        }
-
-        slice.count = count;
-
-        slice.before = listing.data.before || null;
-        slice.after = listing.data.after || null;
-        slice.allChildren = listing.data.children || [];
-
-        slice.empty = slice.allChildren.length === 0;
-
-        slice.children = slice.allChildren.filter(function(child) {
-          return !child.data.stickied;
-        });
-
-        slice.stickied = slice.allChildren.filter(function(child) {
-          return child.data.stickied;
-        });
-
-        slice.next = function() {
-          count += limit;
-
-          var args = givenArgs;
-          args.before = null;
-          args.after = slice.children[slice.children.length - 1].data.name;
-          args.count = count;
-          return getSlice(args);
-        };
-
-        slice.previous = function() {
-          count -= limit;
-
-          var args = givenArgs;
-          args.before = slice.children[0].data.name;
-          args.after = null;
-          args.count = count;
-          return getSlice(args);
-        };
-
-        slice.start = function() {
-          count = 0;
-
-          var args = givenArgs;
-          args.before = null;
-          args.after = start;
-          args.count = count;
-          return getSlice(args);
-        };
-
-        slice.requery = function() {
-          return getSlice(givenArgs);
-        };
-
-        return slice;
-      });
-
-    }
-
-    return getSlice(givenArgs);
-  }
-
-  /*
-     Build support for the raw API calls
-   */
-  self.raw = function(urlOrPath) {
-
-    var parsed = urlLib.parse(urlOrPath);
-
-    function getEndpoint(method) {
-      return {
-        path: parsed.pathname,
-        method: method,
-        oauth: [],
-        isListing: true
-      };
-    }
-
-    var endpoints = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'UPDATE'].map(getEndpoint);
-
-    return buildCall(endpoints);
-  };
-
-
-  /*
-     Enable path syntax support, e.g. reddit('/path/to/$endpoint/etc')
-   */
-  self.path = function(path) {
-
-    // remove leading slash if any
-    var sections = path.replace(/^\//, '').split('/');
-    var leaf = endpointTree; // the top level of the endpoint tree that we will traverse down
-
-    // Adjust how this call is built if necessary
-    var buildCallOptions = {
-      urlParamAlias: {}, // aliases for url parameters
-      urlParamValue: {} // values for url parameters (included in the url vs. using $placeholder)
-    };
-
-    // Travel down the endpoint tree until we get to the endpoint that we want
-    for (var i = 0, len = sections.length; i < len; ++i) {
-
-      // The section of the url path provided
-      var providedSection = sections[i];
-      var nextSection = sections[i + 1];
-
-      // The *real* section should the provided section not exist
-      var actualSection = providedSection;
-
-      // If the user provided section does not exist in our endpoint tree
-      // this means that they are using their own placeholder, or an actual
-      // value of the url parameter
-      if (typeof leaf[providedSection] === 'undefined') {
-
-        var leafKeys = Object.keys(leaf);
-
-        for (var j = 0, jlen = leafKeys.length; j < jlen; ++j) {
-          // Return the section that represents a placeholder
-          if (leafKeys[j].substring(0, 1) === '$') {
-            actualSection = leafKeys[j]; // The actual value, e.g. '$subreddit'
-
-            // If this section is the actual section, the next section of
-            // this path should be valid as well if we have a next session
-            if (nextSection && leaf[actualSection][nextSection]) {
-              break;
-            }
-
-            // continue until we find a valid section
-          }
-        }
-
-        // The user is using their own alias
-        if (providedSection.substring(0, 1) === '$') {
-          buildCallOptions.urlParamAlias[providedSection] = actualSection;
-        }
-        // looks like they used a value instead of the placeholder
-        else {
-          buildCallOptions.urlParamValue[providedSection] = actualSection;
-        }
-
-      }
-
-      // Check that the actual section is a valid one
-      if (typeof leaf[actualSection] === 'undefined') {
-        return self.raw(path); // Assume that this is a raw endpoint.
-      }
-
-      // move down the endpoint tree
-      leaf = leaf[actualSection];
-    }
-
-    // Check that our leaf is an endpoint before building the call
-    if (typeof leaf._endpoints === 'undefined') {
-      return self.raw(path); // Assume that this is a raw endpoint
-    }
-
-    return buildCall(leaf._endpoints, buildCallOptions);
-  };
-
-  /*
-     Get the Explicit Auth Url
-   */
-  self.getExplicitAuthUrl = function(state, options) {
-    var options = self._oauth;
-    options.state = state || Math.ceil(Math.random() * 1000);
-    options.serverWWW = thisOrThat(options.serverWWW, self._serverWWW);
-    return Snoocore.oauth.getExplicitAuthUrl(options);
-  };
-
-  /*
-     Get the Implicit Auth Url
-   */
-  self.getImplicitAuthUrl = function(state, options) {
-    var options = self._oauth;
-    options.state = state || Math.ceil(Math.random() * 1000);
-    options.serverWWW = thisOrThat(options.serverWWW, self._serverWWW);
-    return Snoocore.oauth.getImplicitAuthUrl(options);
-  };
-
-  /*
-     Authenticate with a refresh token
-   */
-  self.refresh = function(refreshToken, options) {
-    options = options || {};
-    var serverWWW = thisOrThat(options.serverWWW, self._serverWWW);
-
-    return Snoocore.oauth.getAuthData('refresh', {
-      refreshToken: refreshToken,
-      key: self._oauth.key,
-      secret: self._oauth.secret,
-      redirectUri: self._oauth.redirectUri,
-      scope: self._oauth.scope,
-      serverWWW: serverWWW
-    }).then(function(authDataResult) {
-      // only set the internal refresh token if reddit
-      // agrees that it was OK and sends back authData
-      self._refreshToken = refreshToken;
-
-      self._authenticatedAuthData = authDataResult;
-    });
-  };
-
-  /*
-     Sets the auth data from the oauth module to allow OAuth calls.
-
-     This function can authenticate with:
-
-     - Script based OAuth (no parameter)
-     - Raw authentication data
-     - Authorization Code (request_type = "code")
-     - Access Token (request_type = "token") / Implicit OAuth
-     - Application Only. (void 0, true);
-   */
-  self.auth = function(authDataOrAuthCodeOrAccessToken, isApplicationOnly, options) {
-
-    options = options || {};
-    var serverWWW = thisOrThat(options.serverWWW, self._serverWWW);
-
-    var authData;
-
-    switch(self._oauth.type) {
-      case 'script':
-        authData = Snoocore.oauth.getAuthData(self._oauth.type, {
-          key: self._oauth.key,
-          secret: self._oauth.secret,
-          scope: self._oauth.scope,
-          username: self._oauth.username,
-          password: self._oauth.password,
-          applicationOnly: isApplicationOnly,
-          serverWWW: serverWWW
-        });
-        break;
-
-      case 'explicit':
-        authData = Snoocore.oauth.getAuthData(self._oauth.type, {
-          authorizationCode: authDataOrAuthCodeOrAccessToken, // auth code in this case
-          key: self._oauth.key,
-          secret: self._oauth.secret,
-          redirectUri: self._oauth.redirectUri,
-          scope: self._oauth.scope,
-          applicationOnly: isApplicationOnly,
-          serverWWW: serverWWW
-        });
-        break;
-
-      case 'implicit':
-        if (isApplicationOnly) {
-          console.log('ohhh heeyyy (2)');
-          authData = Snoocore.oauth.getAuthData(self._oauth.type, {
-            key: self._oauth.key,
-            scope: self._oauth.scope,
-            applicationOnly: true,
-            serverWWW: serverWWW
-          });
-        } else {
-          // Set the access token, no need to make another call to reddit
-          // using the `Snoocore.oauth.getAuthData` call
-          authData = {
-            access_token: authDataOrAuthCodeOrAccessToken, // access token in this case
-            token_type: 'bearer',
-            expires_in: 3600,
-            scope: self._oauth.scope
-          };
-        }
-        break;
-
-      default:
-        // assume that it is the authData
-        authData = authDataOrAuthCodeOrAccessToken;
-    }
-
-    return when(authData).then(function(authDataResult) {
-
-      if (typeof authDataResult !== 'object') {
-        return when.reject(new Error(
-          'There was a problem authenticating: ', authDataResult));
-      }
-
-      if (!isApplicationOnly) {
-        self._authenticatedAuthData = authDataResult;
-      } else {
-        self._applicationOnlyAuthData = authDataResult;
-      }
-
-      // if the explicit app used a perminant duration, send
-      // back the refresh token that will be used to re-authenticate
-      // later without user interaction.
-      if (authDataResult.refresh_token) {
-        // set the internal refresh token for automatic expiring
-        // access_token management
-        self._refreshToken = authDataResult.refresh_token;
-        return authDataResult.refresh_token;
-      }
-    });
-  };
-
-  /*
-     Only authenticates with Application Only OAuth
-   */
-  self.applicationOnlyAuth = function() {
-    return self.auth(void 0, true);
-  };
-
-  /*
-     Clears any authentication data & removes OAuth authentication
-
-     By default it will only remove the "access_token". Specify
-     the users refresh token to revoke that token instead.
-   */
-  self.deauth = function(refreshToken, options) {
-
-    options = options || {};
-    var serverWWW = thisOrThat(options.serverWWW, self._serverWWW);
-
-    // no need to deauth if not authenticated
-    if (!hasAuthenticatedData()) {
-      return when.resolve();
-    }
-
-    var isRefreshToken = typeof refreshToken === 'string';
-    var token = isRefreshToken ? refreshToken : self._authenticatedAuthData.access_token;
-
-    return Snoocore.oauth.revokeToken(token, isRefreshToken, {
-      key: self._oauth.key,
-      secret: self._oauth.secret,
-      serverWWW: serverWWW
-    }).then(function() {
-      self._authenticatedAuthData = {}; // clear internal authenticated auth data.
-    });
-  };
-
-
-
-  /*
-     Make self.path the primary function that we return, but
-     still allow access to the objects defined on self
-   */
-  var key;
-  for (key in self) {
-    self.path[key] = self[key];
-  }
-
-  self = self.path;
-  return self;
-}
-
-},{"./build/endpointTree":2,"./oauth":71,"./package":72,"./request":75,"./request/file":73,"./utils":84,"events":7,"he":51,"url":15,"util":17,"when":70,"when/delay":52}],2:[function(require,module,exports){
 module.exports={
-  "api": {
-    "clear_sessions": {
-      "_endpoints": [
-        {
-          "path": "/api/clear_sessions",
-          "oauth": [],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "curpass": {},
-            "dest": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "delete_user": {
-      "_endpoints": [
-        {
-          "path": "/api/delete_user",
-          "oauth": [],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "confirm": {},
-            "delete_message": {},
-            "passwd": {},
-            "uh": {},
-            "user": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "login": {
-      "_endpoints": [
-        {
-          "path": "/api/login",
-          "oauth": [],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "passwd": {},
-            "rem": {},
-            "user": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "me.json": {
-      "_endpoints": [
-        {
-          "path": "/api/me.json",
-          "oauth": [],
-          "extensions": [],
-          "method": "GET",
-          "args": {},
-          "isListing": false
-        }
-      ]
-    },
-    "register": {
-      "_endpoints": [
-        {
-          "path": "/api/register",
-          "oauth": [],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "email": {},
-            "passwd": {},
-            "passwd2": {},
-            "rem": {},
-            "user": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "set_force_https": {
-      "_endpoints": [
-        {
-          "path": "/api/set_force_https",
-          "oauth": [],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "curpass": {},
-            "force_https": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "update_email": {
-      "_endpoints": [
-        {
-          "path": "/api/update_email",
-          "oauth": [],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "curpass": {},
-            "dest": {},
-            "email": {},
-            "uh": {},
-            "verify": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "update_password": {
-      "_endpoints": [
-        {
-          "path": "/api/update_password",
-          "oauth": [],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "curpass": {},
-            "newpass": {},
-            "uh": {},
-            "verpass": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "v1": {
-      "me": {
-        "_endpoints": [
-          {
-            "path": "/api/v1/me",
-            "oauth": [
-              "identity"
-            ],
-            "extensions": [],
-            "method": "GET",
-            "args": {},
-            "isListing": false
-          }
-        ],
-        "karma": {
-          "_endpoints": [
-            {
-              "path": "/api/v1/me/karma",
-              "oauth": [
-                "mysubreddits"
-              ],
-              "extensions": [],
-              "method": "GET",
-              "args": {},
-              "isListing": false
-            }
-          ]
-        },
-        "prefs": {
-          "_endpoints": [
-            {
-              "path": "/api/v1/me/prefs",
-              "oauth": [
-                "identity"
-              ],
-              "extensions": [],
-              "method": "GET",
-              "args": {
-                "fields": {}
-              },
-              "isListing": false
-            },
-            {
-              "path": "/api/v1/me/prefs",
-              "oauth": [
-                "account"
-              ],
-              "extensions": [],
-              "method": "PATCH",
-              "args": {
-                "This": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "trophies": {
-          "_endpoints": [
-            {
-              "path": "/api/v1/me/trophies",
-              "oauth": [
-                "identity"
-              ],
-              "extensions": [],
-              "method": "GET",
-              "args": {},
-              "isListing": false
-            }
-          ]
-        },
-        "friends": {
-          "_endpoints": [
-            {
-              "path": "/api/v1/me/friends",
-              "oauth": [
-                "read"
-              ],
-              "extensions": [
-                ".json",
-                ".xml"
-              ],
-              "method": "GET",
-              "args": {
-                "after": {},
-                "before": {},
-                "count": {},
-                "limit": {},
-                "show": {}
-              },
-              "isListing": true
-            }
-          ],
-          "$username": {
-            "_endpoints": [
-              {
-                "path": "/api/v1/me/friends/$username",
-                "oauth": [
-                  "subscribe"
-                ],
-                "extensions": [],
-                "method": "DELETE",
-                "args": {
-                  "username": {}
-                },
-                "isListing": false
-              },
-              {
-                "path": "/api/v1/me/friends/$username",
-                "oauth": [
-                  "mysubreddits"
-                ],
-                "extensions": [],
-                "method": "GET",
-                "args": {
-                  "username": {}
-                },
-                "isListing": false
-              },
-              {
-                "path": "/api/v1/me/friends/$username",
-                "oauth": [
-                  "subscribe"
-                ],
-                "extensions": [],
-                "method": "PUT",
-                "args": {
-                  "This": {}
-                },
-                "isListing": false
-              }
-            ]
-          }
-        },
-        "blocked": {
-          "_endpoints": [
-            {
-              "path": "/api/v1/me/blocked",
-              "oauth": [
-                "read"
-              ],
-              "extensions": [
-                ".json",
-                ".xml"
-              ],
-              "method": "GET",
-              "args": {
-                "after": {},
-                "before": {},
-                "count": {},
-                "limit": {},
-                "show": {}
-              },
-              "isListing": true
-            }
-          ]
-        }
-      },
-      "gold": {
-        "gild": {
-          "$fullname": {
-            "_endpoints": [
-              {
-                "path": "/api/v1/gold/gild/$fullname",
-                "oauth": [
-                  "creddits"
-                ],
-                "extensions": [],
-                "method": "POST",
-                "args": {
-                  "fullname": {}
-                },
-                "isListing": false
-              }
-            ]
-          }
-        },
-        "give": {
-          "$username": {
-            "_endpoints": [
-              {
-                "path": "/api/v1/gold/give/$username",
-                "oauth": [
-                  "creddits"
-                ],
-                "extensions": [],
-                "method": "POST",
-                "args": {
-                  "months": {},
-                  "username": {}
-                },
-                "isListing": false
-              }
-            ]
-          }
-        }
-      },
-      "user": {
-        "$username": {
-          "trophies": {
-            "_endpoints": [
-              {
-                "path": "/api/v1/user/$username/trophies",
-                "oauth": [
-                  "read"
-                ],
-                "extensions": [],
-                "method": "GET",
-                "args": {
-                  "username": {}
-                },
-                "isListing": false
-              }
-            ]
-          }
-        }
-      }
-    },
-    "needs_captcha.json": {
-      "_endpoints": [
-        {
-          "path": "/api/needs_captcha.json",
-          "oauth": [
-            "any"
-          ],
-          "extensions": [],
-          "method": "GET",
-          "args": {},
-          "isListing": false
-        }
-      ]
-    },
-    "new_captcha": {
-      "_endpoints": [
-        {
-          "path": "/api/new_captcha",
-          "oauth": [
-            "any"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "clearflairtemplates": {
-      "_endpoints": [
-        {
-          "path": "/api/clearflairtemplates",
-          "oauth": [
-            "modflair"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "flair_type": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "deleteflair": {
-      "_endpoints": [
-        {
-          "path": "/api/deleteflair",
-          "oauth": [
-            "modflair"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "name": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "deleteflairtemplate": {
-      "_endpoints": [
-        {
-          "path": "/api/deleteflairtemplate",
-          "oauth": [
-            "modflair"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "flair_template_id": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "flair": {
-      "_endpoints": [
-        {
-          "path": "/api/flair",
-          "oauth": [
-            "modflair"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "css_class": {},
-            "link": {},
-            "name": {},
-            "text": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "flairconfig": {
-      "_endpoints": [
-        {
-          "path": "/api/flairconfig",
-          "oauth": [
-            "modflair"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "flair_enabled": {},
-            "flair_position": {},
-            "flair_self_assign_enabled": {},
-            "link_flair_position": {},
-            "link_flair_self_assign_enabled": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "flaircsv": {
-      "_endpoints": [
-        {
-          "path": "/api/flaircsv",
-          "oauth": [
-            "modflair"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "flair_csv": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "flairlist": {
-      "_endpoints": [
-        {
-          "path": "/api/flairlist",
-          "oauth": [
-            "modflair"
-          ],
-          "extensions": [],
-          "method": "GET",
-          "args": {
-            "after": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "name": {},
-            "show": {}
-          },
-          "isListing": true
-        }
-      ]
-    },
-    "flairselector": {
-      "_endpoints": [
-        {
-          "path": "/api/flairselector",
-          "oauth": [
-            "flair"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "link": {},
-            "name": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "flairtemplate": {
-      "_endpoints": [
-        {
-          "path": "/api/flairtemplate",
-          "oauth": [
-            "modflair"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "css_class": {},
-            "flair_template_id": {},
-            "flair_type": {},
-            "text": {},
-            "text_editable": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "selectflair": {
-      "_endpoints": [
-        {
-          "path": "/api/selectflair",
-          "oauth": [
-            "flair"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "flair_template_id": {},
-            "link": {},
-            "name": {},
-            "text": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "setflairenabled": {
-      "_endpoints": [
-        {
-          "path": "/api/setflairenabled",
-          "oauth": [
-            "flair"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "flair_enabled": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "comment": {
-      "_endpoints": [
-        {
-          "path": "/api/comment",
-          "oauth": [
-            "submit"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "text": {},
-            "thing_id": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "del": {
-      "_endpoints": [
-        {
-          "path": "/api/del",
-          "oauth": [
-            "edit"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "id": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "editusertext": {
-      "_endpoints": [
-        {
-          "path": "/api/editusertext",
-          "oauth": [
-            "edit"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "text": {},
-            "thing_id": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "hide": {
-      "_endpoints": [
-        {
-          "path": "/api/hide",
-          "oauth": [
-            "report"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "id": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "info": {
-      "_endpoints": [
-        {
-          "path": "/api/info",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [],
-          "method": "GET",
-          "args": {
-            "id": {},
-            "url": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "marknsfw": {
-      "_endpoints": [
-        {
-          "path": "/api/marknsfw",
-          "oauth": [
-            "modposts"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "id": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "morechildren": {
-      "_endpoints": [
-        {
-          "path": "/api/morechildren",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [],
-          "method": "GET",
-          "args": {
-            "api_type": {},
-            "children": {},
-            "id": {},
-            "link_id": {},
-            "pv_hex": {},
-            "sort": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "report": {
-      "_endpoints": [
-        {
-          "path": "/api/report",
-          "oauth": [
-            "report"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "other_reason": {},
-            "reason": {},
-            "thing_id": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "save": {
-      "_endpoints": [
-        {
-          "path": "/api/save",
-          "oauth": [
-            "save"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "category": {},
-            "id": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "saved_categories.json": {
-      "_endpoints": [
-        {
-          "path": "/api/saved_categories.json",
-          "oauth": [
-            "save"
-          ],
-          "extensions": [],
-          "method": "GET",
-          "args": {},
-          "isListing": false
-        }
-      ]
-    },
-    "sendreplies": {
-      "_endpoints": [
-        {
-          "path": "/api/sendreplies",
-          "oauth": [
-            "edit"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "id": {},
-            "state": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "set_contest_mode": {
-      "_endpoints": [
-        {
-          "path": "/api/set_contest_mode",
-          "oauth": [
-            "modposts"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "id": {},
-            "state": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "set_subreddit_sticky": {
-      "_endpoints": [
-        {
-          "path": "/api/set_subreddit_sticky",
-          "oauth": [
-            "modposts"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "id": {},
-            "state": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "store_visits": {
-      "_endpoints": [
-        {
-          "path": "/api/store_visits",
-          "oauth": [
-            "save"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "links": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "submit": {
-      "_endpoints": [
-        {
-          "path": "/api/submit",
-          "oauth": [
-            "submit"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "captcha": {},
-            "extension": {},
-            "iden": {},
-            "kind": {},
-            "resubmit": {},
-            "sendreplies": {},
-            "sr": {},
-            "text": {},
-            "then": {},
-            "title": {},
-            "uh": {},
-            "url": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "unhide": {
-      "_endpoints": [
-        {
-          "path": "/api/unhide",
-          "oauth": [
-            "report"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "id": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "unmarknsfw": {
-      "_endpoints": [
-        {
-          "path": "/api/unmarknsfw",
-          "oauth": [
-            "modposts"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "id": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "unsave": {
-      "_endpoints": [
-        {
-          "path": "/api/unsave",
-          "oauth": [
-            "save"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "id": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "vote": {
-      "_endpoints": [
-        {
-          "path": "/api/vote",
-          "oauth": [
-            "vote"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "dir": {},
-            "id": {},
-            "uh": {},
-            "v": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "live": {
-      "create": {
-        "_endpoints": [
-          {
-            "path": "/api/live/create",
-            "oauth": [
-              "submit"
-            ],
-            "extensions": [],
-            "method": "POST",
-            "args": {
-              "api_type": {},
-              "description": {},
-              "nsfw": {},
-              "resources": {},
-              "title": {},
-              "uh": {}
-            },
-            "isListing": false
-          }
-        ]
-      },
-      "$thread": {
-        "accept_contributor_invite": {
-          "_endpoints": [
-            {
-              "path": "/api/live/$thread/accept_contributor_invite",
-              "oauth": [
-                "livemanage"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "api_type": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "close_thread": {
-          "_endpoints": [
-            {
-              "path": "/api/live/$thread/close_thread",
-              "oauth": [
-                "livemanage"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "api_type": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "delete_update": {
-          "_endpoints": [
-            {
-              "path": "/api/live/$thread/delete_update",
-              "oauth": [
-                "edit"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "api_type": {},
-                "id": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "edit": {
-          "_endpoints": [
-            {
-              "path": "/api/live/$thread/edit",
-              "oauth": [
-                "livemanage"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "api_type": {},
-                "description": {},
-                "nsfw": {},
-                "resources": {},
-                "title": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "invite_contributor": {
-          "_endpoints": [
-            {
-              "path": "/api/live/$thread/invite_contributor",
-              "oauth": [
-                "livemanage"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "api_type": {},
-                "name": {},
-                "permissions": {},
-                "type": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "leave_contributor": {
-          "_endpoints": [
-            {
-              "path": "/api/live/$thread/leave_contributor",
-              "oauth": [
-                "livemanage"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "api_type": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "report": {
-          "_endpoints": [
-            {
-              "path": "/api/live/$thread/report",
-              "oauth": [
-                "report"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "api_type": {},
-                "type": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "rm_contributor": {
-          "_endpoints": [
-            {
-              "path": "/api/live/$thread/rm_contributor",
-              "oauth": [
-                "livemanage"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "api_type": {},
-                "id": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "rm_contributor_invite": {
-          "_endpoints": [
-            {
-              "path": "/api/live/$thread/rm_contributor_invite",
-              "oauth": [
-                "livemanage"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "api_type": {},
-                "id": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "set_contributor_permissions": {
-          "_endpoints": [
-            {
-              "path": "/api/live/$thread/set_contributor_permissions",
-              "oauth": [
-                "livemanage"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "api_type": {},
-                "name": {},
-                "permissions": {},
-                "type": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "strike_update": {
-          "_endpoints": [
-            {
-              "path": "/api/live/$thread/strike_update",
-              "oauth": [
-                "edit"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "api_type": {},
-                "id": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "update": {
-          "_endpoints": [
-            {
-              "path": "/api/live/$thread/update",
-              "oauth": [
-                "submit"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "api_type": {},
-                "body": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        }
-      }
-    },
-    "block": {
-      "_endpoints": [
-        {
-          "path": "/api/block",
-          "oauth": [
-            "privatemessages"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "id": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "compose": {
-      "_endpoints": [
-        {
-          "path": "/api/compose",
-          "oauth": [
-            "privatemessages"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "captcha": {},
-            "from_sr": {},
-            "iden": {},
-            "subject": {},
-            "text": {},
-            "to": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "read_all_messages": {
-      "_endpoints": [
-        {
-          "path": "/api/read_all_messages",
-          "oauth": [
-            "privatemessages"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "read_message": {
-      "_endpoints": [
-        {
-          "path": "/api/read_message",
-          "oauth": [
-            "privatemessages"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "id": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "unblock_subreddit": {
-      "_endpoints": [
-        {
-          "path": "/api/unblock_subreddit",
-          "oauth": [
-            "privatemessages"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "id": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "unread_message": {
-      "_endpoints": [
-        {
-          "path": "/api/unread_message",
-          "oauth": [
-            "privatemessages"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "id": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "accept_moderator_invite": {
-      "_endpoints": [
-        {
-          "path": "/api/accept_moderator_invite",
-          "oauth": [
-            "modself"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "approve": {
-      "_endpoints": [
-        {
-          "path": "/api/approve",
-          "oauth": [
-            "modposts"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "id": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "distinguish": {
-      "_endpoints": [
-        {
-          "path": "/api/distinguish",
-          "oauth": [
-            "modposts"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "how": {},
-            "id": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "ignore_reports": {
-      "_endpoints": [
-        {
-          "path": "/api/ignore_reports",
-          "oauth": [
-            "modposts"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "id": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "leavecontributor": {
-      "_endpoints": [
-        {
-          "path": "/api/leavecontributor",
-          "oauth": [
-            "modself"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "id": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "leavemoderator": {
-      "_endpoints": [
-        {
-          "path": "/api/leavemoderator",
-          "oauth": [
-            "modself"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "id": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "remove": {
-      "_endpoints": [
-        {
-          "path": "/api/remove",
-          "oauth": [
-            "modposts"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "id": {},
-            "spam": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "unignore_reports": {
-      "_endpoints": [
-        {
-          "path": "/api/unignore_reports",
-          "oauth": [
-            "modposts"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "id": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "multi": {
-      "mine": {
-        "_endpoints": [
-          {
-            "path": "/api/multi/mine",
-            "oauth": [
-              "read"
-            ],
-            "extensions": [],
-            "method": "GET",
-            "args": {
-              "expand_srs": {}
-            },
-            "isListing": false
-          }
-        ]
-      },
-      "$multipath": {
-        "_endpoints": [
-          {
-            "path": "/api/multi/$multipath",
-            "oauth": [
-              "subscribe"
-            ],
-            "extensions": [],
-            "method": "DELETE",
-            "args": {
-              "multipath": {},
-              "uh": {},
-              "expand_srs": {}
-            },
-            "isListing": false
-          },
-          {
-            "path": "/api/multi/$multipath",
-            "oauth": [
-              "read"
-            ],
-            "extensions": [],
-            "method": "GET",
-            "args": {
-              "expand_srs": {},
-              "multipath": {}
-            },
-            "isListing": false
-          },
-          {
-            "path": "/api/multi/$multipath",
-            "oauth": [
-              "subscribe"
-            ],
-            "extensions": [],
-            "method": "POST",
-            "args": {
-              "model": {},
-              "multipath": {},
-              "uh": {},
-              "expand_srs": {}
-            },
-            "isListing": false
-          },
-          {
-            "path": "/api/multi/$multipath",
-            "oauth": [
-              "subscribe"
-            ],
-            "extensions": [],
-            "method": "PUT",
-            "args": {
-              "model": {},
-              "multipath": {},
-              "uh": {},
-              "expand_srs": {}
-            },
-            "isListing": false
-          }
-        ],
-        "copy": {
-          "_endpoints": [
-            {
-              "path": "/api/multi/$multipath/copy",
-              "oauth": [
-                "subscribe"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "from": {},
-                "to": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "description": {
-          "_endpoints": [
-            {
-              "path": "/api/multi/$multipath/description",
-              "oauth": [
-                "read"
-              ],
-              "extensions": [],
-              "method": "GET",
-              "args": {
-                "multipath": {}
-              },
-              "isListing": false
-            },
-            {
-              "path": "/api/multi/$multipath/description",
-              "oauth": [
-                "read"
-              ],
-              "extensions": [],
-              "method": "PUT",
-              "args": {
-                "model": {},
-                "multipath": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "r": {
-          "$srname": {
-            "_endpoints": [
-              {
-                "path": "/api/multi/$multipath/r/$srname",
-                "oauth": [
-                  "subscribe"
-                ],
-                "extensions": [],
-                "method": "DELETE",
-                "args": {
-                  "multipath": {},
-                  "srname": {},
-                  "uh": {}
-                },
-                "isListing": false
-              },
-              {
-                "path": "/api/multi/$multipath/r/$srname",
-                "oauth": [
-                  "read"
-                ],
-                "extensions": [],
-                "method": "GET",
-                "args": {
-                  "multipath": {},
-                  "srname": {}
-                },
-                "isListing": false
-              },
-              {
-                "path": "/api/multi/$multipath/r/$srname",
-                "oauth": [
-                  "subscribe"
-                ],
-                "extensions": [],
-                "method": "PUT",
-                "args": {
-                  "model": {},
-                  "multipath": {},
-                  "srname": {},
-                  "uh": {}
-                },
-                "isListing": false
-              }
-            ]
-          }
-        },
-        "rename": {
-          "_endpoints": [
-            {
-              "path": "/api/multi/$multipath/rename",
-              "oauth": [
-                "subscribe"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "from": {},
-                "to": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        }
-      }
-    },
-    "filter": {
-      "filterpath": {
-        "_endpoints": [
-          {
-            "path": "/api/filter/filterpath",
-            "oauth": [
-              "subscribe"
-            ],
-            "extensions": [],
-            "method": "DELETE",
-            "args": {
-              "multipath": {},
-              "uh": {},
-              "expand_srs": {}
-            },
-            "isListing": false
-          },
-          {
-            "path": "/api/filter/filterpath",
-            "oauth": [
-              "read"
-            ],
-            "extensions": [],
-            "method": "GET",
-            "args": {
-              "expand_srs": {},
-              "multipath": {}
-            },
-            "isListing": false
-          },
-          {
-            "path": "/api/filter/filterpath",
-            "oauth": [
-              "subscribe"
-            ],
-            "extensions": [],
-            "method": "POST",
-            "args": {
-              "model": {},
-              "multipath": {},
-              "uh": {},
-              "expand_srs": {}
-            },
-            "isListing": false
-          },
-          {
-            "path": "/api/filter/filterpath",
-            "oauth": [
-              "subscribe"
-            ],
-            "extensions": [],
-            "method": "PUT",
-            "args": {
-              "model": {},
-              "multipath": {},
-              "uh": {},
-              "expand_srs": {}
-            },
-            "isListing": false
-          }
-        ],
-        "r": {
-          "$srname": {
-            "_endpoints": [
-              {
-                "path": "/api/filter/filterpath/r/$srname",
-                "oauth": [
-                  "subscribe"
-                ],
-                "extensions": [],
-                "method": "DELETE",
-                "args": {
-                  "multipath": {},
-                  "srname": {},
-                  "uh": {}
-                },
-                "isListing": false
-              },
-              {
-                "path": "/api/filter/filterpath/r/$srname",
-                "oauth": [
-                  "read"
-                ],
-                "extensions": [],
-                "method": "GET",
-                "args": {
-                  "multipath": {},
-                  "srname": {}
-                },
-                "isListing": false
-              },
-              {
-                "path": "/api/filter/filterpath/r/$srname",
-                "oauth": [
-                  "subscribe"
-                ],
-                "extensions": [],
-                "method": "PUT",
-                "args": {
-                  "model": {},
-                  "multipath": {},
-                  "srname": {},
-                  "uh": {}
-                },
-                "isListing": false
-              }
-            ]
-          }
-        }
-      }
-    },
-    "delete_sr_header": {
-      "_endpoints": [
-        {
-          "path": "/api/delete_sr_header",
-          "oauth": [
-            "modconfig"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "delete_sr_img": {
-      "_endpoints": [
-        {
-          "path": "/api/delete_sr_img",
-          "oauth": [
-            "modconfig"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "img_name": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "recommend": {
-      "sr": {
-        "$srnames": {
-          "_endpoints": [
-            {
-              "path": "/api/recommend/sr/$srnames",
-              "oauth": [
-                "read"
-              ],
-              "extensions": [],
-              "method": "GET",
-              "args": {
-                "omit": {},
-                "srnames": {}
-              },
-              "isListing": false
-            }
-          ]
-        }
-      }
-    },
-    "search_reddit_names.json": {
-      "_endpoints": [
-        {
-          "path": "/api/search_reddit_names.json",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "include_over_18": {},
-            "query": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "site_admin": {
-      "_endpoints": [
-        {
-          "path": "/api/site_admin",
-          "oauth": [
-            "modconfig"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "allow_top": {},
-            "api_type": {},
-            "captcha": {},
-            "collapse_deleted_comments": {},
-            "comment_score_hide_mins": {},
-            "css_on_cname": {},
-            "description": {},
-            "exclude_banned_modqueue": {},
-            "header-title": {},
-            "hide_ads": {},
-            "iden": {},
-            "lang": {},
-            "link_type": {},
-            "name": {},
-            "over_18": {},
-            "public_description": {},
-            "public_traffic": {},
-            "show_cname_sidebar": {},
-            "show_media": {},
-            "spam_comments": {},
-            "spam_links": {},
-            "spam_selfposts": {},
-            "sr": {},
-            "submit_link_label": {},
-            "submit_text": {},
-            "submit_text_label": {},
-            "title": {},
-            "type": {},
-            "uh": {},
-            "wiki_edit_age": {},
-            "wiki_edit_karma": {},
-            "wikimode": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "submit_text.json": {
-      "_endpoints": [
-        {
-          "path": "/api/submit_text.json",
-          "oauth": [
-            "submit"
-          ],
-          "extensions": [],
-          "method": "GET",
-          "args": {},
-          "isListing": false
-        }
-      ]
-    },
-    "$subreddit_stylesheet": {
-      "_endpoints": [
-        {
-          "path": "/api/$subreddit_stylesheet",
-          "oauth": [
-            "modconfig"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "op": {},
-            "reason": {},
-            "stylesheet_contents": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "subreddits_by_topic.json": {
-      "_endpoints": [
-        {
-          "path": "/api/subreddits_by_topic.json",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [],
-          "method": "GET",
-          "args": {
-            "query": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "subscribe": {
-      "_endpoints": [
-        {
-          "path": "/api/subscribe",
-          "oauth": [
-            "subscribe"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "action": {},
-            "sr": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "upload_sr_img": {
-      "_endpoints": [
-        {
-          "path": "/api/upload_sr_img",
-          "oauth": [
-            "modconfig"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "file": {},
-            "formid": {},
-            "header": {},
-            "img_type": {},
-            "name": {},
-            "uh": {},
-            "upload_type": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "friend": {
-      "_endpoints": [
-        {
-          "path": "/api/friend",
-          "oauth": [
-            "any"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "ban_message": {},
-            "container": {},
-            "duration": {},
-            "name": {},
-            "note": {},
-            "permissions": {},
-            "type": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "setpermissions": {
-      "_endpoints": [
-        {
-          "path": "/api/setpermissions",
-          "oauth": [
-            "modothers"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "name": {},
-            "permissions": {},
-            "type": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "unfriend": {
-      "_endpoints": [
-        {
-          "path": "/api/unfriend",
-          "oauth": [
-            "any"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "container": {},
-            "id": {},
-            "name": {},
-            "type": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "username_available.json": {
-      "_endpoints": [
-        {
-          "path": "/api/username_available.json",
-          "oauth": [],
-          "extensions": [],
-          "method": "GET",
-          "args": {
-            "user": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "wiki": {
-      "alloweditor": {
-        "$act": {
-          "_endpoints": [
-            {
-              "path": "/api/wiki/alloweditor/$act",
-              "oauth": [
-                "modwiki"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "act": {},
-                "page": {},
-                "uh": {},
-                "username": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "del": {
-          "_endpoints": [
-            {
-              "path": "/api/wiki/alloweditor/del",
-              "oauth": [
-                "modwiki"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "act": {},
-                "page": {},
-                "uh": {},
-                "username": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "add": {
-          "_endpoints": [
-            {
-              "path": "/api/wiki/alloweditor/add",
-              "oauth": [
-                "modwiki"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "act": {},
-                "page": {},
-                "uh": {},
-                "username": {}
-              },
-              "isListing": false
-            }
-          ]
-        }
-      },
-      "edit": {
-        "_endpoints": [
-          {
-            "path": "/api/wiki/edit",
-            "oauth": [
-              "wikiedit"
-            ],
-            "extensions": [],
-            "method": "POST",
-            "args": {
-              "content": {},
-              "page": {},
-              "previous": {},
-              "reason": {},
-              "uh": {}
-            },
-            "isListing": false
-          }
-        ]
-      },
-      "hide": {
-        "_endpoints": [
-          {
-            "path": "/api/wiki/hide",
-            "oauth": [
-              "modwiki"
-            ],
-            "extensions": [],
-            "method": "POST",
-            "args": {
-              "page": {},
-              "revision": {},
-              "uh": {}
-            },
-            "isListing": false
-          }
-        ]
-      },
-      "revert": {
-        "_endpoints": [
-          {
-            "path": "/api/wiki/revert",
-            "oauth": [
-              "modwiki"
-            ],
-            "extensions": [],
-            "method": "POST",
-            "args": {
-              "page": {},
-              "revision": {},
-              "uh": {}
-            },
-            "isListing": false
-          }
-        ]
-      }
-    },
-    "delete_sr_banner": {
-      "_endpoints": [
-        {
-          "path": "/api/delete_sr_banner",
-          "oauth": [
-            "modconfig"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    },
-    "delete_sr_icon": {
-      "_endpoints": [
-        {
-          "path": "/api/delete_sr_icon",
-          "oauth": [
-            "modconfig"
-          ],
-          "extensions": [],
-          "method": "POST",
-          "args": {
-            "api_type": {},
-            "uh": {}
-          },
-          "isListing": false
-        }
-      ]
-    }
-  },
-  "prefs": {
-    "$where": {
-      "_endpoints": [
-        {
-          "path": "/prefs/$where",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [
-            ".json",
-            ".xml"
-          ],
-          "method": "GET",
-          "args": {
-            "after": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "show": {}
-          },
-          "isListing": true
-        }
-      ]
-    },
-    "friends": {
-      "_endpoints": [
-        {
-          "path": "/prefs/friends",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [
-            ".json",
-            ".xml"
-          ],
-          "method": "GET",
-          "args": {
-            "after": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "show": {}
-          },
-          "isListing": true
-        }
-      ]
-    },
-    "blocked": {
-      "_endpoints": [
-        {
-          "path": "/prefs/blocked",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [
-            ".json",
-            ".xml"
-          ],
-          "method": "GET",
-          "args": {
-            "after": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "show": {}
-          },
-          "isListing": true
-        }
-      ]
-    }
-  },
-  "captcha": {
-    "$iden": {
-      "_endpoints": [
-        {
-          "path": "/captcha/$iden",
-          "oauth": [
-            "any"
-          ],
-          "extensions": [],
-          "method": "GET",
-          "args": {},
-          "isListing": false
-        }
-      ]
-    }
-  },
-  "r": {
-    "$subreddit": {
-      "api": {
-        "clearflairtemplates": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/api/clearflairtemplates",
-              "oauth": [
-                "modflair"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "api_type": {},
-                "flair_type": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "deleteflair": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/api/deleteflair",
-              "oauth": [
-                "modflair"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "api_type": {},
-                "name": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "deleteflairtemplate": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/api/deleteflairtemplate",
-              "oauth": [
-                "modflair"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "api_type": {},
-                "flair_template_id": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "flair": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/api/flair",
-              "oauth": [
-                "modflair"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "api_type": {},
-                "css_class": {},
-                "link": {},
-                "name": {},
-                "text": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "flairconfig": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/api/flairconfig",
-              "oauth": [
-                "modflair"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "api_type": {},
-                "flair_enabled": {},
-                "flair_position": {},
-                "flair_self_assign_enabled": {},
-                "link_flair_position": {},
-                "link_flair_self_assign_enabled": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "flaircsv": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/api/flaircsv",
-              "oauth": [
-                "modflair"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "flair_csv": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "flairlist": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/api/flairlist",
-              "oauth": [
-                "modflair"
-              ],
-              "extensions": [],
-              "method": "GET",
-              "args": {
-                "after": {},
-                "before": {},
-                "count": {},
-                "limit": {},
-                "name": {},
-                "show": {}
-              },
-              "isListing": true
-            }
-          ]
-        },
-        "flairselector": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/api/flairselector",
-              "oauth": [
-                "flair"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "link": {},
-                "name": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "flairtemplate": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/api/flairtemplate",
-              "oauth": [
-                "modflair"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "api_type": {},
-                "css_class": {},
-                "flair_template_id": {},
-                "flair_type": {},
-                "text": {},
-                "text_editable": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "selectflair": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/api/selectflair",
-              "oauth": [
-                "flair"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "api_type": {},
-                "flair_template_id": {},
-                "link": {},
-                "name": {},
-                "text": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "setflairenabled": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/api/setflairenabled",
-              "oauth": [
-                "flair"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "api_type": {},
-                "flair_enabled": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "info": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/api/info",
-              "oauth": [
-                "read"
-              ],
-              "extensions": [],
-              "method": "GET",
-              "args": {
-                "id": {},
-                "url": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "accept_moderator_invite": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/api/accept_moderator_invite",
-              "oauth": [
-                "modself"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "api_type": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "delete_sr_header": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/api/delete_sr_header",
-              "oauth": [
-                "modconfig"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "api_type": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "delete_sr_img": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/api/delete_sr_img",
-              "oauth": [
-                "modconfig"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "api_type": {},
-                "img_name": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "submit_text.json": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/api/submit_text.json",
-              "oauth": [
-                "submit"
-              ],
-              "extensions": [],
-              "method": "GET",
-              "args": {},
-              "isListing": false
-            }
-          ]
-        },
-        "subreddit_stylesheet": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/api/subreddit_stylesheet",
-              "oauth": [
-                "modconfig"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "api_type": {},
-                "op": {},
-                "reason": {},
-                "stylesheet_contents": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "upload_sr_img": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/api/upload_sr_img",
-              "oauth": [
-                "modconfig"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "file": {},
-                "formid": {},
-                "header": {},
-                "img_type": {},
-                "name": {},
-                "uh": {},
-                "upload_type": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "friend": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/api/friend",
-              "oauth": [
-                "any"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "api_type": {},
-                "ban_message": {},
-                "container": {},
-                "duration": {},
-                "name": {},
-                "note": {},
-                "permissions": {},
-                "type": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "setpermissions": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/api/setpermissions",
-              "oauth": [
-                "modothers"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "api_type": {},
-                "name": {},
-                "permissions": {},
-                "type": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "unfriend": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/api/unfriend",
-              "oauth": [
-                "any"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "container": {},
-                "id": {},
-                "name": {},
-                "type": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "wiki": {
-          "alloweditor": {
-            "$act": {
-              "_endpoints": [
-                {
-                  "path": "/r/$subreddit/api/wiki/alloweditor/$act",
-                  "oauth": [
-                    "modwiki"
-                  ],
-                  "extensions": [],
-                  "method": "POST",
-                  "args": {
-                    "act": {},
-                    "page": {},
-                    "uh": {},
-                    "username": {}
-                  },
-                  "isListing": false
-                }
-              ]
-            },
-            "del": {
-              "_endpoints": [
-                {
-                  "path": "/r/$subreddit/api/wiki/alloweditor/del",
-                  "oauth": [
-                    "modwiki"
-                  ],
-                  "extensions": [],
-                  "method": "POST",
-                  "args": {
-                    "act": {},
-                    "page": {},
-                    "uh": {},
-                    "username": {}
-                  },
-                  "isListing": false
-                }
-              ]
-            },
-            "add": {
-              "_endpoints": [
-                {
-                  "path": "/r/$subreddit/api/wiki/alloweditor/add",
-                  "oauth": [
-                    "modwiki"
-                  ],
-                  "extensions": [],
-                  "method": "POST",
-                  "args": {
-                    "act": {},
-                    "page": {},
-                    "uh": {},
-                    "username": {}
-                  },
-                  "isListing": false
-                }
-              ]
-            }
-          },
-          "edit": {
-            "_endpoints": [
-              {
-                "path": "/r/$subreddit/api/wiki/edit",
-                "oauth": [
-                  "wikiedit"
-                ],
-                "extensions": [],
-                "method": "POST",
-                "args": {
-                  "content": {},
-                  "page": {},
-                  "previous": {},
-                  "reason": {},
-                  "uh": {}
-                },
-                "isListing": false
-              }
-            ]
-          },
-          "hide": {
-            "_endpoints": [
-              {
-                "path": "/r/$subreddit/api/wiki/hide",
-                "oauth": [
-                  "modwiki"
-                ],
-                "extensions": [],
-                "method": "POST",
-                "args": {
-                  "page": {},
-                  "revision": {},
-                  "uh": {}
-                },
-                "isListing": false
-              }
-            ]
-          },
-          "revert": {
-            "_endpoints": [
-              {
-                "path": "/r/$subreddit/api/wiki/revert",
-                "oauth": [
-                  "modwiki"
-                ],
-                "extensions": [],
-                "method": "POST",
-                "args": {
-                  "page": {},
-                  "revision": {},
-                  "uh": {}
-                },
-                "isListing": false
-              }
-            ]
-          }
-        },
-        "delete_sr_banner": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/api/delete_sr_banner",
-              "oauth": [
-                "modconfig"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "api_type": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        },
-        "delete_sr_icon": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/api/delete_sr_icon",
-              "oauth": [
-                "modconfig"
-              ],
-              "extensions": [],
-              "method": "POST",
-              "args": {
-                "api_type": {},
-                "uh": {}
-              },
-              "isListing": false
-            }
-          ]
-        }
-      },
-      "comments": {
-        "$article": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/comments/$article",
-              "oauth": [
-                "read"
-              ],
-              "extensions": [
-                ".json",
-                ".xml"
-              ],
-              "method": "GET",
-              "args": {
-                "article": {},
-                "comment": {},
-                "context": {},
-                "depth": {},
-                "limit": {},
-                "showedits": {},
-                "showmore": {},
-                "sort": {}
-              },
-              "isListing": false
-            }
-          ]
-        }
-      },
-      "hot": {
-        "_endpoints": [
-          {
-            "path": "/r/$subreddit/hot",
-            "oauth": [
-              "read"
-            ],
-            "extensions": [
-              ".json",
-              ".xml"
-            ],
-            "method": "GET",
-            "args": {
-              "after": {},
-              "before": {},
-              "count": {},
-              "limit": {},
-              "show": {}
-            },
-            "isListing": true
-          }
-        ]
-      },
-      "new": {
-        "_endpoints": [
-          {
-            "path": "/r/$subreddit/new",
-            "oauth": [
-              "read"
-            ],
-            "extensions": [
-              ".json",
-              ".xml"
-            ],
-            "method": "GET",
-            "args": {
-              "after": {},
-              "before": {},
-              "count": {},
-              "limit": {},
-              "show": {}
-            },
-            "isListing": true
-          }
-        ]
-      },
-      "random": {
-        "_endpoints": [
-          {
-            "path": "/r/$subreddit/random",
-            "oauth": [
-              "read"
-            ],
-            "extensions": [],
-            "method": "GET",
-            "args": {},
-            "isListing": false
-          }
-        ]
-      },
-      "$sort": {
-        "_endpoints": [
-          {
-            "path": "/r/$subreddit/$sort",
-            "oauth": [
-              "read"
-            ],
-            "extensions": [
-              ".json",
-              ".xml"
-            ],
-            "method": "GET",
-            "args": {
-              "t": {},
-              "after": {},
-              "before": {},
-              "count": {},
-              "limit": {},
-              "show": {}
-            },
-            "isListing": true
-          }
-        ]
-      },
-      "top": {
-        "_endpoints": [
-          {
-            "path": "/r/$subreddit/top",
-            "oauth": [
-              "read"
-            ],
-            "extensions": [
-              ".json",
-              ".xml"
-            ],
-            "method": "GET",
-            "args": {
-              "t": {},
-              "after": {},
-              "before": {},
-              "count": {},
-              "limit": {},
-              "show": {}
-            },
-            "isListing": true
-          }
-        ]
-      },
-      "controversial": {
-        "_endpoints": [
-          {
-            "path": "/r/$subreddit/controversial",
-            "oauth": [
-              "read"
-            ],
-            "extensions": [
-              ".json",
-              ".xml"
-            ],
-            "method": "GET",
-            "args": {
-              "t": {},
-              "after": {},
-              "before": {},
-              "count": {},
-              "limit": {},
-              "show": {}
-            },
-            "isListing": true
-          }
-        ]
-      },
-      "about": {
-        "log": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/about/log",
-              "oauth": [
-                "modlog"
-              ],
-              "extensions": [
-                ".json",
-                ".xml"
-              ],
-              "method": "GET",
-              "args": {
-                "after": {},
-                "before": {},
-                "count": {},
-                "limit": {},
-                "mod": {},
-                "show": {},
-                "type": {}
-              },
-              "isListing": true
-            }
-          ]
-        },
-        "$location": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/about/$location",
-              "oauth": [
-                "read"
-              ],
-              "extensions": [],
-              "method": "GET",
-              "args": {
-                "after": {},
-                "before": {},
-                "count": {},
-                "limit": {},
-                "location": {},
-                "only": {},
-                "show": {}
-              },
-              "isListing": true
-            }
-          ]
-        },
-        "reports": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/about/reports",
-              "oauth": [
-                "read"
-              ],
-              "extensions": [],
-              "method": "GET",
-              "args": {
-                "after": {},
-                "before": {},
-                "count": {},
-                "limit": {},
-                "location": {},
-                "only": {},
-                "show": {}
-              },
-              "isListing": true
-            }
-          ]
-        },
-        "spam": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/about/spam",
-              "oauth": [
-                "read"
-              ],
-              "extensions": [],
-              "method": "GET",
-              "args": {
-                "after": {},
-                "before": {},
-                "count": {},
-                "limit": {},
-                "location": {},
-                "only": {},
-                "show": {}
-              },
-              "isListing": true
-            }
-          ]
-        },
-        "modqueue": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/about/modqueue",
-              "oauth": [
-                "read"
-              ],
-              "extensions": [],
-              "method": "GET",
-              "args": {
-                "after": {},
-                "before": {},
-                "count": {},
-                "limit": {},
-                "location": {},
-                "only": {},
-                "show": {}
-              },
-              "isListing": true
-            }
-          ]
-        },
-        "unmoderated": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/about/unmoderated",
-              "oauth": [
-                "read"
-              ],
-              "extensions": [],
-              "method": "GET",
-              "args": {
-                "after": {},
-                "before": {},
-                "count": {},
-                "limit": {},
-                "location": {},
-                "only": {},
-                "show": {}
-              },
-              "isListing": true
-            }
-          ]
-        },
-        "edited": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/about/edited",
-              "oauth": [
-                "read"
-              ],
-              "extensions": [],
-              "method": "GET",
-              "args": {
-                "after": {},
-                "before": {},
-                "count": {},
-                "limit": {},
-                "location": {},
-                "only": {},
-                "show": {}
-              },
-              "isListing": true
-            }
-          ]
-        },
-        "$where": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/about/$where",
-              "oauth": [
-                "read"
-              ],
-              "extensions": [
-                ".json",
-                ".xml"
-              ],
-              "method": "GET",
-              "args": {
-                "after": {},
-                "before": {},
-                "count": {},
-                "limit": {},
-                "show": {},
-                "user": {}
-              },
-              "isListing": true
-            }
-          ]
-        },
-        "banned": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/about/banned",
-              "oauth": [
-                "read"
-              ],
-              "extensions": [
-                ".json",
-                ".xml"
-              ],
-              "method": "GET",
-              "args": {
-                "after": {},
-                "before": {},
-                "count": {},
-                "limit": {},
-                "show": {},
-                "user": {}
-              },
-              "isListing": true
-            }
-          ]
-        },
-        "wikibanned": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/about/wikibanned",
-              "oauth": [
-                "read"
-              ],
-              "extensions": [
-                ".json",
-                ".xml"
-              ],
-              "method": "GET",
-              "args": {
-                "after": {},
-                "before": {},
-                "count": {},
-                "limit": {},
-                "show": {},
-                "user": {}
-              },
-              "isListing": true
-            }
-          ]
-        },
-        "contributors": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/about/contributors",
-              "oauth": [
-                "read"
-              ],
-              "extensions": [
-                ".json",
-                ".xml"
-              ],
-              "method": "GET",
-              "args": {
-                "after": {},
-                "before": {},
-                "count": {},
-                "limit": {},
-                "show": {},
-                "user": {}
-              },
-              "isListing": true
-            }
-          ]
-        },
-        "wikicontributors": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/about/wikicontributors",
-              "oauth": [
-                "read"
-              ],
-              "extensions": [
-                ".json",
-                ".xml"
-              ],
-              "method": "GET",
-              "args": {
-                "after": {},
-                "before": {},
-                "count": {},
-                "limit": {},
-                "show": {},
-                "user": {}
-              },
-              "isListing": true
-            }
-          ]
-        },
-        "moderators": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/about/moderators",
-              "oauth": [
-                "read"
-              ],
-              "extensions": [
-                ".json",
-                ".xml"
-              ],
-              "method": "GET",
-              "args": {
-                "after": {},
-                "before": {},
-                "count": {},
-                "limit": {},
-                "show": {},
-                "user": {}
-              },
-              "isListing": true
-            }
-          ]
-        },
-        "edit.json": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/about/edit.json",
-              "oauth": [
-                "modconfig"
-              ],
-              "extensions": [],
-              "method": "GET",
-              "args": {
-                "created": {},
-                "location": {}
-              },
-              "isListing": false
-            }
-          ]
-        }
-      },
-      "stylesheet": {
-        "_endpoints": [
-          {
-            "path": "/r/$subreddit/stylesheet",
-            "oauth": [
-              "modconfig"
-            ],
-            "extensions": [],
-            "method": "GET",
-            "args": {},
-            "isListing": false
-          }
-        ]
-      },
-      "search": {
-        "_endpoints": [
-          {
-            "path": "/r/$subreddit/search",
-            "oauth": [
-              "read"
-            ],
-            "extensions": [
-              ".json",
-              ".xml"
-            ],
-            "method": "GET",
-            "args": {
-              "after": {},
-              "before": {},
-              "count": {},
-              "limit": {},
-              "q": {},
-              "restrict_sr": {},
-              "show": {},
-              "sort": {},
-              "syntax": {},
-              "t": {}
-            },
-            "isListing": true
-          }
-        ]
-      },
-      "about.json": {
-        "_endpoints": [
-          {
-            "path": "/r/$subreddit/about.json",
-            "oauth": [
-              "read"
-            ],
-            "extensions": [],
-            "method": "GET",
-            "args": {},
-            "isListing": false
-          }
-        ]
-      },
-      "wiki": {
-        "discussions": {
-          "$page": {
-            "_endpoints": [
-              {
-                "path": "/r/$subreddit/wiki/discussions/$page",
-                "oauth": [
-                  "wikiread"
-                ],
-                "extensions": [],
-                "method": "GET",
-                "args": {
-                  "after": {},
-                  "before": {},
-                  "count": {},
-                  "limit": {},
-                  "page": {},
-                  "show": {}
-                },
-                "isListing": true
-              }
-            ]
-          }
-        },
-        "pages": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/wiki/pages",
-              "oauth": [
-                "wikiread"
-              ],
-              "extensions": [],
-              "method": "GET",
-              "args": {},
-              "isListing": false
-            }
-          ]
-        },
-        "revisions": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/wiki/revisions",
-              "oauth": [
-                "wikiread"
-              ],
-              "extensions": [],
-              "method": "GET",
-              "args": {
-                "after": {},
-                "before": {},
-                "count": {},
-                "limit": {},
-                "show": {}
-              },
-              "isListing": true
-            }
-          ],
-          "$page": {
-            "_endpoints": [
-              {
-                "path": "/r/$subreddit/wiki/revisions/$page",
-                "oauth": [
-                  "wikiread"
-                ],
-                "extensions": [],
-                "method": "GET",
-                "args": {
-                  "after": {},
-                  "before": {},
-                  "count": {},
-                  "limit": {},
-                  "page": {},
-                  "show": {}
-                },
-                "isListing": true
-              }
-            ]
-          }
-        },
-        "settings": {
-          "$page": {
-            "_endpoints": [
-              {
-                "path": "/r/$subreddit/wiki/settings/$page",
-                "oauth": [
-                  "modwiki"
-                ],
-                "extensions": [],
-                "method": "GET",
-                "args": {
-                  "page": {}
-                },
-                "isListing": false
-              },
-              {
-                "path": "/r/$subreddit/wiki/settings/$page",
-                "oauth": [
-                  "modwiki"
-                ],
-                "extensions": [],
-                "method": "POST",
-                "args": {
-                  "listed": {},
-                  "page": {},
-                  "permlevel": {},
-                  "uh": {}
-                },
-                "isListing": false
-              }
-            ]
-          }
-        },
-        "$page": {
-          "_endpoints": [
-            {
-              "path": "/r/$subreddit/wiki/$page",
-              "oauth": [
-                "wikiread"
-              ],
-              "extensions": [],
-              "method": "GET",
-              "args": {
-                "page": {},
-                "v": {},
-                "v2": {}
-              },
-              "isListing": false
-            }
-          ]
-        }
-      },
-      "sidebar": {
-        "_endpoints": [
-          {
-            "path": "/r/$subreddit/sidebar",
-            "oauth": [
-              "read"
-            ],
-            "extensions": [],
-            "method": "GET",
-            "args": {},
-            "isListing": false
-          }
-        ]
-      },
-      "sticky": {
-        "_endpoints": [
-          {
-            "path": "/r/$subreddit/sticky",
-            "oauth": [
-              "read"
-            ],
-            "extensions": [],
-            "method": "GET",
-            "args": {},
-            "isListing": false
-          }
-        ]
-      }
-    }
-  },
-  "by_id": {
-    "$names": {
-      "_endpoints": [
-        {
-          "path": "/by_id/$names",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [],
-          "method": "GET",
-          "args": {
-            "names": {}
-          },
-          "isListing": false
-        }
-      ]
-    }
-  },
-  "comments": {
-    "$article": {
-      "_endpoints": [
-        {
-          "path": "/comments/$article",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [
-            ".json",
-            ".xml"
-          ],
-          "method": "GET",
-          "args": {
-            "article": {},
-            "comment": {},
-            "context": {},
-            "depth": {},
-            "limit": {},
-            "showedits": {},
-            "showmore": {},
-            "sort": {}
-          },
-          "isListing": false
-        }
-      ]
-    }
-  },
-  "hot": {
-    "_endpoints": [
-      {
-        "path": "/hot",
-        "oauth": [
-          "read"
-        ],
-        "extensions": [
-          ".json",
-          ".xml"
-        ],
-        "method": "GET",
-        "args": {
-          "after": {},
-          "before": {},
-          "count": {},
-          "limit": {},
-          "show": {}
-        },
-        "isListing": true
-      }
-    ]
-  },
-  "new": {
-    "_endpoints": [
-      {
-        "path": "/new",
-        "oauth": [
-          "read"
-        ],
-        "extensions": [
-          ".json",
-          ".xml"
-        ],
-        "method": "GET",
-        "args": {
-          "after": {},
-          "before": {},
-          "count": {},
-          "limit": {},
-          "show": {}
-        },
-        "isListing": true
-      }
-    ]
-  },
-  "random": {
-    "_endpoints": [
-      {
-        "path": "/random",
-        "oauth": [
-          "read"
-        ],
-        "extensions": [],
-        "method": "GET",
-        "args": {},
-        "isListing": false
-      }
-    ]
-  },
-  "$sort": {
-    "_endpoints": [
-      {
-        "path": "/$sort",
-        "oauth": [
-          "read"
-        ],
-        "extensions": [
-          ".json",
-          ".xml"
-        ],
-        "method": "GET",
-        "args": {
-          "t": {},
-          "after": {},
-          "before": {},
-          "count": {},
-          "limit": {},
-          "show": {}
-        },
-        "isListing": true
-      }
-    ]
-  },
-  "top": {
-    "_endpoints": [
-      {
-        "path": "/top",
-        "oauth": [
-          "read"
-        ],
-        "extensions": [
-          ".json",
-          ".xml"
-        ],
-        "method": "GET",
-        "args": {
-          "t": {},
-          "after": {},
-          "before": {},
-          "count": {},
-          "limit": {},
-          "show": {}
-        },
-        "isListing": true
-      }
-    ]
-  },
-  "controversial": {
-    "_endpoints": [
-      {
-        "path": "/controversial",
-        "oauth": [
-          "read"
-        ],
-        "extensions": [
-          ".json",
-          ".xml"
-        ],
-        "method": "GET",
-        "args": {
-          "t": {},
-          "after": {},
-          "before": {},
-          "count": {},
-          "limit": {},
-          "show": {}
-        },
-        "isListing": true
-      }
-    ]
-  },
-  "live": {
-    "$thread": {
-      "_endpoints": [
-        {
-          "path": "/live/$thread",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [
-            ".json",
-            ".xml"
-          ],
-          "method": "GET",
-          "args": {
-            "after": {},
-            "before": {},
-            "count": {},
-            "is_embed": {},
-            "limit": {},
-            "stylesr": {}
-          },
-          "isListing": false
-        }
-      ],
-      "about.json": {
-        "_endpoints": [
-          {
-            "path": "/live/$thread/about.json",
-            "oauth": [
-              "read"
-            ],
-            "extensions": [],
-            "method": "GET",
-            "args": {},
-            "isListing": false
-          }
-        ]
-      },
-      "contributors.json": {
-        "_endpoints": [
-          {
-            "path": "/live/$thread/contributors.json",
-            "oauth": [
-              "read"
-            ],
-            "extensions": [],
-            "method": "GET",
-            "args": {},
-            "isListing": false
-          }
-        ]
-      },
-      "discussions": {
-        "_endpoints": [
-          {
-            "path": "/live/$thread/discussions",
-            "oauth": [
-              "read"
-            ],
-            "extensions": [
-              ".json",
-              ".xml"
-            ],
-            "method": "GET",
-            "args": {
-              "after": {},
-              "before": {},
-              "count": {},
-              "limit": {},
-              "show": {}
-            },
-            "isListing": true
-          }
-        ]
-      }
-    }
-  },
-  "message": {
-    "$where": {
-      "_endpoints": [
-        {
-          "path": "/message/$where",
-          "oauth": [
-            "privatemessages"
-          ],
-          "extensions": [
-            ".json",
-            ".xml"
-          ],
-          "method": "GET",
-          "args": {
-            "mark": {},
-            "mid": {},
-            "after": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "show": {}
-          },
-          "isListing": true
-        }
-      ]
-    },
-    "inbox": {
-      "_endpoints": [
-        {
-          "path": "/message/inbox",
-          "oauth": [
-            "privatemessages"
-          ],
-          "extensions": [
-            ".json",
-            ".xml"
-          ],
-          "method": "GET",
-          "args": {
-            "mark": {},
-            "mid": {},
-            "after": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "show": {}
-          },
-          "isListing": true
-        }
-      ]
-    },
-    "unread": {
-      "_endpoints": [
-        {
-          "path": "/message/unread",
-          "oauth": [
-            "privatemessages"
-          ],
-          "extensions": [
-            ".json",
-            ".xml"
-          ],
-          "method": "GET",
-          "args": {
-            "mark": {},
-            "mid": {},
-            "after": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "show": {}
-          },
-          "isListing": true
-        }
-      ]
-    },
-    "sent": {
-      "_endpoints": [
-        {
-          "path": "/message/sent",
-          "oauth": [
-            "privatemessages"
-          ],
-          "extensions": [
-            ".json",
-            ".xml"
-          ],
-          "method": "GET",
-          "args": {
-            "mark": {},
-            "mid": {},
-            "after": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "show": {}
-          },
-          "isListing": true
-        }
-      ]
-    }
-  },
-  "about": {
-    "log": {
-      "_endpoints": [
-        {
-          "path": "/about/log",
-          "oauth": [
-            "modlog"
-          ],
-          "extensions": [
-            ".json",
-            ".xml"
-          ],
-          "method": "GET",
-          "args": {
-            "after": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "mod": {},
-            "show": {},
-            "type": {}
-          },
-          "isListing": true
-        }
-      ]
-    },
-    "$location": {
-      "_endpoints": [
-        {
-          "path": "/about/$location",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [],
-          "method": "GET",
-          "args": {
-            "after": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "location": {},
-            "only": {},
-            "show": {}
-          },
-          "isListing": true
-        }
-      ]
-    },
-    "reports": {
-      "_endpoints": [
-        {
-          "path": "/about/reports",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [],
-          "method": "GET",
-          "args": {
-            "after": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "location": {},
-            "only": {},
-            "show": {}
-          },
-          "isListing": true
-        }
-      ]
-    },
-    "spam": {
-      "_endpoints": [
-        {
-          "path": "/about/spam",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [],
-          "method": "GET",
-          "args": {
-            "after": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "location": {},
-            "only": {},
-            "show": {}
-          },
-          "isListing": true
-        }
-      ]
-    },
-    "modqueue": {
-      "_endpoints": [
-        {
-          "path": "/about/modqueue",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [],
-          "method": "GET",
-          "args": {
-            "after": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "location": {},
-            "only": {},
-            "show": {}
-          },
-          "isListing": true
-        }
-      ]
-    },
-    "unmoderated": {
-      "_endpoints": [
-        {
-          "path": "/about/unmoderated",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [],
-          "method": "GET",
-          "args": {
-            "after": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "location": {},
-            "only": {},
-            "show": {}
-          },
-          "isListing": true
-        }
-      ]
-    },
-    "edited": {
-      "_endpoints": [
-        {
-          "path": "/about/edited",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [],
-          "method": "GET",
-          "args": {
-            "after": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "location": {},
-            "only": {},
-            "show": {}
-          },
-          "isListing": true
-        }
-      ]
-    },
-    "$where": {
-      "_endpoints": [
-        {
-          "path": "/about/$where",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [
-            ".json",
-            ".xml"
-          ],
-          "method": "GET",
-          "args": {
-            "after": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "show": {},
-            "user": {}
-          },
-          "isListing": true
-        }
-      ]
-    },
-    "banned": {
-      "_endpoints": [
-        {
-          "path": "/about/banned",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [
-            ".json",
-            ".xml"
-          ],
-          "method": "GET",
-          "args": {
-            "after": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "show": {},
-            "user": {}
-          },
-          "isListing": true
-        }
-      ]
-    },
-    "wikibanned": {
-      "_endpoints": [
-        {
-          "path": "/about/wikibanned",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [
-            ".json",
-            ".xml"
-          ],
-          "method": "GET",
-          "args": {
-            "after": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "show": {},
-            "user": {}
-          },
-          "isListing": true
-        }
-      ]
-    },
-    "contributors": {
-      "_endpoints": [
-        {
-          "path": "/about/contributors",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [
-            ".json",
-            ".xml"
-          ],
-          "method": "GET",
-          "args": {
-            "after": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "show": {},
-            "user": {}
-          },
-          "isListing": true
-        }
-      ]
-    },
-    "wikicontributors": {
-      "_endpoints": [
-        {
-          "path": "/about/wikicontributors",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [
-            ".json",
-            ".xml"
-          ],
-          "method": "GET",
-          "args": {
-            "after": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "show": {},
-            "user": {}
-          },
-          "isListing": true
-        }
-      ]
-    },
-    "moderators": {
-      "_endpoints": [
-        {
-          "path": "/about/moderators",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [
-            ".json",
-            ".xml"
-          ],
-          "method": "GET",
-          "args": {
-            "after": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "show": {},
-            "user": {}
-          },
-          "isListing": true
-        }
-      ]
-    }
-  },
-  "stylesheet": {
-    "_endpoints": [
-      {
-        "path": "/stylesheet",
-        "oauth": [
-          "modconfig"
-        ],
-        "extensions": [],
-        "method": "GET",
-        "args": {},
-        "isListing": false
-      }
-    ]
-  },
-  "search": {
-    "_endpoints": [
-      {
-        "path": "/search",
-        "oauth": [
-          "read"
-        ],
-        "extensions": [
-          ".json",
-          ".xml"
-        ],
-        "method": "GET",
-        "args": {
-          "after": {},
-          "before": {},
-          "count": {},
-          "limit": {},
-          "q": {},
-          "restrict_sr": {},
-          "show": {},
-          "sort": {},
-          "syntax": {},
-          "t": {}
-        },
-        "isListing": true
-      }
-    ]
-  },
-  "subreddits": {
-    "mine": {
-      "$where": {
-        "_endpoints": [
-          {
-            "path": "/subreddits/mine/$where",
-            "oauth": [
-              "mysubreddits"
-            ],
-            "extensions": [
-              ".json",
-              ".xml"
-            ],
-            "method": "GET",
-            "args": {
-              "after": {},
-              "before": {},
-              "count": {},
-              "limit": {},
-              "show": {}
-            },
-            "isListing": true
-          }
-        ]
-      },
-      "subscriber": {
-        "_endpoints": [
-          {
-            "path": "/subreddits/mine/subscriber",
-            "oauth": [
-              "mysubreddits"
-            ],
-            "extensions": [
-              ".json",
-              ".xml"
-            ],
-            "method": "GET",
-            "args": {
-              "after": {},
-              "before": {},
-              "count": {},
-              "limit": {},
-              "show": {}
-            },
-            "isListing": true
-          }
-        ]
-      },
-      "contributor": {
-        "_endpoints": [
-          {
-            "path": "/subreddits/mine/contributor",
-            "oauth": [
-              "mysubreddits"
-            ],
-            "extensions": [
-              ".json",
-              ".xml"
-            ],
-            "method": "GET",
-            "args": {
-              "after": {},
-              "before": {},
-              "count": {},
-              "limit": {},
-              "show": {}
-            },
-            "isListing": true
-          }
-        ]
-      },
-      "moderator": {
-        "_endpoints": [
-          {
-            "path": "/subreddits/mine/moderator",
-            "oauth": [
-              "mysubreddits"
-            ],
-            "extensions": [
-              ".json",
-              ".xml"
-            ],
-            "method": "GET",
-            "args": {
-              "after": {},
-              "before": {},
-              "count": {},
-              "limit": {},
-              "show": {}
-            },
-            "isListing": true
-          }
-        ]
-      }
-    },
-    "search": {
-      "_endpoints": [
-        {
-          "path": "/subreddits/search",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [
-            ".json",
-            ".xml"
-          ],
-          "method": "GET",
-          "args": {
-            "after": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "q": {},
-            "show": {}
-          },
-          "isListing": true
-        }
-      ]
-    },
-    "$where": {
-      "_endpoints": [
-        {
-          "path": "/subreddits/$where",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [
-            ".json",
-            ".xml"
-          ],
-          "method": "GET",
-          "args": {
-            "after": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "show": {}
-          },
-          "isListing": true
-        }
-      ]
-    },
-    "popular": {
-      "_endpoints": [
-        {
-          "path": "/subreddits/popular",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [
-            ".json",
-            ".xml"
-          ],
-          "method": "GET",
-          "args": {
-            "after": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "show": {}
-          },
-          "isListing": true
-        }
-      ]
-    },
-    "new": {
-      "_endpoints": [
-        {
-          "path": "/subreddits/new",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [
-            ".json",
-            ".xml"
-          ],
-          "method": "GET",
-          "args": {
-            "after": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "show": {}
-          },
-          "isListing": true
-        }
-      ]
-    },
-    "employee": {
-      "_endpoints": [
-        {
-          "path": "/subreddits/employee",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [
-            ".json",
-            ".xml"
-          ],
-          "method": "GET",
-          "args": {
-            "after": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "show": {}
-          },
-          "isListing": true
-        }
-      ]
-    },
-    "gold": {
-      "_endpoints": [
-        {
-          "path": "/subreddits/gold",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [
-            ".json",
-            ".xml"
-          ],
-          "method": "GET",
-          "args": {
-            "after": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "show": {}
-          },
-          "isListing": true
-        }
-      ]
-    }
-  },
-  "user": {
-    "$username": {
-      "about.json": {
-        "_endpoints": [
-          {
-            "path": "/user/$username/about.json",
-            "oauth": [
-              "read"
-            ],
-            "extensions": [],
-            "method": "GET",
-            "args": {
-              "username": {}
-            },
-            "isListing": false
-          }
-        ]
-      },
-      "$where": {
-        "_endpoints": [
-          {
-            "path": "/user/$username/$where",
-            "oauth": [
-              "history"
-            ],
-            "extensions": [
-              ".json",
-              ".xml"
-            ],
-            "method": "GET",
-            "args": {
-              "show": {},
-              "sort": {},
-              "t": {},
-              "username": {},
-              "after": {},
-              "before": {},
-              "count": {},
-              "limit": {}
-            },
-            "isListing": true
-          }
-        ]
-      },
-      "overview": {
-        "_endpoints": [
-          {
-            "path": "/user/$username/overview",
-            "oauth": [
-              "history"
-            ],
-            "extensions": [
-              ".json",
-              ".xml"
-            ],
-            "method": "GET",
-            "args": {
-              "show": {},
-              "sort": {},
-              "t": {},
-              "username": {},
-              "after": {},
-              "before": {},
-              "count": {},
-              "limit": {}
-            },
-            "isListing": true
-          }
-        ]
-      },
-      "submitted": {
-        "_endpoints": [
-          {
-            "path": "/user/$username/submitted",
-            "oauth": [
-              "history"
-            ],
-            "extensions": [
-              ".json",
-              ".xml"
-            ],
-            "method": "GET",
-            "args": {
-              "show": {},
-              "sort": {},
-              "t": {},
-              "username": {},
-              "after": {},
-              "before": {},
-              "count": {},
-              "limit": {}
-            },
-            "isListing": true
-          }
-        ]
-      },
-      "comments": {
-        "_endpoints": [
-          {
-            "path": "/user/$username/comments",
-            "oauth": [
-              "history"
-            ],
-            "extensions": [
-              ".json",
-              ".xml"
-            ],
-            "method": "GET",
-            "args": {
-              "show": {},
-              "sort": {},
-              "t": {},
-              "username": {},
-              "after": {},
-              "before": {},
-              "count": {},
-              "limit": {}
-            },
-            "isListing": true
-          }
-        ]
-      },
-      "liked": {
-        "_endpoints": [
-          {
-            "path": "/user/$username/liked",
-            "oauth": [
-              "history"
-            ],
-            "extensions": [
-              ".json",
-              ".xml"
-            ],
-            "method": "GET",
-            "args": {
-              "show": {},
-              "sort": {},
-              "t": {},
-              "username": {},
-              "after": {},
-              "before": {},
-              "count": {},
-              "limit": {}
-            },
-            "isListing": true
-          }
-        ]
-      },
-      "disliked": {
-        "_endpoints": [
-          {
-            "path": "/user/$username/disliked",
-            "oauth": [
-              "history"
-            ],
-            "extensions": [
-              ".json",
-              ".xml"
-            ],
-            "method": "GET",
-            "args": {
-              "show": {},
-              "sort": {},
-              "t": {},
-              "username": {},
-              "after": {},
-              "before": {},
-              "count": {},
-              "limit": {}
-            },
-            "isListing": true
-          }
-        ]
-      },
-      "hidden": {
-        "_endpoints": [
-          {
-            "path": "/user/$username/hidden",
-            "oauth": [
-              "history"
-            ],
-            "extensions": [
-              ".json",
-              ".xml"
-            ],
-            "method": "GET",
-            "args": {
-              "show": {},
-              "sort": {},
-              "t": {},
-              "username": {},
-              "after": {},
-              "before": {},
-              "count": {},
-              "limit": {}
-            },
-            "isListing": true
-          }
-        ]
-      },
-      "saved": {
-        "_endpoints": [
-          {
-            "path": "/user/$username/saved",
-            "oauth": [
-              "history"
-            ],
-            "extensions": [
-              ".json",
-              ".xml"
-            ],
-            "method": "GET",
-            "args": {
-              "show": {},
-              "sort": {},
-              "t": {},
-              "username": {},
-              "after": {},
-              "before": {},
-              "count": {},
-              "limit": {}
-            },
-            "isListing": true
-          }
-        ]
-      },
-      "gilded": {
-        "_endpoints": [
-          {
-            "path": "/user/$username/gilded",
-            "oauth": [
-              "history"
-            ],
-            "extensions": [
-              ".json",
-              ".xml"
-            ],
-            "method": "GET",
-            "args": {
-              "show": {},
-              "sort": {},
-              "t": {},
-              "username": {},
-              "after": {},
-              "before": {},
-              "count": {},
-              "limit": {}
-            },
-            "isListing": true
-          }
-        ]
-      }
-    }
-  },
-  "wiki": {
-    "discussions": {
-      "$page": {
-        "_endpoints": [
-          {
-            "path": "/wiki/discussions/$page",
-            "oauth": [
-              "wikiread"
-            ],
-            "extensions": [],
-            "method": "GET",
-            "args": {
-              "after": {},
-              "before": {},
-              "count": {},
-              "limit": {},
-              "page": {},
-              "show": {}
-            },
-            "isListing": true
-          }
-        ]
-      }
-    },
-    "pages": {
-      "_endpoints": [
-        {
-          "path": "/wiki/pages",
-          "oauth": [
-            "wikiread"
-          ],
-          "extensions": [],
-          "method": "GET",
-          "args": {},
-          "isListing": false
-        }
-      ]
-    },
-    "revisions": {
-      "_endpoints": [
-        {
-          "path": "/wiki/revisions",
-          "oauth": [
-            "wikiread"
-          ],
-          "extensions": [],
-          "method": "GET",
-          "args": {
-            "after": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "show": {}
-          },
-          "isListing": true
-        }
-      ],
-      "$page": {
-        "_endpoints": [
-          {
-            "path": "/wiki/revisions/$page",
-            "oauth": [
-              "wikiread"
-            ],
-            "extensions": [],
-            "method": "GET",
-            "args": {
-              "after": {},
-              "before": {},
-              "count": {},
-              "limit": {},
-              "page": {},
-              "show": {}
-            },
-            "isListing": true
-          }
-        ]
-      }
-    },
-    "settings": {
-      "$page": {
-        "_endpoints": [
-          {
-            "path": "/wiki/settings/$page",
-            "oauth": [
-              "modwiki"
-            ],
-            "extensions": [],
-            "method": "GET",
-            "args": {
-              "page": {}
-            },
-            "isListing": false
-          },
-          {
-            "path": "/wiki/settings/$page",
-            "oauth": [
-              "modwiki"
-            ],
-            "extensions": [],
-            "method": "POST",
-            "args": {
-              "listed": {},
-              "page": {},
-              "permlevel": {},
-              "uh": {}
-            },
-            "isListing": false
-          }
-        ]
-      }
-    },
-    "$page": {
-      "_endpoints": [
-        {
-          "path": "/wiki/$page",
-          "oauth": [
-            "wikiread"
-          ],
-          "extensions": [],
-          "method": "GET",
-          "args": {
-            "page": {},
-            "v": {},
-            "v2": {}
-          },
-          "isListing": false
-        }
-      ]
-    }
-  },
-  "$article": {
-    "duplicates": {
-      "_endpoints": [
-        {
-          "path": "/$article/duplicates",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [],
-          "method": "GET",
-          "args": {
-            "after": {},
-            "article": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "show": {}
-          },
-          "isListing": true
-        }
-      ]
-    },
-    "related": {
-      "_endpoints": [
-        {
-          "path": "/$article/related",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [],
-          "method": "GET",
-          "args": {
-            "after": {},
-            "article": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "show": {}
-          },
-          "isListing": true
-        }
-      ]
-    }
-  },
-  "sidebar": {
-    "_endpoints": [
-      {
-        "path": "/sidebar",
-        "oauth": [
-          "read"
-        ],
-        "extensions": [],
-        "method": "GET",
-        "args": {},
-        "isListing": false
-      }
-    ]
-  },
-  "sticky": {
-    "_endpoints": [
-      {
-        "path": "/sticky",
-        "oauth": [
-          "read"
-        ],
-        "extensions": [],
-        "method": "GET",
-        "args": {},
-        "isListing": false
-      }
-    ]
-  },
-  "duplicates": {
-    "$article": {
-      "_endpoints": [
-        {
-          "path": "/duplicates/$article",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [
-            ".json",
-            ".xml"
-          ],
-          "method": "GET",
-          "args": {
-            "after": {},
-            "article": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "show": {}
-          },
-          "isListing": true
-        }
-      ]
-    }
-  },
-  "related": {
-    "$article": {
-      "_endpoints": [
-        {
-          "path": "/related/$article",
-          "oauth": [
-            "read"
-          ],
-          "extensions": [],
-          "method": "GET",
-          "args": {
-            "after": {},
-            "article": {},
-            "before": {},
-            "count": {},
-            "limit": {},
-            "show": {}
-          },
-          "isListing": true
-        }
-      ]
-    }
-  }
+  "post/api/new_captcha": "a",
+  "post/api/clearflairtemplates": "a",
+  "post/r/$/api/clearflairtemplates": "a",
+  "post/api/deleteflair": "a",
+  "post/r/$/api/deleteflair": "a",
+  "post/api/deleteflairtemplate": "a",
+  "post/r/$/api/deleteflairtemplate": "a",
+  "post/api/flair": "a",
+  "post/r/$/api/flair": "a",
+  "post/api/flairconfig": "a",
+  "post/r/$/api/flairconfig": "a",
+  "post/api/flairtemplate": "a",
+  "post/r/$/api/flairtemplate": "a",
+  "post/api/selectflair": "a",
+  "post/r/$/api/selectflair": "a",
+  "post/api/setflairenabled": "a",
+  "post/r/$/api/setflairenabled": "a",
+  "post/api/comment": "a",
+  "post/api/editusertext": "a",
+  "get/api/morechildren": "a",
+  "post/api/report": "a",
+  "post/api/set_contest_mode": "a",
+  "post/api/set_subreddit_sticky": "a",
+  "post/api/submit": "a",
+  "post/api/live/create": "a",
+  "post/api/live/$/accept_contributor_invite": "a",
+  "post/api/live/$/close_thread": "a",
+  "post/api/live/$/delete_update": "a",
+  "post/api/live/$/edit": "a",
+  "post/api/live/$/invite_contributor": "a",
+  "post/api/live/$/leave_contributor": "a",
+  "post/api/live/$/report": "a",
+  "post/api/live/$/rm_contributor": "a",
+  "post/api/live/$/rm_contributor_invite": "a",
+  "post/api/live/$/set_contributor_permissions": "a",
+  "post/api/live/$/strike_update": "a",
+  "post/api/live/$/update": "a",
+  "post/api/compose": "a",
+  "post/api/accept_moderator_invite": "a",
+  "post/r/$/api/accept_moderator_invite": "a",
+  "post/api/distinguish": "a",
+  "post/api/delete_sr_banner": "a",
+  "post/r/$/api/delete_sr_banner": "a",
+  "post/api/delete_sr_header": "a",
+  "post/r/$/api/delete_sr_header": "a",
+  "post/api/delete_sr_icon": "a",
+  "post/r/$/api/delete_sr_icon": "a",
+  "post/api/delete_sr_img": "a",
+  "post/r/$/api/delete_sr_img": "a",
+  "post/api/site_admin": "a",
+  "post/api/$": "a",
+  "post/r/$/api/subreddit_stylesheet": "a",
+  "post/api/friend": "a",
+  "post/r/$/api/friend": "a",
+  "post/api/setpermissions": "a",
+  "post/r/$/api/setpermissions": "a"
 }
-},{}],3:[function(require,module,exports){
+},{}],2:[function(require,module,exports){
 /*!
  * The buffer module from node.js, for the browser.
  *
@@ -7003,7 +1111,7 @@ function decodeUtf8Char (str) {
   }
 }
 
-},{"base64-js":4,"ieee754":5,"is-array":6}],4:[function(require,module,exports){
+},{"base64-js":3,"ieee754":4,"is-array":5}],3:[function(require,module,exports){
 var lookup = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
 ;(function (exports) {
@@ -7125,7 +1233,7 @@ var lookup = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 	exports.fromByteArray = uint8ToBase64
 }(typeof exports === 'undefined' ? (this.base64js = {}) : exports))
 
-},{}],5:[function(require,module,exports){
+},{}],4:[function(require,module,exports){
 exports.read = function(buffer, offset, isLE, mLen, nBytes) {
   var e, m,
       eLen = nBytes * 8 - mLen - 1,
@@ -7211,7 +1319,7 @@ exports.write = function(buffer, value, offset, isLE, mLen, nBytes) {
   buffer[offset + i - d] |= s * 128;
 };
 
-},{}],6:[function(require,module,exports){
+},{}],5:[function(require,module,exports){
 
 /**
  * isArray
@@ -7246,7 +1354,7 @@ module.exports = isArray || function (val) {
   return !! val && '[object Array]' == str.call(val);
 };
 
-},{}],7:[function(require,module,exports){
+},{}],6:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -7549,7 +1657,563 @@ function isUndefined(arg) {
   return arg === void 0;
 }
 
-},{}],8:[function(require,module,exports){
+},{}],7:[function(require,module,exports){
+var http = module.exports;
+var EventEmitter = require('events').EventEmitter;
+var Request = require('./lib/request');
+var url = require('url')
+
+http.request = function (params, cb) {
+    if (typeof params === 'string') {
+        params = url.parse(params)
+    }
+    if (!params) params = {};
+    if (!params.host && !params.port) {
+        params.port = parseInt(window.location.port, 10);
+    }
+    if (!params.host && params.hostname) {
+        params.host = params.hostname;
+    }
+
+    if (!params.protocol) {
+        if (params.scheme) {
+            params.protocol = params.scheme + ':';
+        } else {
+            params.protocol = window.location.protocol;
+        }
+    }
+
+    if (!params.host) {
+        params.host = window.location.hostname || window.location.host;
+    }
+    if (/:/.test(params.host)) {
+        if (!params.port) {
+            params.port = params.host.split(':')[1];
+        }
+        params.host = params.host.split(':')[0];
+    }
+    if (!params.port) params.port = params.protocol == 'https:' ? 443 : 80;
+    
+    var req = new Request(new xhrHttp, params);
+    if (cb) req.on('response', cb);
+    return req;
+};
+
+http.get = function (params, cb) {
+    params.method = 'GET';
+    var req = http.request(params, cb);
+    req.end();
+    return req;
+};
+
+http.Agent = function () {};
+http.Agent.defaultMaxSockets = 4;
+
+var xhrHttp = (function () {
+    if (typeof window === 'undefined') {
+        throw new Error('no window object present');
+    }
+    else if (window.XMLHttpRequest) {
+        return window.XMLHttpRequest;
+    }
+    else if (window.ActiveXObject) {
+        var axs = [
+            'Msxml2.XMLHTTP.6.0',
+            'Msxml2.XMLHTTP.3.0',
+            'Microsoft.XMLHTTP'
+        ];
+        for (var i = 0; i < axs.length; i++) {
+            try {
+                var ax = new(window.ActiveXObject)(axs[i]);
+                return function () {
+                    if (ax) {
+                        var ax_ = ax;
+                        ax = null;
+                        return ax_;
+                    }
+                    else {
+                        return new(window.ActiveXObject)(axs[i]);
+                    }
+                };
+            }
+            catch (e) {}
+        }
+        throw new Error('ajax not supported in this browser')
+    }
+    else {
+        throw new Error('ajax not supported in this browser');
+    }
+})();
+
+http.STATUS_CODES = {
+    100 : 'Continue',
+    101 : 'Switching Protocols',
+    102 : 'Processing',                 // RFC 2518, obsoleted by RFC 4918
+    200 : 'OK',
+    201 : 'Created',
+    202 : 'Accepted',
+    203 : 'Non-Authoritative Information',
+    204 : 'No Content',
+    205 : 'Reset Content',
+    206 : 'Partial Content',
+    207 : 'Multi-Status',               // RFC 4918
+    300 : 'Multiple Choices',
+    301 : 'Moved Permanently',
+    302 : 'Moved Temporarily',
+    303 : 'See Other',
+    304 : 'Not Modified',
+    305 : 'Use Proxy',
+    307 : 'Temporary Redirect',
+    400 : 'Bad Request',
+    401 : 'Unauthorized',
+    402 : 'Payment Required',
+    403 : 'Forbidden',
+    404 : 'Not Found',
+    405 : 'Method Not Allowed',
+    406 : 'Not Acceptable',
+    407 : 'Proxy Authentication Required',
+    408 : 'Request Time-out',
+    409 : 'Conflict',
+    410 : 'Gone',
+    411 : 'Length Required',
+    412 : 'Precondition Failed',
+    413 : 'Request Entity Too Large',
+    414 : 'Request-URI Too Large',
+    415 : 'Unsupported Media Type',
+    416 : 'Requested Range Not Satisfiable',
+    417 : 'Expectation Failed',
+    418 : 'I\'m a teapot',              // RFC 2324
+    422 : 'Unprocessable Entity',       // RFC 4918
+    423 : 'Locked',                     // RFC 4918
+    424 : 'Failed Dependency',          // RFC 4918
+    425 : 'Unordered Collection',       // RFC 4918
+    426 : 'Upgrade Required',           // RFC 2817
+    428 : 'Precondition Required',      // RFC 6585
+    429 : 'Too Many Requests',          // RFC 6585
+    431 : 'Request Header Fields Too Large',// RFC 6585
+    500 : 'Internal Server Error',
+    501 : 'Not Implemented',
+    502 : 'Bad Gateway',
+    503 : 'Service Unavailable',
+    504 : 'Gateway Time-out',
+    505 : 'HTTP Version Not Supported',
+    506 : 'Variant Also Negotiates',    // RFC 2295
+    507 : 'Insufficient Storage',       // RFC 4918
+    509 : 'Bandwidth Limit Exceeded',
+    510 : 'Not Extended',               // RFC 2774
+    511 : 'Network Authentication Required' // RFC 6585
+};
+},{"./lib/request":8,"events":6,"url":33}],8:[function(require,module,exports){
+var Stream = require('stream');
+var Response = require('./response');
+var Base64 = require('Base64');
+var inherits = require('inherits');
+
+var Request = module.exports = function (xhr, params) {
+    var self = this;
+    self.writable = true;
+    self.xhr = xhr;
+    self.body = [];
+    
+    self.uri = (params.protocol || 'http:') + '//'
+        + params.host
+        + (params.port ? ':' + params.port : '')
+        + (params.path || '/')
+    ;
+    
+    if (typeof params.withCredentials === 'undefined') {
+        params.withCredentials = true;
+    }
+
+    try { xhr.withCredentials = params.withCredentials }
+    catch (e) {}
+    
+    if (params.responseType) try { xhr.responseType = params.responseType }
+    catch (e) {}
+    
+    xhr.open(
+        params.method || 'GET',
+        self.uri,
+        true
+    );
+
+    xhr.onerror = function(event) {
+        self.emit('error', new Error('Network error'));
+    };
+
+    self._headers = {};
+    
+    if (params.headers) {
+        var keys = objectKeys(params.headers);
+        for (var i = 0; i < keys.length; i++) {
+            var key = keys[i];
+            if (!self.isSafeRequestHeader(key)) continue;
+            var value = params.headers[key];
+            self.setHeader(key, value);
+        }
+    }
+    
+    if (params.auth) {
+        //basic auth
+        this.setHeader('Authorization', 'Basic ' + Base64.btoa(params.auth));
+    }
+
+    var res = new Response;
+    res.on('close', function () {
+        self.emit('close');
+    });
+    
+    res.on('ready', function () {
+        self.emit('response', res);
+    });
+
+    res.on('error', function (err) {
+        self.emit('error', err);
+    });
+    
+    xhr.onreadystatechange = function () {
+        // Fix for IE9 bug
+        // SCRIPT575: Could not complete the operation due to error c00c023f
+        // It happens when a request is aborted, calling the success callback anyway with readyState === 4
+        if (xhr.__aborted) return;
+        res.handle(xhr);
+    };
+};
+
+inherits(Request, Stream);
+
+Request.prototype.setHeader = function (key, value) {
+    this._headers[key.toLowerCase()] = value
+};
+
+Request.prototype.getHeader = function (key) {
+    return this._headers[key.toLowerCase()]
+};
+
+Request.prototype.removeHeader = function (key) {
+    delete this._headers[key.toLowerCase()]
+};
+
+Request.prototype.write = function (s) {
+    this.body.push(s);
+};
+
+Request.prototype.destroy = function (s) {
+    this.xhr.__aborted = true;
+    this.xhr.abort();
+    this.emit('close');
+};
+
+Request.prototype.end = function (s) {
+    if (s !== undefined) this.body.push(s);
+
+    var keys = objectKeys(this._headers);
+    for (var i = 0; i < keys.length; i++) {
+        var key = keys[i];
+        var value = this._headers[key];
+        if (isArray(value)) {
+            for (var j = 0; j < value.length; j++) {
+                this.xhr.setRequestHeader(key, value[j]);
+            }
+        }
+        else this.xhr.setRequestHeader(key, value)
+    }
+
+    if (this.body.length === 0) {
+        this.xhr.send('');
+    }
+    else if (typeof this.body[0] === 'string') {
+        this.xhr.send(this.body.join(''));
+    }
+    else if (isArray(this.body[0])) {
+        var body = [];
+        for (var i = 0; i < this.body.length; i++) {
+            body.push.apply(body, this.body[i]);
+        }
+        this.xhr.send(body);
+    }
+    else if (/Array/.test(Object.prototype.toString.call(this.body[0]))) {
+        var len = 0;
+        for (var i = 0; i < this.body.length; i++) {
+            len += this.body[i].length;
+        }
+        var body = new(this.body[0].constructor)(len);
+        var k = 0;
+        
+        for (var i = 0; i < this.body.length; i++) {
+            var b = this.body[i];
+            for (var j = 0; j < b.length; j++) {
+                body[k++] = b[j];
+            }
+        }
+        this.xhr.send(body);
+    }
+    else if (isXHR2Compatible(this.body[0])) {
+        this.xhr.send(this.body[0]);
+    }
+    else {
+        var body = '';
+        for (var i = 0; i < this.body.length; i++) {
+            body += this.body[i].toString();
+        }
+        this.xhr.send(body);
+    }
+};
+
+// Taken from http://dxr.mozilla.org/mozilla/mozilla-central/content/base/src/nsXMLHttpRequest.cpp.html
+Request.unsafeHeaders = [
+    "accept-charset",
+    "accept-encoding",
+    "access-control-request-headers",
+    "access-control-request-method",
+    "connection",
+    "content-length",
+    "cookie",
+    "cookie2",
+    "content-transfer-encoding",
+    "date",
+    "expect",
+    "host",
+    "keep-alive",
+    "origin",
+    "referer",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+    "user-agent",
+    "via"
+];
+
+Request.prototype.isSafeRequestHeader = function (headerName) {
+    if (!headerName) return false;
+    return indexOf(Request.unsafeHeaders, headerName.toLowerCase()) === -1;
+};
+
+var objectKeys = Object.keys || function (obj) {
+    var keys = [];
+    for (var key in obj) keys.push(key);
+    return keys;
+};
+
+var isArray = Array.isArray || function (xs) {
+    return Object.prototype.toString.call(xs) === '[object Array]';
+};
+
+var indexOf = function (xs, x) {
+    if (xs.indexOf) return xs.indexOf(x);
+    for (var i = 0; i < xs.length; i++) {
+        if (xs[i] === x) return i;
+    }
+    return -1;
+};
+
+var isXHR2Compatible = function (obj) {
+    if (typeof Blob !== 'undefined' && obj instanceof Blob) return true;
+    if (typeof ArrayBuffer !== 'undefined' && obj instanceof ArrayBuffer) return true;
+    if (typeof FormData !== 'undefined' && obj instanceof FormData) return true;
+};
+
+},{"./response":9,"Base64":10,"inherits":12,"stream":31}],9:[function(require,module,exports){
+var Stream = require('stream');
+var util = require('util');
+
+var Response = module.exports = function (res) {
+    this.offset = 0;
+    this.readable = true;
+};
+
+util.inherits(Response, Stream);
+
+var capable = {
+    streaming : true,
+    status2 : true
+};
+
+function parseHeaders (res) {
+    var lines = res.getAllResponseHeaders().split(/\r?\n/);
+    var headers = {};
+    for (var i = 0; i < lines.length; i++) {
+        var line = lines[i];
+        if (line === '') continue;
+        
+        var m = line.match(/^([^:]+):\s*(.*)/);
+        if (m) {
+            var key = m[1].toLowerCase(), value = m[2];
+            
+            if (headers[key] !== undefined) {
+            
+                if (isArray(headers[key])) {
+                    headers[key].push(value);
+                }
+                else {
+                    headers[key] = [ headers[key], value ];
+                }
+            }
+            else {
+                headers[key] = value;
+            }
+        }
+        else {
+            headers[line] = true;
+        }
+    }
+    return headers;
+}
+
+Response.prototype.getResponse = function (xhr) {
+    var respType = String(xhr.responseType).toLowerCase();
+    if (respType === 'blob') return xhr.responseBlob || xhr.response;
+    if (respType === 'arraybuffer') return xhr.response;
+    return xhr.responseText;
+}
+
+Response.prototype.getHeader = function (key) {
+    return this.headers[key.toLowerCase()];
+};
+
+Response.prototype.handle = function (res) {
+    if (res.readyState === 2 && capable.status2) {
+        try {
+            this.statusCode = res.status;
+            this.headers = parseHeaders(res);
+        }
+        catch (err) {
+            capable.status2 = false;
+        }
+        
+        if (capable.status2) {
+            this.emit('ready');
+        }
+    }
+    else if (capable.streaming && res.readyState === 3) {
+        try {
+            if (!this.statusCode) {
+                this.statusCode = res.status;
+                this.headers = parseHeaders(res);
+                this.emit('ready');
+            }
+        }
+        catch (err) {}
+        
+        try {
+            this._emitData(res);
+        }
+        catch (err) {
+            capable.streaming = false;
+        }
+    }
+    else if (res.readyState === 4) {
+        if (!this.statusCode) {
+            this.statusCode = res.status;
+            this.emit('ready');
+        }
+        this._emitData(res);
+        
+        if (res.error) {
+            this.emit('error', this.getResponse(res));
+        }
+        else this.emit('end');
+        
+        this.emit('close');
+    }
+};
+
+Response.prototype._emitData = function (res) {
+    var respBody = this.getResponse(res);
+    if (respBody.toString().match(/ArrayBuffer/)) {
+        this.emit('data', new Uint8Array(respBody, this.offset));
+        this.offset = respBody.byteLength;
+        return;
+    }
+    if (respBody.length > this.offset) {
+        this.emit('data', respBody.slice(this.offset));
+        this.offset = respBody.length;
+    }
+};
+
+var isArray = Array.isArray || function (xs) {
+    return Object.prototype.toString.call(xs) === '[object Array]';
+};
+
+},{"stream":31,"util":35}],10:[function(require,module,exports){
+;(function () {
+
+  var object = typeof exports != 'undefined' ? exports : this; // #8: web workers
+  var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+
+  function InvalidCharacterError(message) {
+    this.message = message;
+  }
+  InvalidCharacterError.prototype = new Error;
+  InvalidCharacterError.prototype.name = 'InvalidCharacterError';
+
+  // encoder
+  // [https://gist.github.com/999166] by [https://github.com/nignag]
+  object.btoa || (
+  object.btoa = function (input) {
+    for (
+      // initialize result and counter
+      var block, charCode, idx = 0, map = chars, output = '';
+      // if the next input index does not exist:
+      //   change the mapping table to "="
+      //   check if d has no fractional digits
+      input.charAt(idx | 0) || (map = '=', idx % 1);
+      // "8 - idx % 1 * 8" generates the sequence 2, 4, 6, 8
+      output += map.charAt(63 & block >> 8 - idx % 1 * 8)
+    ) {
+      charCode = input.charCodeAt(idx += 3/4);
+      if (charCode > 0xFF) {
+        throw new InvalidCharacterError("'btoa' failed: The string to be encoded contains characters outside of the Latin1 range.");
+      }
+      block = block << 8 | charCode;
+    }
+    return output;
+  });
+
+  // decoder
+  // [https://gist.github.com/1020396] by [https://github.com/atk]
+  object.atob || (
+  object.atob = function (input) {
+    input = input.replace(/=+$/, '');
+    if (input.length % 4 == 1) {
+      throw new InvalidCharacterError("'atob' failed: The string to be decoded is not correctly encoded.");
+    }
+    for (
+      // initialize result and counters
+      var bc = 0, bs, buffer, idx = 0, output = '';
+      // get next character
+      buffer = input.charAt(idx++);
+      // character found in table? initialize bit storage and add its ascii value;
+      ~buffer && (bs = bc % 4 ? bs * 64 + buffer : buffer,
+        // and if not first of each 4 characters,
+        // convert the first 8 bits to one ascii character
+        bc++ % 4) ? output += String.fromCharCode(255 & bs >> (-2 * bc & 6)) : 0
+    ) {
+      // try to find character in table (0-63, not found => -1)
+      buffer = chars.indexOf(buffer);
+    }
+    return output;
+  });
+
+}());
+
+},{}],11:[function(require,module,exports){
+var http = require('http');
+
+var https = module.exports;
+
+for (var key in http) {
+    if (http.hasOwnProperty(key)) https[key] = http[key];
+};
+
+https.request = function (params, cb) {
+    if (!params) params = {};
+    params.scheme = 'https';
+    return http.request.call(this, params, cb);
+}
+
+},{"http":7}],12:[function(require,module,exports){
 if (typeof Object.create === 'function') {
   // implementation from standard node.js 'util' module
   module.exports = function inherits(ctor, superCtor) {
@@ -7574,7 +2238,12 @@ if (typeof Object.create === 'function') {
   }
 }
 
-},{}],9:[function(require,module,exports){
+},{}],13:[function(require,module,exports){
+module.exports = Array.isArray || function (arr) {
+  return Object.prototype.toString.call(arr) == '[object Array]';
+};
+
+},{}],14:[function(require,module,exports){
 (function (process){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -7802,7 +2471,7 @@ var substr = 'ab'.substr(-1) === 'b'
 ;
 
 }).call(this,require('_process'))
-},{"_process":10}],10:[function(require,module,exports){
+},{"_process":15}],15:[function(require,module,exports){
 // shim for using process in browser
 
 var process = module.exports = {};
@@ -7890,7 +2559,7 @@ process.chdir = function (dir) {
     throw new Error('process.chdir is not supported');
 };
 
-},{}],11:[function(require,module,exports){
+},{}],16:[function(require,module,exports){
 (function (global){
 /*! http://mths.be/punycode v1.2.4 by @mathias */
 ;(function(root) {
@@ -8401,7 +3070,7 @@ process.chdir = function (dir) {
 }(this));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],12:[function(require,module,exports){
+},{}],17:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8487,7 +3156,7 @@ var isArray = Array.isArray || function (xs) {
   return Object.prototype.toString.call(xs) === '[object Array]';
 };
 
-},{}],13:[function(require,module,exports){
+},{}],18:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8574,13 +3243,2226 @@ var objectKeys = Object.keys || function (obj) {
   return res;
 };
 
-},{}],14:[function(require,module,exports){
+},{}],19:[function(require,module,exports){
 'use strict';
 
 exports.decode = exports.parse = require('./decode');
 exports.encode = exports.stringify = require('./encode');
 
-},{"./decode":12,"./encode":13}],15:[function(require,module,exports){
+},{"./decode":17,"./encode":18}],20:[function(require,module,exports){
+module.exports = require("./lib/_stream_duplex.js")
+
+},{"./lib/_stream_duplex.js":21}],21:[function(require,module,exports){
+(function (process){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+// a duplex stream is just a stream that is both readable and writable.
+// Since JS doesn't have multiple prototypal inheritance, this class
+// prototypally inherits from Readable, and then parasitically from
+// Writable.
+
+module.exports = Duplex;
+
+/*<replacement>*/
+var objectKeys = Object.keys || function (obj) {
+  var keys = [];
+  for (var key in obj) keys.push(key);
+  return keys;
+}
+/*</replacement>*/
+
+
+/*<replacement>*/
+var util = require('core-util-is');
+util.inherits = require('inherits');
+/*</replacement>*/
+
+var Readable = require('./_stream_readable');
+var Writable = require('./_stream_writable');
+
+util.inherits(Duplex, Readable);
+
+forEach(objectKeys(Writable.prototype), function(method) {
+  if (!Duplex.prototype[method])
+    Duplex.prototype[method] = Writable.prototype[method];
+});
+
+function Duplex(options) {
+  if (!(this instanceof Duplex))
+    return new Duplex(options);
+
+  Readable.call(this, options);
+  Writable.call(this, options);
+
+  if (options && options.readable === false)
+    this.readable = false;
+
+  if (options && options.writable === false)
+    this.writable = false;
+
+  this.allowHalfOpen = true;
+  if (options && options.allowHalfOpen === false)
+    this.allowHalfOpen = false;
+
+  this.once('end', onend);
+}
+
+// the no-half-open enforcer
+function onend() {
+  // if we allow half-open state, or if the writable side ended,
+  // then we're ok.
+  if (this.allowHalfOpen || this._writableState.ended)
+    return;
+
+  // no more data can be written.
+  // But allow more writes to happen in this tick.
+  process.nextTick(this.end.bind(this));
+}
+
+function forEach (xs, f) {
+  for (var i = 0, l = xs.length; i < l; i++) {
+    f(xs[i], i);
+  }
+}
+
+}).call(this,require('_process'))
+},{"./_stream_readable":23,"./_stream_writable":25,"_process":15,"core-util-is":26,"inherits":12}],22:[function(require,module,exports){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+// a passthrough stream.
+// basically just the most minimal sort of Transform stream.
+// Every written chunk gets output as-is.
+
+module.exports = PassThrough;
+
+var Transform = require('./_stream_transform');
+
+/*<replacement>*/
+var util = require('core-util-is');
+util.inherits = require('inherits');
+/*</replacement>*/
+
+util.inherits(PassThrough, Transform);
+
+function PassThrough(options) {
+  if (!(this instanceof PassThrough))
+    return new PassThrough(options);
+
+  Transform.call(this, options);
+}
+
+PassThrough.prototype._transform = function(chunk, encoding, cb) {
+  cb(null, chunk);
+};
+
+},{"./_stream_transform":24,"core-util-is":26,"inherits":12}],23:[function(require,module,exports){
+(function (process){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+module.exports = Readable;
+
+/*<replacement>*/
+var isArray = require('isarray');
+/*</replacement>*/
+
+
+/*<replacement>*/
+var Buffer = require('buffer').Buffer;
+/*</replacement>*/
+
+Readable.ReadableState = ReadableState;
+
+var EE = require('events').EventEmitter;
+
+/*<replacement>*/
+if (!EE.listenerCount) EE.listenerCount = function(emitter, type) {
+  return emitter.listeners(type).length;
+};
+/*</replacement>*/
+
+var Stream = require('stream');
+
+/*<replacement>*/
+var util = require('core-util-is');
+util.inherits = require('inherits');
+/*</replacement>*/
+
+var StringDecoder;
+
+util.inherits(Readable, Stream);
+
+function ReadableState(options, stream) {
+  options = options || {};
+
+  // the point at which it stops calling _read() to fill the buffer
+  // Note: 0 is a valid value, means "don't call _read preemptively ever"
+  var hwm = options.highWaterMark;
+  this.highWaterMark = (hwm || hwm === 0) ? hwm : 16 * 1024;
+
+  // cast to ints.
+  this.highWaterMark = ~~this.highWaterMark;
+
+  this.buffer = [];
+  this.length = 0;
+  this.pipes = null;
+  this.pipesCount = 0;
+  this.flowing = false;
+  this.ended = false;
+  this.endEmitted = false;
+  this.reading = false;
+
+  // In streams that never have any data, and do push(null) right away,
+  // the consumer can miss the 'end' event if they do some I/O before
+  // consuming the stream.  So, we don't emit('end') until some reading
+  // happens.
+  this.calledRead = false;
+
+  // a flag to be able to tell if the onwrite cb is called immediately,
+  // or on a later tick.  We set this to true at first, becuase any
+  // actions that shouldn't happen until "later" should generally also
+  // not happen before the first write call.
+  this.sync = true;
+
+  // whenever we return null, then we set a flag to say
+  // that we're awaiting a 'readable' event emission.
+  this.needReadable = false;
+  this.emittedReadable = false;
+  this.readableListening = false;
+
+
+  // object stream flag. Used to make read(n) ignore n and to
+  // make all the buffer merging and length checks go away
+  this.objectMode = !!options.objectMode;
+
+  // Crypto is kind of old and crusty.  Historically, its default string
+  // encoding is 'binary' so we have to make this configurable.
+  // Everything else in the universe uses 'utf8', though.
+  this.defaultEncoding = options.defaultEncoding || 'utf8';
+
+  // when piping, we only care about 'readable' events that happen
+  // after read()ing all the bytes and not getting any pushback.
+  this.ranOut = false;
+
+  // the number of writers that are awaiting a drain event in .pipe()s
+  this.awaitDrain = 0;
+
+  // if true, a maybeReadMore has been scheduled
+  this.readingMore = false;
+
+  this.decoder = null;
+  this.encoding = null;
+  if (options.encoding) {
+    if (!StringDecoder)
+      StringDecoder = require('string_decoder/').StringDecoder;
+    this.decoder = new StringDecoder(options.encoding);
+    this.encoding = options.encoding;
+  }
+}
+
+function Readable(options) {
+  if (!(this instanceof Readable))
+    return new Readable(options);
+
+  this._readableState = new ReadableState(options, this);
+
+  // legacy
+  this.readable = true;
+
+  Stream.call(this);
+}
+
+// Manually shove something into the read() buffer.
+// This returns true if the highWaterMark has not been hit yet,
+// similar to how Writable.write() returns true if you should
+// write() some more.
+Readable.prototype.push = function(chunk, encoding) {
+  var state = this._readableState;
+
+  if (typeof chunk === 'string' && !state.objectMode) {
+    encoding = encoding || state.defaultEncoding;
+    if (encoding !== state.encoding) {
+      chunk = new Buffer(chunk, encoding);
+      encoding = '';
+    }
+  }
+
+  return readableAddChunk(this, state, chunk, encoding, false);
+};
+
+// Unshift should *always* be something directly out of read()
+Readable.prototype.unshift = function(chunk) {
+  var state = this._readableState;
+  return readableAddChunk(this, state, chunk, '', true);
+};
+
+function readableAddChunk(stream, state, chunk, encoding, addToFront) {
+  var er = chunkInvalid(state, chunk);
+  if (er) {
+    stream.emit('error', er);
+  } else if (chunk === null || chunk === undefined) {
+    state.reading = false;
+    if (!state.ended)
+      onEofChunk(stream, state);
+  } else if (state.objectMode || chunk && chunk.length > 0) {
+    if (state.ended && !addToFront) {
+      var e = new Error('stream.push() after EOF');
+      stream.emit('error', e);
+    } else if (state.endEmitted && addToFront) {
+      var e = new Error('stream.unshift() after end event');
+      stream.emit('error', e);
+    } else {
+      if (state.decoder && !addToFront && !encoding)
+        chunk = state.decoder.write(chunk);
+
+      // update the buffer info.
+      state.length += state.objectMode ? 1 : chunk.length;
+      if (addToFront) {
+        state.buffer.unshift(chunk);
+      } else {
+        state.reading = false;
+        state.buffer.push(chunk);
+      }
+
+      if (state.needReadable)
+        emitReadable(stream);
+
+      maybeReadMore(stream, state);
+    }
+  } else if (!addToFront) {
+    state.reading = false;
+  }
+
+  return needMoreData(state);
+}
+
+
+
+// if it's past the high water mark, we can push in some more.
+// Also, if we have no data yet, we can stand some
+// more bytes.  This is to work around cases where hwm=0,
+// such as the repl.  Also, if the push() triggered a
+// readable event, and the user called read(largeNumber) such that
+// needReadable was set, then we ought to push more, so that another
+// 'readable' event will be triggered.
+function needMoreData(state) {
+  return !state.ended &&
+         (state.needReadable ||
+          state.length < state.highWaterMark ||
+          state.length === 0);
+}
+
+// backwards compatibility.
+Readable.prototype.setEncoding = function(enc) {
+  if (!StringDecoder)
+    StringDecoder = require('string_decoder/').StringDecoder;
+  this._readableState.decoder = new StringDecoder(enc);
+  this._readableState.encoding = enc;
+};
+
+// Don't raise the hwm > 128MB
+var MAX_HWM = 0x800000;
+function roundUpToNextPowerOf2(n) {
+  if (n >= MAX_HWM) {
+    n = MAX_HWM;
+  } else {
+    // Get the next highest power of 2
+    n--;
+    for (var p = 1; p < 32; p <<= 1) n |= n >> p;
+    n++;
+  }
+  return n;
+}
+
+function howMuchToRead(n, state) {
+  if (state.length === 0 && state.ended)
+    return 0;
+
+  if (state.objectMode)
+    return n === 0 ? 0 : 1;
+
+  if (n === null || isNaN(n)) {
+    // only flow one buffer at a time
+    if (state.flowing && state.buffer.length)
+      return state.buffer[0].length;
+    else
+      return state.length;
+  }
+
+  if (n <= 0)
+    return 0;
+
+  // If we're asking for more than the target buffer level,
+  // then raise the water mark.  Bump up to the next highest
+  // power of 2, to prevent increasing it excessively in tiny
+  // amounts.
+  if (n > state.highWaterMark)
+    state.highWaterMark = roundUpToNextPowerOf2(n);
+
+  // don't have that much.  return null, unless we've ended.
+  if (n > state.length) {
+    if (!state.ended) {
+      state.needReadable = true;
+      return 0;
+    } else
+      return state.length;
+  }
+
+  return n;
+}
+
+// you can override either this method, or the async _read(n) below.
+Readable.prototype.read = function(n) {
+  var state = this._readableState;
+  state.calledRead = true;
+  var nOrig = n;
+  var ret;
+
+  if (typeof n !== 'number' || n > 0)
+    state.emittedReadable = false;
+
+  // if we're doing read(0) to trigger a readable event, but we
+  // already have a bunch of data in the buffer, then just trigger
+  // the 'readable' event and move on.
+  if (n === 0 &&
+      state.needReadable &&
+      (state.length >= state.highWaterMark || state.ended)) {
+    emitReadable(this);
+    return null;
+  }
+
+  n = howMuchToRead(n, state);
+
+  // if we've ended, and we're now clear, then finish it up.
+  if (n === 0 && state.ended) {
+    ret = null;
+
+    // In cases where the decoder did not receive enough data
+    // to produce a full chunk, then immediately received an
+    // EOF, state.buffer will contain [<Buffer >, <Buffer 00 ...>].
+    // howMuchToRead will see this and coerce the amount to
+    // read to zero (because it's looking at the length of the
+    // first <Buffer > in state.buffer), and we'll end up here.
+    //
+    // This can only happen via state.decoder -- no other venue
+    // exists for pushing a zero-length chunk into state.buffer
+    // and triggering this behavior. In this case, we return our
+    // remaining data and end the stream, if appropriate.
+    if (state.length > 0 && state.decoder) {
+      ret = fromList(n, state);
+      state.length -= ret.length;
+    }
+
+    if (state.length === 0)
+      endReadable(this);
+
+    return ret;
+  }
+
+  // All the actual chunk generation logic needs to be
+  // *below* the call to _read.  The reason is that in certain
+  // synthetic stream cases, such as passthrough streams, _read
+  // may be a completely synchronous operation which may change
+  // the state of the read buffer, providing enough data when
+  // before there was *not* enough.
+  //
+  // So, the steps are:
+  // 1. Figure out what the state of things will be after we do
+  // a read from the buffer.
+  //
+  // 2. If that resulting state will trigger a _read, then call _read.
+  // Note that this may be asynchronous, or synchronous.  Yes, it is
+  // deeply ugly to write APIs this way, but that still doesn't mean
+  // that the Readable class should behave improperly, as streams are
+  // designed to be sync/async agnostic.
+  // Take note if the _read call is sync or async (ie, if the read call
+  // has returned yet), so that we know whether or not it's safe to emit
+  // 'readable' etc.
+  //
+  // 3. Actually pull the requested chunks out of the buffer and return.
+
+  // if we need a readable event, then we need to do some reading.
+  var doRead = state.needReadable;
+
+  // if we currently have less than the highWaterMark, then also read some
+  if (state.length - n <= state.highWaterMark)
+    doRead = true;
+
+  // however, if we've ended, then there's no point, and if we're already
+  // reading, then it's unnecessary.
+  if (state.ended || state.reading)
+    doRead = false;
+
+  if (doRead) {
+    state.reading = true;
+    state.sync = true;
+    // if the length is currently zero, then we *need* a readable event.
+    if (state.length === 0)
+      state.needReadable = true;
+    // call internal read method
+    this._read(state.highWaterMark);
+    state.sync = false;
+  }
+
+  // If _read called its callback synchronously, then `reading`
+  // will be false, and we need to re-evaluate how much data we
+  // can return to the user.
+  if (doRead && !state.reading)
+    n = howMuchToRead(nOrig, state);
+
+  if (n > 0)
+    ret = fromList(n, state);
+  else
+    ret = null;
+
+  if (ret === null) {
+    state.needReadable = true;
+    n = 0;
+  }
+
+  state.length -= n;
+
+  // If we have nothing in the buffer, then we want to know
+  // as soon as we *do* get something into the buffer.
+  if (state.length === 0 && !state.ended)
+    state.needReadable = true;
+
+  // If we happened to read() exactly the remaining amount in the
+  // buffer, and the EOF has been seen at this point, then make sure
+  // that we emit 'end' on the very next tick.
+  if (state.ended && !state.endEmitted && state.length === 0)
+    endReadable(this);
+
+  return ret;
+};
+
+function chunkInvalid(state, chunk) {
+  var er = null;
+  if (!Buffer.isBuffer(chunk) &&
+      'string' !== typeof chunk &&
+      chunk !== null &&
+      chunk !== undefined &&
+      !state.objectMode) {
+    er = new TypeError('Invalid non-string/buffer chunk');
+  }
+  return er;
+}
+
+
+function onEofChunk(stream, state) {
+  if (state.decoder && !state.ended) {
+    var chunk = state.decoder.end();
+    if (chunk && chunk.length) {
+      state.buffer.push(chunk);
+      state.length += state.objectMode ? 1 : chunk.length;
+    }
+  }
+  state.ended = true;
+
+  // if we've ended and we have some data left, then emit
+  // 'readable' now to make sure it gets picked up.
+  if (state.length > 0)
+    emitReadable(stream);
+  else
+    endReadable(stream);
+}
+
+// Don't emit readable right away in sync mode, because this can trigger
+// another read() call => stack overflow.  This way, it might trigger
+// a nextTick recursion warning, but that's not so bad.
+function emitReadable(stream) {
+  var state = stream._readableState;
+  state.needReadable = false;
+  if (state.emittedReadable)
+    return;
+
+  state.emittedReadable = true;
+  if (state.sync)
+    process.nextTick(function() {
+      emitReadable_(stream);
+    });
+  else
+    emitReadable_(stream);
+}
+
+function emitReadable_(stream) {
+  stream.emit('readable');
+}
+
+
+// at this point, the user has presumably seen the 'readable' event,
+// and called read() to consume some data.  that may have triggered
+// in turn another _read(n) call, in which case reading = true if
+// it's in progress.
+// However, if we're not ended, or reading, and the length < hwm,
+// then go ahead and try to read some more preemptively.
+function maybeReadMore(stream, state) {
+  if (!state.readingMore) {
+    state.readingMore = true;
+    process.nextTick(function() {
+      maybeReadMore_(stream, state);
+    });
+  }
+}
+
+function maybeReadMore_(stream, state) {
+  var len = state.length;
+  while (!state.reading && !state.flowing && !state.ended &&
+         state.length < state.highWaterMark) {
+    stream.read(0);
+    if (len === state.length)
+      // didn't get any data, stop spinning.
+      break;
+    else
+      len = state.length;
+  }
+  state.readingMore = false;
+}
+
+// abstract method.  to be overridden in specific implementation classes.
+// call cb(er, data) where data is <= n in length.
+// for virtual (non-string, non-buffer) streams, "length" is somewhat
+// arbitrary, and perhaps not very meaningful.
+Readable.prototype._read = function(n) {
+  this.emit('error', new Error('not implemented'));
+};
+
+Readable.prototype.pipe = function(dest, pipeOpts) {
+  var src = this;
+  var state = this._readableState;
+
+  switch (state.pipesCount) {
+    case 0:
+      state.pipes = dest;
+      break;
+    case 1:
+      state.pipes = [state.pipes, dest];
+      break;
+    default:
+      state.pipes.push(dest);
+      break;
+  }
+  state.pipesCount += 1;
+
+  var doEnd = (!pipeOpts || pipeOpts.end !== false) &&
+              dest !== process.stdout &&
+              dest !== process.stderr;
+
+  var endFn = doEnd ? onend : cleanup;
+  if (state.endEmitted)
+    process.nextTick(endFn);
+  else
+    src.once('end', endFn);
+
+  dest.on('unpipe', onunpipe);
+  function onunpipe(readable) {
+    if (readable !== src) return;
+    cleanup();
+  }
+
+  function onend() {
+    dest.end();
+  }
+
+  // when the dest drains, it reduces the awaitDrain counter
+  // on the source.  This would be more elegant with a .once()
+  // handler in flow(), but adding and removing repeatedly is
+  // too slow.
+  var ondrain = pipeOnDrain(src);
+  dest.on('drain', ondrain);
+
+  function cleanup() {
+    // cleanup event handlers once the pipe is broken
+    dest.removeListener('close', onclose);
+    dest.removeListener('finish', onfinish);
+    dest.removeListener('drain', ondrain);
+    dest.removeListener('error', onerror);
+    dest.removeListener('unpipe', onunpipe);
+    src.removeListener('end', onend);
+    src.removeListener('end', cleanup);
+
+    // if the reader is waiting for a drain event from this
+    // specific writer, then it would cause it to never start
+    // flowing again.
+    // So, if this is awaiting a drain, then we just call it now.
+    // If we don't know, then assume that we are waiting for one.
+    if (!dest._writableState || dest._writableState.needDrain)
+      ondrain();
+  }
+
+  // if the dest has an error, then stop piping into it.
+  // however, don't suppress the throwing behavior for this.
+  function onerror(er) {
+    unpipe();
+    dest.removeListener('error', onerror);
+    if (EE.listenerCount(dest, 'error') === 0)
+      dest.emit('error', er);
+  }
+  // This is a brutally ugly hack to make sure that our error handler
+  // is attached before any userland ones.  NEVER DO THIS.
+  if (!dest._events || !dest._events.error)
+    dest.on('error', onerror);
+  else if (isArray(dest._events.error))
+    dest._events.error.unshift(onerror);
+  else
+    dest._events.error = [onerror, dest._events.error];
+
+
+
+  // Both close and finish should trigger unpipe, but only once.
+  function onclose() {
+    dest.removeListener('finish', onfinish);
+    unpipe();
+  }
+  dest.once('close', onclose);
+  function onfinish() {
+    dest.removeListener('close', onclose);
+    unpipe();
+  }
+  dest.once('finish', onfinish);
+
+  function unpipe() {
+    src.unpipe(dest);
+  }
+
+  // tell the dest that it's being piped to
+  dest.emit('pipe', src);
+
+  // start the flow if it hasn't been started already.
+  if (!state.flowing) {
+    // the handler that waits for readable events after all
+    // the data gets sucked out in flow.
+    // This would be easier to follow with a .once() handler
+    // in flow(), but that is too slow.
+    this.on('readable', pipeOnReadable);
+
+    state.flowing = true;
+    process.nextTick(function() {
+      flow(src);
+    });
+  }
+
+  return dest;
+};
+
+function pipeOnDrain(src) {
+  return function() {
+    var dest = this;
+    var state = src._readableState;
+    state.awaitDrain--;
+    if (state.awaitDrain === 0)
+      flow(src);
+  };
+}
+
+function flow(src) {
+  var state = src._readableState;
+  var chunk;
+  state.awaitDrain = 0;
+
+  function write(dest, i, list) {
+    var written = dest.write(chunk);
+    if (false === written) {
+      state.awaitDrain++;
+    }
+  }
+
+  while (state.pipesCount && null !== (chunk = src.read())) {
+
+    if (state.pipesCount === 1)
+      write(state.pipes, 0, null);
+    else
+      forEach(state.pipes, write);
+
+    src.emit('data', chunk);
+
+    // if anyone needs a drain, then we have to wait for that.
+    if (state.awaitDrain > 0)
+      return;
+  }
+
+  // if every destination was unpiped, either before entering this
+  // function, or in the while loop, then stop flowing.
+  //
+  // NB: This is a pretty rare edge case.
+  if (state.pipesCount === 0) {
+    state.flowing = false;
+
+    // if there were data event listeners added, then switch to old mode.
+    if (EE.listenerCount(src, 'data') > 0)
+      emitDataEvents(src);
+    return;
+  }
+
+  // at this point, no one needed a drain, so we just ran out of data
+  // on the next readable event, start it over again.
+  state.ranOut = true;
+}
+
+function pipeOnReadable() {
+  if (this._readableState.ranOut) {
+    this._readableState.ranOut = false;
+    flow(this);
+  }
+}
+
+
+Readable.prototype.unpipe = function(dest) {
+  var state = this._readableState;
+
+  // if we're not piping anywhere, then do nothing.
+  if (state.pipesCount === 0)
+    return this;
+
+  // just one destination.  most common case.
+  if (state.pipesCount === 1) {
+    // passed in one, but it's not the right one.
+    if (dest && dest !== state.pipes)
+      return this;
+
+    if (!dest)
+      dest = state.pipes;
+
+    // got a match.
+    state.pipes = null;
+    state.pipesCount = 0;
+    this.removeListener('readable', pipeOnReadable);
+    state.flowing = false;
+    if (dest)
+      dest.emit('unpipe', this);
+    return this;
+  }
+
+  // slow case. multiple pipe destinations.
+
+  if (!dest) {
+    // remove all.
+    var dests = state.pipes;
+    var len = state.pipesCount;
+    state.pipes = null;
+    state.pipesCount = 0;
+    this.removeListener('readable', pipeOnReadable);
+    state.flowing = false;
+
+    for (var i = 0; i < len; i++)
+      dests[i].emit('unpipe', this);
+    return this;
+  }
+
+  // try to find the right one.
+  var i = indexOf(state.pipes, dest);
+  if (i === -1)
+    return this;
+
+  state.pipes.splice(i, 1);
+  state.pipesCount -= 1;
+  if (state.pipesCount === 1)
+    state.pipes = state.pipes[0];
+
+  dest.emit('unpipe', this);
+
+  return this;
+};
+
+// set up data events if they are asked for
+// Ensure readable listeners eventually get something
+Readable.prototype.on = function(ev, fn) {
+  var res = Stream.prototype.on.call(this, ev, fn);
+
+  if (ev === 'data' && !this._readableState.flowing)
+    emitDataEvents(this);
+
+  if (ev === 'readable' && this.readable) {
+    var state = this._readableState;
+    if (!state.readableListening) {
+      state.readableListening = true;
+      state.emittedReadable = false;
+      state.needReadable = true;
+      if (!state.reading) {
+        this.read(0);
+      } else if (state.length) {
+        emitReadable(this, state);
+      }
+    }
+  }
+
+  return res;
+};
+Readable.prototype.addListener = Readable.prototype.on;
+
+// pause() and resume() are remnants of the legacy readable stream API
+// If the user uses them, then switch into old mode.
+Readable.prototype.resume = function() {
+  emitDataEvents(this);
+  this.read(0);
+  this.emit('resume');
+};
+
+Readable.prototype.pause = function() {
+  emitDataEvents(this, true);
+  this.emit('pause');
+};
+
+function emitDataEvents(stream, startPaused) {
+  var state = stream._readableState;
+
+  if (state.flowing) {
+    // https://github.com/isaacs/readable-stream/issues/16
+    throw new Error('Cannot switch to old mode now.');
+  }
+
+  var paused = startPaused || false;
+  var readable = false;
+
+  // convert to an old-style stream.
+  stream.readable = true;
+  stream.pipe = Stream.prototype.pipe;
+  stream.on = stream.addListener = Stream.prototype.on;
+
+  stream.on('readable', function() {
+    readable = true;
+
+    var c;
+    while (!paused && (null !== (c = stream.read())))
+      stream.emit('data', c);
+
+    if (c === null) {
+      readable = false;
+      stream._readableState.needReadable = true;
+    }
+  });
+
+  stream.pause = function() {
+    paused = true;
+    this.emit('pause');
+  };
+
+  stream.resume = function() {
+    paused = false;
+    if (readable)
+      process.nextTick(function() {
+        stream.emit('readable');
+      });
+    else
+      this.read(0);
+    this.emit('resume');
+  };
+
+  // now make it start, just in case it hadn't already.
+  stream.emit('readable');
+}
+
+// wrap an old-style stream as the async data source.
+// This is *not* part of the readable stream interface.
+// It is an ugly unfortunate mess of history.
+Readable.prototype.wrap = function(stream) {
+  var state = this._readableState;
+  var paused = false;
+
+  var self = this;
+  stream.on('end', function() {
+    if (state.decoder && !state.ended) {
+      var chunk = state.decoder.end();
+      if (chunk && chunk.length)
+        self.push(chunk);
+    }
+
+    self.push(null);
+  });
+
+  stream.on('data', function(chunk) {
+    if (state.decoder)
+      chunk = state.decoder.write(chunk);
+
+    // don't skip over falsy values in objectMode
+    //if (state.objectMode && util.isNullOrUndefined(chunk))
+    if (state.objectMode && (chunk === null || chunk === undefined))
+      return;
+    else if (!state.objectMode && (!chunk || !chunk.length))
+      return;
+
+    var ret = self.push(chunk);
+    if (!ret) {
+      paused = true;
+      stream.pause();
+    }
+  });
+
+  // proxy all the other methods.
+  // important when wrapping filters and duplexes.
+  for (var i in stream) {
+    if (typeof stream[i] === 'function' &&
+        typeof this[i] === 'undefined') {
+      this[i] = function(method) { return function() {
+        return stream[method].apply(stream, arguments);
+      }}(i);
+    }
+  }
+
+  // proxy certain important events.
+  var events = ['error', 'close', 'destroy', 'pause', 'resume'];
+  forEach(events, function(ev) {
+    stream.on(ev, self.emit.bind(self, ev));
+  });
+
+  // when we try to consume some more bytes, simply unpause the
+  // underlying stream.
+  self._read = function(n) {
+    if (paused) {
+      paused = false;
+      stream.resume();
+    }
+  };
+
+  return self;
+};
+
+
+
+// exposed for testing purposes only.
+Readable._fromList = fromList;
+
+// Pluck off n bytes from an array of buffers.
+// Length is the combined lengths of all the buffers in the list.
+function fromList(n, state) {
+  var list = state.buffer;
+  var length = state.length;
+  var stringMode = !!state.decoder;
+  var objectMode = !!state.objectMode;
+  var ret;
+
+  // nothing in the list, definitely empty.
+  if (list.length === 0)
+    return null;
+
+  if (length === 0)
+    ret = null;
+  else if (objectMode)
+    ret = list.shift();
+  else if (!n || n >= length) {
+    // read it all, truncate the array.
+    if (stringMode)
+      ret = list.join('');
+    else
+      ret = Buffer.concat(list, length);
+    list.length = 0;
+  } else {
+    // read just some of it.
+    if (n < list[0].length) {
+      // just take a part of the first list item.
+      // slice is the same for buffers and strings.
+      var buf = list[0];
+      ret = buf.slice(0, n);
+      list[0] = buf.slice(n);
+    } else if (n === list[0].length) {
+      // first list is a perfect match
+      ret = list.shift();
+    } else {
+      // complex case.
+      // we have enough to cover it, but it spans past the first buffer.
+      if (stringMode)
+        ret = '';
+      else
+        ret = new Buffer(n);
+
+      var c = 0;
+      for (var i = 0, l = list.length; i < l && c < n; i++) {
+        var buf = list[0];
+        var cpy = Math.min(n - c, buf.length);
+
+        if (stringMode)
+          ret += buf.slice(0, cpy);
+        else
+          buf.copy(ret, c, 0, cpy);
+
+        if (cpy < buf.length)
+          list[0] = buf.slice(cpy);
+        else
+          list.shift();
+
+        c += cpy;
+      }
+    }
+  }
+
+  return ret;
+}
+
+function endReadable(stream) {
+  var state = stream._readableState;
+
+  // If we get here before consuming all the bytes, then that is a
+  // bug in node.  Should never happen.
+  if (state.length > 0)
+    throw new Error('endReadable called on non-empty stream');
+
+  if (!state.endEmitted && state.calledRead) {
+    state.ended = true;
+    process.nextTick(function() {
+      // Check that we didn't get one last unshift.
+      if (!state.endEmitted && state.length === 0) {
+        state.endEmitted = true;
+        stream.readable = false;
+        stream.emit('end');
+      }
+    });
+  }
+}
+
+function forEach (xs, f) {
+  for (var i = 0, l = xs.length; i < l; i++) {
+    f(xs[i], i);
+  }
+}
+
+function indexOf (xs, x) {
+  for (var i = 0, l = xs.length; i < l; i++) {
+    if (xs[i] === x) return i;
+  }
+  return -1;
+}
+
+}).call(this,require('_process'))
+},{"_process":15,"buffer":2,"core-util-is":26,"events":6,"inherits":12,"isarray":13,"stream":31,"string_decoder/":32}],24:[function(require,module,exports){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+// a transform stream is a readable/writable stream where you do
+// something with the data.  Sometimes it's called a "filter",
+// but that's not a great name for it, since that implies a thing where
+// some bits pass through, and others are simply ignored.  (That would
+// be a valid example of a transform, of course.)
+//
+// While the output is causally related to the input, it's not a
+// necessarily symmetric or synchronous transformation.  For example,
+// a zlib stream might take multiple plain-text writes(), and then
+// emit a single compressed chunk some time in the future.
+//
+// Here's how this works:
+//
+// The Transform stream has all the aspects of the readable and writable
+// stream classes.  When you write(chunk), that calls _write(chunk,cb)
+// internally, and returns false if there's a lot of pending writes
+// buffered up.  When you call read(), that calls _read(n) until
+// there's enough pending readable data buffered up.
+//
+// In a transform stream, the written data is placed in a buffer.  When
+// _read(n) is called, it transforms the queued up data, calling the
+// buffered _write cb's as it consumes chunks.  If consuming a single
+// written chunk would result in multiple output chunks, then the first
+// outputted bit calls the readcb, and subsequent chunks just go into
+// the read buffer, and will cause it to emit 'readable' if necessary.
+//
+// This way, back-pressure is actually determined by the reading side,
+// since _read has to be called to start processing a new chunk.  However,
+// a pathological inflate type of transform can cause excessive buffering
+// here.  For example, imagine a stream where every byte of input is
+// interpreted as an integer from 0-255, and then results in that many
+// bytes of output.  Writing the 4 bytes {ff,ff,ff,ff} would result in
+// 1kb of data being output.  In this case, you could write a very small
+// amount of input, and end up with a very large amount of output.  In
+// such a pathological inflating mechanism, there'd be no way to tell
+// the system to stop doing the transform.  A single 4MB write could
+// cause the system to run out of memory.
+//
+// However, even in such a pathological case, only a single written chunk
+// would be consumed, and then the rest would wait (un-transformed) until
+// the results of the previous transformed chunk were consumed.
+
+module.exports = Transform;
+
+var Duplex = require('./_stream_duplex');
+
+/*<replacement>*/
+var util = require('core-util-is');
+util.inherits = require('inherits');
+/*</replacement>*/
+
+util.inherits(Transform, Duplex);
+
+
+function TransformState(options, stream) {
+  this.afterTransform = function(er, data) {
+    return afterTransform(stream, er, data);
+  };
+
+  this.needTransform = false;
+  this.transforming = false;
+  this.writecb = null;
+  this.writechunk = null;
+}
+
+function afterTransform(stream, er, data) {
+  var ts = stream._transformState;
+  ts.transforming = false;
+
+  var cb = ts.writecb;
+
+  if (!cb)
+    return stream.emit('error', new Error('no writecb in Transform class'));
+
+  ts.writechunk = null;
+  ts.writecb = null;
+
+  if (data !== null && data !== undefined)
+    stream.push(data);
+
+  if (cb)
+    cb(er);
+
+  var rs = stream._readableState;
+  rs.reading = false;
+  if (rs.needReadable || rs.length < rs.highWaterMark) {
+    stream._read(rs.highWaterMark);
+  }
+}
+
+
+function Transform(options) {
+  if (!(this instanceof Transform))
+    return new Transform(options);
+
+  Duplex.call(this, options);
+
+  var ts = this._transformState = new TransformState(options, this);
+
+  // when the writable side finishes, then flush out anything remaining.
+  var stream = this;
+
+  // start out asking for a readable event once data is transformed.
+  this._readableState.needReadable = true;
+
+  // we have implemented the _read method, and done the other things
+  // that Readable wants before the first _read call, so unset the
+  // sync guard flag.
+  this._readableState.sync = false;
+
+  this.once('finish', function() {
+    if ('function' === typeof this._flush)
+      this._flush(function(er) {
+        done(stream, er);
+      });
+    else
+      done(stream);
+  });
+}
+
+Transform.prototype.push = function(chunk, encoding) {
+  this._transformState.needTransform = false;
+  return Duplex.prototype.push.call(this, chunk, encoding);
+};
+
+// This is the part where you do stuff!
+// override this function in implementation classes.
+// 'chunk' is an input chunk.
+//
+// Call `push(newChunk)` to pass along transformed output
+// to the readable side.  You may call 'push' zero or more times.
+//
+// Call `cb(err)` when you are done with this chunk.  If you pass
+// an error, then that'll put the hurt on the whole operation.  If you
+// never call cb(), then you'll never get another chunk.
+Transform.prototype._transform = function(chunk, encoding, cb) {
+  throw new Error('not implemented');
+};
+
+Transform.prototype._write = function(chunk, encoding, cb) {
+  var ts = this._transformState;
+  ts.writecb = cb;
+  ts.writechunk = chunk;
+  ts.writeencoding = encoding;
+  if (!ts.transforming) {
+    var rs = this._readableState;
+    if (ts.needTransform ||
+        rs.needReadable ||
+        rs.length < rs.highWaterMark)
+      this._read(rs.highWaterMark);
+  }
+};
+
+// Doesn't matter what the args are here.
+// _transform does all the work.
+// That we got here means that the readable side wants more data.
+Transform.prototype._read = function(n) {
+  var ts = this._transformState;
+
+  if (ts.writechunk !== null && ts.writecb && !ts.transforming) {
+    ts.transforming = true;
+    this._transform(ts.writechunk, ts.writeencoding, ts.afterTransform);
+  } else {
+    // mark that we need a transform, so that any data that comes in
+    // will get processed, now that we've asked for it.
+    ts.needTransform = true;
+  }
+};
+
+
+function done(stream, er) {
+  if (er)
+    return stream.emit('error', er);
+
+  // if there's nothing in the write buffer, then that means
+  // that nothing more will ever be provided
+  var ws = stream._writableState;
+  var rs = stream._readableState;
+  var ts = stream._transformState;
+
+  if (ws.length)
+    throw new Error('calling transform done when ws.length != 0');
+
+  if (ts.transforming)
+    throw new Error('calling transform done when still transforming');
+
+  return stream.push(null);
+}
+
+},{"./_stream_duplex":21,"core-util-is":26,"inherits":12}],25:[function(require,module,exports){
+(function (process){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+// A bit simpler than readable streams.
+// Implement an async ._write(chunk, cb), and it'll handle all
+// the drain event emission and buffering.
+
+module.exports = Writable;
+
+/*<replacement>*/
+var Buffer = require('buffer').Buffer;
+/*</replacement>*/
+
+Writable.WritableState = WritableState;
+
+
+/*<replacement>*/
+var util = require('core-util-is');
+util.inherits = require('inherits');
+/*</replacement>*/
+
+var Stream = require('stream');
+
+util.inherits(Writable, Stream);
+
+function WriteReq(chunk, encoding, cb) {
+  this.chunk = chunk;
+  this.encoding = encoding;
+  this.callback = cb;
+}
+
+function WritableState(options, stream) {
+  options = options || {};
+
+  // the point at which write() starts returning false
+  // Note: 0 is a valid value, means that we always return false if
+  // the entire buffer is not flushed immediately on write()
+  var hwm = options.highWaterMark;
+  this.highWaterMark = (hwm || hwm === 0) ? hwm : 16 * 1024;
+
+  // object stream flag to indicate whether or not this stream
+  // contains buffers or objects.
+  this.objectMode = !!options.objectMode;
+
+  // cast to ints.
+  this.highWaterMark = ~~this.highWaterMark;
+
+  this.needDrain = false;
+  // at the start of calling end()
+  this.ending = false;
+  // when end() has been called, and returned
+  this.ended = false;
+  // when 'finish' is emitted
+  this.finished = false;
+
+  // should we decode strings into buffers before passing to _write?
+  // this is here so that some node-core streams can optimize string
+  // handling at a lower level.
+  var noDecode = options.decodeStrings === false;
+  this.decodeStrings = !noDecode;
+
+  // Crypto is kind of old and crusty.  Historically, its default string
+  // encoding is 'binary' so we have to make this configurable.
+  // Everything else in the universe uses 'utf8', though.
+  this.defaultEncoding = options.defaultEncoding || 'utf8';
+
+  // not an actual buffer we keep track of, but a measurement
+  // of how much we're waiting to get pushed to some underlying
+  // socket or file.
+  this.length = 0;
+
+  // a flag to see when we're in the middle of a write.
+  this.writing = false;
+
+  // a flag to be able to tell if the onwrite cb is called immediately,
+  // or on a later tick.  We set this to true at first, becuase any
+  // actions that shouldn't happen until "later" should generally also
+  // not happen before the first write call.
+  this.sync = true;
+
+  // a flag to know if we're processing previously buffered items, which
+  // may call the _write() callback in the same tick, so that we don't
+  // end up in an overlapped onwrite situation.
+  this.bufferProcessing = false;
+
+  // the callback that's passed to _write(chunk,cb)
+  this.onwrite = function(er) {
+    onwrite(stream, er);
+  };
+
+  // the callback that the user supplies to write(chunk,encoding,cb)
+  this.writecb = null;
+
+  // the amount that is being written when _write is called.
+  this.writelen = 0;
+
+  this.buffer = [];
+
+  // True if the error was already emitted and should not be thrown again
+  this.errorEmitted = false;
+}
+
+function Writable(options) {
+  var Duplex = require('./_stream_duplex');
+
+  // Writable ctor is applied to Duplexes, though they're not
+  // instanceof Writable, they're instanceof Readable.
+  if (!(this instanceof Writable) && !(this instanceof Duplex))
+    return new Writable(options);
+
+  this._writableState = new WritableState(options, this);
+
+  // legacy.
+  this.writable = true;
+
+  Stream.call(this);
+}
+
+// Otherwise people can pipe Writable streams, which is just wrong.
+Writable.prototype.pipe = function() {
+  this.emit('error', new Error('Cannot pipe. Not readable.'));
+};
+
+
+function writeAfterEnd(stream, state, cb) {
+  var er = new Error('write after end');
+  // TODO: defer error events consistently everywhere, not just the cb
+  stream.emit('error', er);
+  process.nextTick(function() {
+    cb(er);
+  });
+}
+
+// If we get something that is not a buffer, string, null, or undefined,
+// and we're not in objectMode, then that's an error.
+// Otherwise stream chunks are all considered to be of length=1, and the
+// watermarks determine how many objects to keep in the buffer, rather than
+// how many bytes or characters.
+function validChunk(stream, state, chunk, cb) {
+  var valid = true;
+  if (!Buffer.isBuffer(chunk) &&
+      'string' !== typeof chunk &&
+      chunk !== null &&
+      chunk !== undefined &&
+      !state.objectMode) {
+    var er = new TypeError('Invalid non-string/buffer chunk');
+    stream.emit('error', er);
+    process.nextTick(function() {
+      cb(er);
+    });
+    valid = false;
+  }
+  return valid;
+}
+
+Writable.prototype.write = function(chunk, encoding, cb) {
+  var state = this._writableState;
+  var ret = false;
+
+  if (typeof encoding === 'function') {
+    cb = encoding;
+    encoding = null;
+  }
+
+  if (Buffer.isBuffer(chunk))
+    encoding = 'buffer';
+  else if (!encoding)
+    encoding = state.defaultEncoding;
+
+  if (typeof cb !== 'function')
+    cb = function() {};
+
+  if (state.ended)
+    writeAfterEnd(this, state, cb);
+  else if (validChunk(this, state, chunk, cb))
+    ret = writeOrBuffer(this, state, chunk, encoding, cb);
+
+  return ret;
+};
+
+function decodeChunk(state, chunk, encoding) {
+  if (!state.objectMode &&
+      state.decodeStrings !== false &&
+      typeof chunk === 'string') {
+    chunk = new Buffer(chunk, encoding);
+  }
+  return chunk;
+}
+
+// if we're already writing something, then just put this
+// in the queue, and wait our turn.  Otherwise, call _write
+// If we return false, then we need a drain event, so set that flag.
+function writeOrBuffer(stream, state, chunk, encoding, cb) {
+  chunk = decodeChunk(state, chunk, encoding);
+  if (Buffer.isBuffer(chunk))
+    encoding = 'buffer';
+  var len = state.objectMode ? 1 : chunk.length;
+
+  state.length += len;
+
+  var ret = state.length < state.highWaterMark;
+  // we must ensure that previous needDrain will not be reset to false.
+  if (!ret)
+    state.needDrain = true;
+
+  if (state.writing)
+    state.buffer.push(new WriteReq(chunk, encoding, cb));
+  else
+    doWrite(stream, state, len, chunk, encoding, cb);
+
+  return ret;
+}
+
+function doWrite(stream, state, len, chunk, encoding, cb) {
+  state.writelen = len;
+  state.writecb = cb;
+  state.writing = true;
+  state.sync = true;
+  stream._write(chunk, encoding, state.onwrite);
+  state.sync = false;
+}
+
+function onwriteError(stream, state, sync, er, cb) {
+  if (sync)
+    process.nextTick(function() {
+      cb(er);
+    });
+  else
+    cb(er);
+
+  stream._writableState.errorEmitted = true;
+  stream.emit('error', er);
+}
+
+function onwriteStateUpdate(state) {
+  state.writing = false;
+  state.writecb = null;
+  state.length -= state.writelen;
+  state.writelen = 0;
+}
+
+function onwrite(stream, er) {
+  var state = stream._writableState;
+  var sync = state.sync;
+  var cb = state.writecb;
+
+  onwriteStateUpdate(state);
+
+  if (er)
+    onwriteError(stream, state, sync, er, cb);
+  else {
+    // Check if we're actually ready to finish, but don't emit yet
+    var finished = needFinish(stream, state);
+
+    if (!finished && !state.bufferProcessing && state.buffer.length)
+      clearBuffer(stream, state);
+
+    if (sync) {
+      process.nextTick(function() {
+        afterWrite(stream, state, finished, cb);
+      });
+    } else {
+      afterWrite(stream, state, finished, cb);
+    }
+  }
+}
+
+function afterWrite(stream, state, finished, cb) {
+  if (!finished)
+    onwriteDrain(stream, state);
+  cb();
+  if (finished)
+    finishMaybe(stream, state);
+}
+
+// Must force callback to be called on nextTick, so that we don't
+// emit 'drain' before the write() consumer gets the 'false' return
+// value, and has a chance to attach a 'drain' listener.
+function onwriteDrain(stream, state) {
+  if (state.length === 0 && state.needDrain) {
+    state.needDrain = false;
+    stream.emit('drain');
+  }
+}
+
+
+// if there's something in the buffer waiting, then process it
+function clearBuffer(stream, state) {
+  state.bufferProcessing = true;
+
+  for (var c = 0; c < state.buffer.length; c++) {
+    var entry = state.buffer[c];
+    var chunk = entry.chunk;
+    var encoding = entry.encoding;
+    var cb = entry.callback;
+    var len = state.objectMode ? 1 : chunk.length;
+
+    doWrite(stream, state, len, chunk, encoding, cb);
+
+    // if we didn't call the onwrite immediately, then
+    // it means that we need to wait until it does.
+    // also, that means that the chunk and cb are currently
+    // being processed, so move the buffer counter past them.
+    if (state.writing) {
+      c++;
+      break;
+    }
+  }
+
+  state.bufferProcessing = false;
+  if (c < state.buffer.length)
+    state.buffer = state.buffer.slice(c);
+  else
+    state.buffer.length = 0;
+}
+
+Writable.prototype._write = function(chunk, encoding, cb) {
+  cb(new Error('not implemented'));
+};
+
+Writable.prototype.end = function(chunk, encoding, cb) {
+  var state = this._writableState;
+
+  if (typeof chunk === 'function') {
+    cb = chunk;
+    chunk = null;
+    encoding = null;
+  } else if (typeof encoding === 'function') {
+    cb = encoding;
+    encoding = null;
+  }
+
+  if (typeof chunk !== 'undefined' && chunk !== null)
+    this.write(chunk, encoding);
+
+  // ignore unnecessary end() calls.
+  if (!state.ending && !state.finished)
+    endWritable(this, state, cb);
+};
+
+
+function needFinish(stream, state) {
+  return (state.ending &&
+          state.length === 0 &&
+          !state.finished &&
+          !state.writing);
+}
+
+function finishMaybe(stream, state) {
+  var need = needFinish(stream, state);
+  if (need) {
+    state.finished = true;
+    stream.emit('finish');
+  }
+  return need;
+}
+
+function endWritable(stream, state, cb) {
+  state.ending = true;
+  finishMaybe(stream, state);
+  if (cb) {
+    if (state.finished)
+      process.nextTick(cb);
+    else
+      stream.once('finish', cb);
+  }
+  state.ended = true;
+}
+
+}).call(this,require('_process'))
+},{"./_stream_duplex":21,"_process":15,"buffer":2,"core-util-is":26,"inherits":12,"stream":31}],26:[function(require,module,exports){
+(function (Buffer){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+// NOTE: These type checking functions intentionally don't use `instanceof`
+// because it is fragile and can be easily faked with `Object.create()`.
+function isArray(ar) {
+  return Array.isArray(ar);
+}
+exports.isArray = isArray;
+
+function isBoolean(arg) {
+  return typeof arg === 'boolean';
+}
+exports.isBoolean = isBoolean;
+
+function isNull(arg) {
+  return arg === null;
+}
+exports.isNull = isNull;
+
+function isNullOrUndefined(arg) {
+  return arg == null;
+}
+exports.isNullOrUndefined = isNullOrUndefined;
+
+function isNumber(arg) {
+  return typeof arg === 'number';
+}
+exports.isNumber = isNumber;
+
+function isString(arg) {
+  return typeof arg === 'string';
+}
+exports.isString = isString;
+
+function isSymbol(arg) {
+  return typeof arg === 'symbol';
+}
+exports.isSymbol = isSymbol;
+
+function isUndefined(arg) {
+  return arg === void 0;
+}
+exports.isUndefined = isUndefined;
+
+function isRegExp(re) {
+  return isObject(re) && objectToString(re) === '[object RegExp]';
+}
+exports.isRegExp = isRegExp;
+
+function isObject(arg) {
+  return typeof arg === 'object' && arg !== null;
+}
+exports.isObject = isObject;
+
+function isDate(d) {
+  return isObject(d) && objectToString(d) === '[object Date]';
+}
+exports.isDate = isDate;
+
+function isError(e) {
+  return isObject(e) &&
+      (objectToString(e) === '[object Error]' || e instanceof Error);
+}
+exports.isError = isError;
+
+function isFunction(arg) {
+  return typeof arg === 'function';
+}
+exports.isFunction = isFunction;
+
+function isPrimitive(arg) {
+  return arg === null ||
+         typeof arg === 'boolean' ||
+         typeof arg === 'number' ||
+         typeof arg === 'string' ||
+         typeof arg === 'symbol' ||  // ES6 symbol
+         typeof arg === 'undefined';
+}
+exports.isPrimitive = isPrimitive;
+
+function isBuffer(arg) {
+  return Buffer.isBuffer(arg);
+}
+exports.isBuffer = isBuffer;
+
+function objectToString(o) {
+  return Object.prototype.toString.call(o);
+}
+}).call(this,require("buffer").Buffer)
+},{"buffer":2}],27:[function(require,module,exports){
+module.exports = require("./lib/_stream_passthrough.js")
+
+},{"./lib/_stream_passthrough.js":22}],28:[function(require,module,exports){
+var Stream = require('stream'); // hack to fix a circular dependency issue when used with browserify
+exports = module.exports = require('./lib/_stream_readable.js');
+exports.Stream = Stream;
+exports.Readable = exports;
+exports.Writable = require('./lib/_stream_writable.js');
+exports.Duplex = require('./lib/_stream_duplex.js');
+exports.Transform = require('./lib/_stream_transform.js');
+exports.PassThrough = require('./lib/_stream_passthrough.js');
+
+},{"./lib/_stream_duplex.js":21,"./lib/_stream_passthrough.js":22,"./lib/_stream_readable.js":23,"./lib/_stream_transform.js":24,"./lib/_stream_writable.js":25,"stream":31}],29:[function(require,module,exports){
+module.exports = require("./lib/_stream_transform.js")
+
+},{"./lib/_stream_transform.js":24}],30:[function(require,module,exports){
+module.exports = require("./lib/_stream_writable.js")
+
+},{"./lib/_stream_writable.js":25}],31:[function(require,module,exports){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+module.exports = Stream;
+
+var EE = require('events').EventEmitter;
+var inherits = require('inherits');
+
+inherits(Stream, EE);
+Stream.Readable = require('readable-stream/readable.js');
+Stream.Writable = require('readable-stream/writable.js');
+Stream.Duplex = require('readable-stream/duplex.js');
+Stream.Transform = require('readable-stream/transform.js');
+Stream.PassThrough = require('readable-stream/passthrough.js');
+
+// Backwards-compat with node 0.4.x
+Stream.Stream = Stream;
+
+
+
+// old-style streams.  Note that the pipe method (the only relevant
+// part of this class) is overridden in the Readable class.
+
+function Stream() {
+  EE.call(this);
+}
+
+Stream.prototype.pipe = function(dest, options) {
+  var source = this;
+
+  function ondata(chunk) {
+    if (dest.writable) {
+      if (false === dest.write(chunk) && source.pause) {
+        source.pause();
+      }
+    }
+  }
+
+  source.on('data', ondata);
+
+  function ondrain() {
+    if (source.readable && source.resume) {
+      source.resume();
+    }
+  }
+
+  dest.on('drain', ondrain);
+
+  // If the 'end' option is not supplied, dest.end() will be called when
+  // source gets the 'end' or 'close' events.  Only dest.end() once.
+  if (!dest._isStdio && (!options || options.end !== false)) {
+    source.on('end', onend);
+    source.on('close', onclose);
+  }
+
+  var didOnEnd = false;
+  function onend() {
+    if (didOnEnd) return;
+    didOnEnd = true;
+
+    dest.end();
+  }
+
+
+  function onclose() {
+    if (didOnEnd) return;
+    didOnEnd = true;
+
+    if (typeof dest.destroy === 'function') dest.destroy();
+  }
+
+  // don't leave dangling pipes when there are errors.
+  function onerror(er) {
+    cleanup();
+    if (EE.listenerCount(this, 'error') === 0) {
+      throw er; // Unhandled stream error in pipe.
+    }
+  }
+
+  source.on('error', onerror);
+  dest.on('error', onerror);
+
+  // remove all the event listeners that were added.
+  function cleanup() {
+    source.removeListener('data', ondata);
+    dest.removeListener('drain', ondrain);
+
+    source.removeListener('end', onend);
+    source.removeListener('close', onclose);
+
+    source.removeListener('error', onerror);
+    dest.removeListener('error', onerror);
+
+    source.removeListener('end', cleanup);
+    source.removeListener('close', cleanup);
+
+    dest.removeListener('close', cleanup);
+  }
+
+  source.on('end', cleanup);
+  source.on('close', cleanup);
+
+  dest.on('close', cleanup);
+
+  dest.emit('pipe', source);
+
+  // Allow for unix-like usage: A.pipe(B).pipe(C)
+  return dest;
+};
+
+},{"events":6,"inherits":12,"readable-stream/duplex.js":20,"readable-stream/passthrough.js":27,"readable-stream/readable.js":28,"readable-stream/transform.js":29,"readable-stream/writable.js":30}],32:[function(require,module,exports){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+var Buffer = require('buffer').Buffer;
+
+var isBufferEncoding = Buffer.isEncoding
+  || function(encoding) {
+       switch (encoding && encoding.toLowerCase()) {
+         case 'hex': case 'utf8': case 'utf-8': case 'ascii': case 'binary': case 'base64': case 'ucs2': case 'ucs-2': case 'utf16le': case 'utf-16le': case 'raw': return true;
+         default: return false;
+       }
+     }
+
+
+function assertEncoding(encoding) {
+  if (encoding && !isBufferEncoding(encoding)) {
+    throw new Error('Unknown encoding: ' + encoding);
+  }
+}
+
+// StringDecoder provides an interface for efficiently splitting a series of
+// buffers into a series of JS strings without breaking apart multi-byte
+// characters. CESU-8 is handled as part of the UTF-8 encoding.
+//
+// @TODO Handling all encodings inside a single object makes it very difficult
+// to reason about this code, so it should be split up in the future.
+// @TODO There should be a utf8-strict encoding that rejects invalid UTF-8 code
+// points as used by CESU-8.
+var StringDecoder = exports.StringDecoder = function(encoding) {
+  this.encoding = (encoding || 'utf8').toLowerCase().replace(/[-_]/, '');
+  assertEncoding(encoding);
+  switch (this.encoding) {
+    case 'utf8':
+      // CESU-8 represents each of Surrogate Pair by 3-bytes
+      this.surrogateSize = 3;
+      break;
+    case 'ucs2':
+    case 'utf16le':
+      // UTF-16 represents each of Surrogate Pair by 2-bytes
+      this.surrogateSize = 2;
+      this.detectIncompleteChar = utf16DetectIncompleteChar;
+      break;
+    case 'base64':
+      // Base-64 stores 3 bytes in 4 chars, and pads the remainder.
+      this.surrogateSize = 3;
+      this.detectIncompleteChar = base64DetectIncompleteChar;
+      break;
+    default:
+      this.write = passThroughWrite;
+      return;
+  }
+
+  // Enough space to store all bytes of a single character. UTF-8 needs 4
+  // bytes, but CESU-8 may require up to 6 (3 bytes per surrogate).
+  this.charBuffer = new Buffer(6);
+  // Number of bytes received for the current incomplete multi-byte character.
+  this.charReceived = 0;
+  // Number of bytes expected for the current incomplete multi-byte character.
+  this.charLength = 0;
+};
+
+
+// write decodes the given buffer and returns it as JS string that is
+// guaranteed to not contain any partial multi-byte characters. Any partial
+// character found at the end of the buffer is buffered up, and will be
+// returned when calling write again with the remaining bytes.
+//
+// Note: Converting a Buffer containing an orphan surrogate to a String
+// currently works, but converting a String to a Buffer (via `new Buffer`, or
+// Buffer#write) will replace incomplete surrogates with the unicode
+// replacement character. See https://codereview.chromium.org/121173009/ .
+StringDecoder.prototype.write = function(buffer) {
+  var charStr = '';
+  // if our last write ended with an incomplete multibyte character
+  while (this.charLength) {
+    // determine how many remaining bytes this buffer has to offer for this char
+    var available = (buffer.length >= this.charLength - this.charReceived) ?
+        this.charLength - this.charReceived :
+        buffer.length;
+
+    // add the new bytes to the char buffer
+    buffer.copy(this.charBuffer, this.charReceived, 0, available);
+    this.charReceived += available;
+
+    if (this.charReceived < this.charLength) {
+      // still not enough chars in this buffer? wait for more ...
+      return '';
+    }
+
+    // remove bytes belonging to the current character from the buffer
+    buffer = buffer.slice(available, buffer.length);
+
+    // get the character that was split
+    charStr = this.charBuffer.slice(0, this.charLength).toString(this.encoding);
+
+    // CESU-8: lead surrogate (D800-DBFF) is also the incomplete character
+    var charCode = charStr.charCodeAt(charStr.length - 1);
+    if (charCode >= 0xD800 && charCode <= 0xDBFF) {
+      this.charLength += this.surrogateSize;
+      charStr = '';
+      continue;
+    }
+    this.charReceived = this.charLength = 0;
+
+    // if there are no more bytes in this buffer, just emit our char
+    if (buffer.length === 0) {
+      return charStr;
+    }
+    break;
+  }
+
+  // determine and set charLength / charReceived
+  this.detectIncompleteChar(buffer);
+
+  var end = buffer.length;
+  if (this.charLength) {
+    // buffer the incomplete character bytes we got
+    buffer.copy(this.charBuffer, 0, buffer.length - this.charReceived, end);
+    end -= this.charReceived;
+  }
+
+  charStr += buffer.toString(this.encoding, 0, end);
+
+  var end = charStr.length - 1;
+  var charCode = charStr.charCodeAt(end);
+  // CESU-8: lead surrogate (D800-DBFF) is also the incomplete character
+  if (charCode >= 0xD800 && charCode <= 0xDBFF) {
+    var size = this.surrogateSize;
+    this.charLength += size;
+    this.charReceived += size;
+    this.charBuffer.copy(this.charBuffer, size, 0, size);
+    buffer.copy(this.charBuffer, 0, 0, size);
+    return charStr.substring(0, end);
+  }
+
+  // or just emit the charStr
+  return charStr;
+};
+
+// detectIncompleteChar determines if there is an incomplete UTF-8 character at
+// the end of the given buffer. If so, it sets this.charLength to the byte
+// length that character, and sets this.charReceived to the number of bytes
+// that are available for this character.
+StringDecoder.prototype.detectIncompleteChar = function(buffer) {
+  // determine how many bytes we have to check at the end of this buffer
+  var i = (buffer.length >= 3) ? 3 : buffer.length;
+
+  // Figure out if one of the last i bytes of our buffer announces an
+  // incomplete char.
+  for (; i > 0; i--) {
+    var c = buffer[buffer.length - i];
+
+    // See http://en.wikipedia.org/wiki/UTF-8#Description
+
+    // 110XXXXX
+    if (i == 1 && c >> 5 == 0x06) {
+      this.charLength = 2;
+      break;
+    }
+
+    // 1110XXXX
+    if (i <= 2 && c >> 4 == 0x0E) {
+      this.charLength = 3;
+      break;
+    }
+
+    // 11110XXX
+    if (i <= 3 && c >> 3 == 0x1E) {
+      this.charLength = 4;
+      break;
+    }
+  }
+  this.charReceived = i;
+};
+
+StringDecoder.prototype.end = function(buffer) {
+  var res = '';
+  if (buffer && buffer.length)
+    res = this.write(buffer);
+
+  if (this.charReceived) {
+    var cr = this.charReceived;
+    var buf = this.charBuffer;
+    var enc = this.encoding;
+    res += buf.slice(0, cr).toString(enc);
+  }
+
+  return res;
+};
+
+function passThroughWrite(buffer) {
+  return buffer.toString(this.encoding);
+}
+
+function utf16DetectIncompleteChar(buffer) {
+  this.charReceived = buffer.length % 2;
+  this.charLength = this.charReceived ? 2 : 0;
+}
+
+function base64DetectIncompleteChar(buffer) {
+  this.charReceived = buffer.length % 3;
+  this.charLength = this.charReceived ? 3 : 0;
+}
+
+},{"buffer":2}],33:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -9289,14 +6171,14 @@ function isNullOrUndefined(arg) {
   return  arg == null;
 }
 
-},{"punycode":11,"querystring":14}],16:[function(require,module,exports){
+},{"punycode":16,"querystring":19}],34:[function(require,module,exports){
 module.exports = function isBuffer(arg) {
   return arg && typeof arg === 'object'
     && typeof arg.copy === 'function'
     && typeof arg.fill === 'function'
     && typeof arg.readUInt8 === 'function';
 }
-},{}],17:[function(require,module,exports){
+},{}],35:[function(require,module,exports){
 (function (process,global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -9886,7 +6768,7 @@ function hasOwnProperty(obj, prop) {
 }
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./support/isBuffer":16,"_process":10,"inherits":8}],18:[function(require,module,exports){
+},{"./support/isBuffer":34,"_process":15,"inherits":12}],36:[function(require,module,exports){
 (function () {
     "use strict";
 
@@ -9913,6 +6795,10 @@ function hasOwnProperty(obj, prop) {
 
     chaiAsPromised.transferPromiseness = function (assertion, promise) {
         assertion.then = promise.then.bind(promise);
+    };
+
+    chaiAsPromised.transformAsserterArgs = function (values) {
+        return values;
     };
 
     function chaiAsPromised(chai, utils) {
@@ -10189,6 +7075,9 @@ function hasOwnProperty(obj, prop) {
                 // just the base Chai code that we get to via the short-circuit above.
                 assertion._obj = value;
                 utils.flag(assertion, "eventually", false);
+
+                return args ? chaiAsPromised.transformAsserterArgs(args) : args;
+            }).then(function (args) {
                 asserter.apply(assertion, args);
 
                 // Because asserters, for example `property`, can change the value of `_obj` (i.e. change the "object"
@@ -10258,10 +7147,10 @@ function hasOwnProperty(obj, prop) {
     }
 }());
 
-},{}],19:[function(require,module,exports){
+},{}],37:[function(require,module,exports){
 module.exports = require('./lib/chai');
 
-},{"./lib/chai":20}],20:[function(require,module,exports){
+},{"./lib/chai":38}],38:[function(require,module,exports){
 /*!
  * chai
  * Copyright(c) 2011-2014 Jake Luer <jake@alogicalparadox.com>
@@ -10350,7 +7239,7 @@ exports.use(should);
 var assert = require('./chai/interface/assert');
 exports.use(assert);
 
-},{"./chai/assertion":21,"./chai/config":22,"./chai/core/assertions":23,"./chai/interface/assert":24,"./chai/interface/expect":25,"./chai/interface/should":26,"./chai/utils":37,"assertion-error":46}],21:[function(require,module,exports){
+},{"./chai/assertion":39,"./chai/config":40,"./chai/core/assertions":41,"./chai/interface/assert":42,"./chai/interface/expect":43,"./chai/interface/should":44,"./chai/utils":55,"assertion-error":64}],39:[function(require,module,exports){
 /*!
  * chai
  * http://chaijs.com
@@ -10487,7 +7376,7 @@ module.exports = function (_chai, util) {
   });
 };
 
-},{"./config":22}],22:[function(require,module,exports){
+},{"./config":40}],40:[function(require,module,exports){
 module.exports = {
 
   /**
@@ -10539,7 +7428,7 @@ module.exports = {
 
 };
 
-},{}],23:[function(require,module,exports){
+},{}],41:[function(require,module,exports){
 /*!
  * chai
  * http://chaijs.com
@@ -11900,7 +8789,7 @@ module.exports = function (chai, _) {
   });
 };
 
-},{}],24:[function(require,module,exports){
+},{}],42:[function(require,module,exports){
 /*!
  * chai
  * Copyright(c) 2011-2014 Jake Luer <jake@alogicalparadox.com>
@@ -12958,7 +9847,7 @@ module.exports = function (chai, util) {
   ('Throw', 'throws');
 };
 
-},{}],25:[function(require,module,exports){
+},{}],43:[function(require,module,exports){
 /*!
  * chai
  * Copyright(c) 2011-2014 Jake Luer <jake@alogicalparadox.com>
@@ -12972,7 +9861,7 @@ module.exports = function (chai, util) {
 };
 
 
-},{}],26:[function(require,module,exports){
+},{}],44:[function(require,module,exports){
 /*!
  * chai
  * Copyright(c) 2011-2014 Jake Luer <jake@alogicalparadox.com>
@@ -13052,7 +9941,7 @@ module.exports = function (chai, util) {
   chai.Should = loadShould;
 };
 
-},{}],27:[function(require,module,exports){
+},{}],45:[function(require,module,exports){
 /*!
  * Chai - addChainingMethod utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -13165,7 +10054,7 @@ module.exports = function (ctx, name, method, chainingBehavior) {
   });
 };
 
-},{"../config":22,"./flag":30,"./transferFlags":44}],28:[function(require,module,exports){
+},{"../config":40,"./flag":48,"./transferFlags":62}],46:[function(require,module,exports){
 /*!
  * Chai - addMethod utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -13210,7 +10099,7 @@ module.exports = function (ctx, name, method) {
   };
 };
 
-},{"../config":22,"./flag":30}],29:[function(require,module,exports){
+},{"../config":40,"./flag":48}],47:[function(require,module,exports){
 /*!
  * Chai - addProperty utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -13252,7 +10141,7 @@ module.exports = function (ctx, name, getter) {
   });
 };
 
-},{}],30:[function(require,module,exports){
+},{}],48:[function(require,module,exports){
 /*!
  * Chai - flag utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -13286,7 +10175,7 @@ module.exports = function (obj, key, value) {
   }
 };
 
-},{}],31:[function(require,module,exports){
+},{}],49:[function(require,module,exports){
 /*!
  * Chai - getActual utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -13306,7 +10195,7 @@ module.exports = function (obj, args) {
   return args.length > 4 ? args[4] : obj._obj;
 };
 
-},{}],32:[function(require,module,exports){
+},{}],50:[function(require,module,exports){
 /*!
  * Chai - getEnumerableProperties utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -13333,7 +10222,7 @@ module.exports = function getEnumerableProperties(object) {
   return result;
 };
 
-},{}],33:[function(require,module,exports){
+},{}],51:[function(require,module,exports){
 /*!
  * Chai - message composition utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -13385,7 +10274,7 @@ module.exports = function (obj, args) {
   return flagMsg ? flagMsg + ': ' + msg : msg;
 };
 
-},{"./flag":30,"./getActual":31,"./inspect":38,"./objDisplay":39}],34:[function(require,module,exports){
+},{"./flag":48,"./getActual":49,"./inspect":56,"./objDisplay":57}],52:[function(require,module,exports){
 /*!
  * Chai - getName utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -13407,7 +10296,7 @@ module.exports = function (func) {
   return match && match[1] ? match[1] : "";
 };
 
-},{}],35:[function(require,module,exports){
+},{}],53:[function(require,module,exports){
 /*!
  * Chai - getPathValue utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -13511,7 +10400,7 @@ function _getPathValue (parsed, obj) {
   return res;
 };
 
-},{}],36:[function(require,module,exports){
+},{}],54:[function(require,module,exports){
 /*!
  * Chai - getProperties utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -13548,7 +10437,7 @@ module.exports = function getProperties(object) {
   return result;
 };
 
-},{}],37:[function(require,module,exports){
+},{}],55:[function(require,module,exports){
 /*!
  * chai
  * Copyright(c) 2011 Jake Luer <jake@alogicalparadox.com>
@@ -13664,7 +10553,7 @@ exports.addChainableMethod = require('./addChainableMethod');
 exports.overwriteChainableMethod = require('./overwriteChainableMethod');
 
 
-},{"./addChainableMethod":27,"./addMethod":28,"./addProperty":29,"./flag":30,"./getActual":31,"./getMessage":33,"./getName":34,"./getPathValue":35,"./inspect":38,"./objDisplay":39,"./overwriteChainableMethod":40,"./overwriteMethod":41,"./overwriteProperty":42,"./test":43,"./transferFlags":44,"./type":45,"deep-eql":47}],38:[function(require,module,exports){
+},{"./addChainableMethod":45,"./addMethod":46,"./addProperty":47,"./flag":48,"./getActual":49,"./getMessage":51,"./getName":52,"./getPathValue":53,"./inspect":56,"./objDisplay":57,"./overwriteChainableMethod":58,"./overwriteMethod":59,"./overwriteProperty":60,"./test":61,"./transferFlags":62,"./type":63,"deep-eql":65}],56:[function(require,module,exports){
 // This is (almost) directly from Node.js utils
 // https://github.com/joyent/node/blob/f8c335d0caf47f16d31413f89aa28eda3878e3aa/lib/util.js
 
@@ -13999,7 +10888,7 @@ function objectToString(o) {
   return Object.prototype.toString.call(o);
 }
 
-},{"./getEnumerableProperties":32,"./getName":34,"./getProperties":36}],39:[function(require,module,exports){
+},{"./getEnumerableProperties":50,"./getName":52,"./getProperties":54}],57:[function(require,module,exports){
 /*!
  * Chai - flag utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -14050,7 +10939,7 @@ module.exports = function (obj) {
   }
 };
 
-},{"../config":22,"./inspect":38}],40:[function(require,module,exports){
+},{"../config":40,"./inspect":56}],58:[function(require,module,exports){
 /*!
  * Chai - overwriteChainableMethod utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -14105,7 +10994,7 @@ module.exports = function (ctx, name, method, chainingBehavior) {
   };
 };
 
-},{}],41:[function(require,module,exports){
+},{}],59:[function(require,module,exports){
 /*!
  * Chai - overwriteMethod utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -14158,7 +11047,7 @@ module.exports = function (ctx, name, method) {
   }
 };
 
-},{}],42:[function(require,module,exports){
+},{}],60:[function(require,module,exports){
 /*!
  * Chai - overwriteProperty utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -14214,7 +11103,7 @@ module.exports = function (ctx, name, getter) {
   });
 };
 
-},{}],43:[function(require,module,exports){
+},{}],61:[function(require,module,exports){
 /*!
  * Chai - test utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -14242,7 +11131,7 @@ module.exports = function (obj, args) {
   return negate ? !expr : expr;
 };
 
-},{"./flag":30}],44:[function(require,module,exports){
+},{"./flag":48}],62:[function(require,module,exports){
 /*!
  * Chai - transferFlags utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -14288,7 +11177,7 @@ module.exports = function (assertion, object, includeAll) {
   }
 };
 
-},{}],45:[function(require,module,exports){
+},{}],63:[function(require,module,exports){
 /*!
  * Chai - type utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -14335,7 +11224,7 @@ module.exports = function (obj) {
   return typeof obj;
 };
 
-},{}],46:[function(require,module,exports){
+},{}],64:[function(require,module,exports){
 /*!
  * assertion-error
  * Copyright(c) 2013 Jake Luer <jake@qualiancy.com>
@@ -14447,10 +11336,10 @@ AssertionError.prototype.toJSON = function (stack) {
   return props;
 };
 
-},{}],47:[function(require,module,exports){
+},{}],65:[function(require,module,exports){
 module.exports = require('./lib/eql');
 
-},{"./lib/eql":48}],48:[function(require,module,exports){
+},{"./lib/eql":66}],66:[function(require,module,exports){
 /*!
  * deep-eql
  * Copyright(c) 2013 Jake Luer <jake@alogicalparadox.com>
@@ -14709,10 +11598,10 @@ function objectEqual(a, b, m) {
   return true;
 }
 
-},{"buffer":3,"type-detect":49}],49:[function(require,module,exports){
+},{"buffer":2,"type-detect":67}],67:[function(require,module,exports){
 module.exports = require('./lib/type');
 
-},{"./lib/type":50}],50:[function(require,module,exports){
+},{"./lib/type":68}],68:[function(require,module,exports){
 /*!
  * type-detect
  * Copyright(c) 2013 jake luer <jake@alogicalparadox.com>
@@ -14856,7 +11745,7 @@ Library.prototype.test = function (obj, type) {
   }
 };
 
-},{}],51:[function(require,module,exports){
+},{}],69:[function(require,module,exports){
 (function (global){
 /*! http://mths.be/he v0.5.0 by @mathias | MIT license */
 ;(function(root) {
@@ -15189,7 +12078,7 @@ Library.prototype.test = function (obj, type) {
 }(this));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],52:[function(require,module,exports){
+},{}],70:[function(require,module,exports){
 /** @license MIT License (c) copyright 2011-2013 original author or authors */
 
 /**
@@ -15218,7 +12107,7 @@ define(function(require) {
 
 
 
-},{"./when":70}],53:[function(require,module,exports){
+},{"./when":88}],71:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -15237,7 +12126,7 @@ define(function (require) {
 });
 })(typeof define === 'function' && define.amd ? define : function (factory) { module.exports = factory(require); });
 
-},{"./Scheduler":54,"./env":66,"./makePromise":68}],54:[function(require,module,exports){
+},{"./Scheduler":72,"./env":84,"./makePromise":86}],72:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -15319,7 +12208,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],55:[function(require,module,exports){
+},{}],73:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -15347,7 +12236,7 @@ define(function() {
 	return TimeoutError;
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
-},{}],56:[function(require,module,exports){
+},{}],74:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -15404,7 +12293,7 @@ define(function() {
 
 
 
-},{}],57:[function(require,module,exports){
+},{}],75:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -15695,7 +12584,7 @@ define(function(require) {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(require); }));
 
-},{"../apply":56,"../state":69}],58:[function(require,module,exports){
+},{"../apply":74,"../state":87}],76:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -15857,7 +12746,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],59:[function(require,module,exports){
+},{}],77:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -15886,7 +12775,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],60:[function(require,module,exports){
+},{}],78:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -15908,7 +12797,7 @@ define(function(require) {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(require); }));
 
-},{"../state":69}],61:[function(require,module,exports){
+},{"../state":87}],79:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -15975,7 +12864,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],62:[function(require,module,exports){
+},{}],80:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -16001,7 +12890,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],63:[function(require,module,exports){
+},{}],81:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -16081,7 +12970,7 @@ define(function(require) {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(require); }));
 
-},{"../TimeoutError":55,"../env":66}],64:[function(require,module,exports){
+},{"../TimeoutError":73,"../env":84}],82:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -16169,7 +13058,7 @@ define(function(require) {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(require); }));
 
-},{"../env":66,"../format":67}],65:[function(require,module,exports){
+},{"../env":84,"../format":85}],83:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -16209,7 +13098,7 @@ define(function() {
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
 
-},{}],66:[function(require,module,exports){
+},{}],84:[function(require,module,exports){
 (function (process){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
@@ -16286,7 +13175,7 @@ define(function(require) {
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(require); }));
 
 }).call(this,require('_process'))
-},{"_process":10}],67:[function(require,module,exports){
+},{"_process":15}],85:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -16344,7 +13233,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],68:[function(require,module,exports){
+},{}],86:[function(require,module,exports){
 (function (process){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
@@ -17275,7 +14164,7 @@ define(function() {
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
 }).call(this,require('_process'))
-},{"_process":10}],69:[function(require,module,exports){
+},{"_process":15}],87:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
@@ -17312,7 +14201,7 @@ define(function() {
 });
 }(typeof define === 'function' && define.amd ? define : function(factory) { module.exports = factory(); }));
 
-},{}],70:[function(require,module,exports){
+},{}],88:[function(require,module,exports){
 /** @license MIT License (c) copyright 2010-2014 original author or authors */
 
 /**
@@ -17543,7 +14432,987 @@ define(function (require) {
 });
 })(typeof define === 'function' && define.amd ? define : function (factory) { module.exports = factory(require); });
 
-},{"./lib/Promise":53,"./lib/TimeoutError":55,"./lib/apply":56,"./lib/decorators/array":57,"./lib/decorators/flow":58,"./lib/decorators/fold":59,"./lib/decorators/inspect":60,"./lib/decorators/iterate":61,"./lib/decorators/progress":62,"./lib/decorators/timed":63,"./lib/decorators/unhandledRejection":64,"./lib/decorators/with":65}],71:[function(require,module,exports){
+},{"./lib/Promise":71,"./lib/TimeoutError":73,"./lib/apply":74,"./lib/decorators/array":75,"./lib/decorators/flow":76,"./lib/decorators/fold":77,"./lib/decorators/inspect":78,"./lib/decorators/iterate":79,"./lib/decorators/progress":80,"./lib/decorators/timed":81,"./lib/decorators/unhandledRejection":82,"./lib/decorators/with":83}],89:[function(require,module,exports){
+module.exports={
+  "name": "snoocore",
+  "version": "2.6.0",
+  "description": "A minimal and complete JavaScript driver for the Reddit API.",
+  "main": "dist/Snoocore-node.js",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/trevorsenior/snoocore.git"
+  },
+  "author": "Trevor Senior <trevor@tsenior.com> (http://tsenior.com/)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/trevorsenior/snoocore/issues"
+  },
+  "dependencies": {
+    "he": "^0.5.0",
+    "when": "^3.6.3"
+  },
+  "devDependencies": {
+    "browserify": "^6.3.3",
+    "chai": "^1.10.0",
+    "chai-as-promised": "^4.1.1",
+    "karma": "^0.12.28",
+    "karma-chrome-launcher": "^0.1.5",
+    "karma-firefox-launcher": "^0.1.3",
+    "karma-mocha": "^0.1.9",
+    "karma-phantomjs-launcher": "^0.1.4",
+    "karma-safari-launcher": "^0.1.1",
+    "mocha": "^2.1.0",
+    "phantom": "^0.7.2",
+    "snooform": "0.1.0",
+    "toml": "^2.1.1"
+  },
+  "directories": {
+    "test": "test"
+  },
+  "keywords": [
+    "reddit",
+    "api",
+    "snoocore",
+    "wrapper",
+    "client"
+  ],
+  "scripts": {
+    "test": "./run.js mocha"
+  }
+}
+
+},{}],90:[function(require,module,exports){
+// Precompiled list of properties for specific endpoints
+var endpointProperties = require('../build/endpointProperties');
+// Build a more parseable tree for the properties. Built here vs. simply
+// requireing to save on bytes
+var PROPERTY_TREE = buildPropertyTree(endpointProperties);
+
+/*
+   Converts a list of endpoint properties into a tree:
+ */
+function buildPropertyTree(endpointProperties) {
+  var propertyTree = {};
+
+  Object.keys(endpointProperties).forEach(function(endpointPath) {
+
+    // get the properties for this endpoint
+    var properties = endpointProperties[endpointPath];
+
+    // get the sections to traverse down for this endpoint
+    var pathSections = endpointPath.split('/');
+
+    // the first element in this list is the endpoint method
+    var method = pathSections.shift().toLowerCase();
+
+    var leaf = propertyTree; // start at the root
+
+    // move down to where we need to be in the chain for this endpoint
+    var i = 0;
+    var len = pathSections.length;
+
+    for (; i < len - 1; ++i) {
+      if (typeof leaf[pathSections[i]] === 'undefined') {
+        leaf[pathSections[i]] = {};
+      }
+      leaf = leaf[pathSections[i]];
+    }
+
+    // push the endpoint to this section of the tree
+    if (typeof leaf[pathSections[i]] === 'undefined') {
+      leaf[pathSections[i]] = { _endpoints: {} };
+    }
+
+
+    leaf[pathSections[i]]._endpoints[method] = properties;
+  });
+
+  return propertyTree;
+}
+
+
+module.exports = Endpoint;
+function Endpoint(method, path) {
+  var self = this;
+
+  self.method = method;
+  self.path = path;
+
+  self.properties = getProperties();
+
+  // if this endpoint requires the `api_type` string of "json"
+  // in it's request
+  self.needsApiTypeJson = self.properties.indexOf('a') !== -1;
+
+  function getProperties() {
+    // remove leading slash if any
+    var sections = self.path.replace(/^\//, '').split('/');
+
+    // the top level of the endpoint tree that we will traverse down
+    var leaf = PROPERTY_TREE;
+
+    var section;
+
+    for (var i = 0, len = sections.length; i < len; ++i) {
+      section = sections[i];
+
+      // We can go down further in the tree
+      if (typeof leaf[section] !== 'undefined') {
+        leaf = leaf[section];
+        continue;
+      }
+
+      // Check if there is a placeholder we can go down
+      if (typeof leaf['$'] !== 'undefined') {
+        leaf = leaf['$'];
+        continue;
+      }
+
+      // this endpoint does not have any properties
+      return '';
+    }
+
+    var properties = leaf._endpoints[self.method];
+
+    return properties;
+  }
+
+}
+
+},{"../build/endpointProperties":1}],91:[function(require,module,exports){
+"use strict";
+
+var urlLib = require('url');
+var events = require('events');
+var util = require('util');
+var path = require('path');
+
+var he = require('he');
+var when = require('when');
+var delay = require('when/delay');
+
+var Endpoint = require('./endpoint');
+var utils = require('./utils');
+
+var pkg = require('../package');
+
+module.exports = Snoocore;
+
+Snoocore.version = pkg.version;
+
+Snoocore.oauth = require('./oauth');
+Snoocore.request = require('./request');
+Snoocore.file = require('./request/file');
+
+Snoocore.when = when;
+
+
+// - - -
+
+
+util.inherits(Snoocore, events.EventEmitter);
+function Snoocore(config) {
+
+  var self = this;
+
+  events.EventEmitter.call(self);
+
+  self._test = {}; // expose internal functions for testing
+
+  self._serverOAuth = thisOrThat(config.serverOAuth, 'oauth.reddit.com');
+  self._serverWWW = thisOrThat(config.serverWWW, 'www.reddit.com');
+
+  var missingMsg = 'Missing required config value ';
+
+  self._userAgent = thisOrThrow(config.userAgent, 'Missing required config value `userAgent`');
+  self._isNode = thisOrThat(config.browser, utils.isNode());
+  self._apiType = thisOrThat(config.apiType, 'json');
+  self._decodeHtmlEntities = thisOrThat(config.decodeHtmlEntities, false);
+  self._retryAttempts = thisOrThat(config.retryAttempts, 60);
+  self._retryDelay = thisOrThat(config.retryDelay, 5000);
+
+  self._authenticatedAuthData = {}; // Set if Authenticated with OAuth
+  self._applicationOnlyAuthData = {}; // Set if authenticated with Application Only OAuth
+
+  self._refreshToken = ''; // Set when calling `refresh` and when duration: 'permanent'
+
+  self._oauth = thisOrThat(config.oauth, {});
+  self._oauth.scope = thisOrThat(self._oauth.scope, []);
+  self._oauth.deviceId = thisOrThat(self._oauth.deviceId, 'DO_NOT_TRACK_THIS_DEVICE');
+  self._oauth.type = thisOrThrow(self._oauth.type, missingMsg + '`oauth.type`');
+  self._oauth.key = thisOrThrow(self._oauth.key, missingMsg + '`oauth.key`');
+
+  if (!isOAuthType('explicit') && !isOAuthType('implicit') && !isOAuthType('script')) {
+    throw new Error('Invalid `oauth.type`. Must be one of: explicit, implicit, or script');
+  }
+
+  if (isOAuthType('explicit') || isOAuthType('script')) {
+    self._oauth.secret = thisOrThrow(self._oauth.secret, missingMsg + '`oauth.secret` for type explicit/script');
+  }
+
+
+  if (isOAuthType('script')) {
+    self._oauth.username = thisOrThrow(self._oauth.username,  missingMsg + '`oauth.username` for type script');
+    self._oauth.password = thisOrThrow(self._oauth.password, missingMsg + '`oauth.password` for type script');
+  }
+
+  if (isOAuthType('implicit') || isOAuthType('explicit')) {
+    self._oauth.redirectUri = thisOrThrow(self._oauth.redirectUri,
+                                          missingMsg + '`oauth.redirectUri` for type implicit/explicit');
+  }
+
+  //
+  //--- end of initial configuration
+  //
+
+  /*
+     The current throttle delay before a request will go through
+     increments every time a call is made, and is reduced when a
+     call finishes.
+
+     Time is added & removed based on the throttle variable.
+   */
+  self._throttleDelay = 1;
+
+
+  self._test.getThrottle = getThrottle;
+  function getThrottle() {
+    return 1000; // OAuth only requires 1000ms
+  }
+
+  /*
+     Return the value of `tryThis` unless it's undefined, then return `that`
+   */
+  self._test.thisOrThat = thisOrThat;
+  function thisOrThat(tryThis, that) {
+    return (typeof tryThis !== 'undefined') ? tryThis : that;
+  }
+
+  self._test.thisOrThrow = thisOrThrow;
+  function thisOrThrow(tryThis, orThrowMessage) {
+    if (typeof tryThis !== 'undefined') { return tryThis; }
+    throw new Error(orThrowMessage);
+  }
+
+  /*
+     Have we authorized with OAuth?
+   */
+  self._test.hasAuthenticatedData = hasAuthenticatedData;
+  function hasAuthenticatedData() {
+    return (typeof self._authenticatedAuthData.access_token !== 'undefined' &&
+      typeof self._authenticatedAuthData.token_type !== 'undefined');
+  }
+
+  /*
+     Have we authenticated with application only OAuth?
+   */
+  self._test.hasApplicationOnlyData = hasApplicationOnlyData;
+  function hasApplicationOnlyData() {
+    return (typeof self._applicationOnlyAuthData.access_token !== 'undefined' &&
+      typeof self._applicationOnlyAuthData.token_type !== 'undefined');
+  }
+
+  /*
+     Checks if the oauth is of a specific type, e.g.
+
+     isOAuthType('script')
+   */
+  self._test.isOAuthType = isOAuthType;
+  function isOAuthType(type) {
+    return self._oauth.type === type;
+  }
+
+  /*
+     Do we have a refresh token defined?
+   */
+  self._test.hasRefreshToken = hasRefreshToken;
+  function hasRefreshToken() {
+    return self._refreshToken !== '';
+  }
+
+  /*
+     Are we in application only mode?
+     Has the user not called `.auth()` yet?
+     Or has the user called `.deauth()`?
+   */
+  self._test.isApplicationOnly = isApplicationOnly;
+  function isApplicationOnly() {
+    return !hasAuthenticatedData();
+  }
+
+  /*
+     Gets the authorization header for when we are using application only OAuth
+   */
+  self._test.getApplicationOnlyAuthorizationHeader = getApplicationOnlyAuthorizationHeader;
+  function getApplicationOnlyAuthorizationHeader() {
+    return self._applicationOnlyAuthData.token_type + ' ' + self._applicationOnlyAuthData.access_token;
+  }
+
+  /*
+     Gets the authorization header for when we are authenticated with OAuth
+   */
+  self._test.getAuthenticatedAuthorizationHeader = getAuthenticatedAuthorizationHeader;
+  function getAuthenticatedAuthorizationHeader() {
+    return self._authenticatedAuthData.token_type + ' ' + self._authenticatedAuthData.access_token;
+  }
+
+  /*
+     Takes an url, and an object of url parameters and replaces
+     them, e.g.
+
+     endpointUrl:
+     'http://example.com/$foo/$bar/test.html'
+
+     givenArgs: { $foo: 'hello', $bar: 'world' }
+
+     would output:
+
+     'http://example.com/hello/world/test.html'
+   */
+  self._test.replaceUrlParams = replaceUrlParams;
+  function replaceUrlParams(endpointUrl, givenArgs) {
+    // nothing to replace!
+    if (endpointUrl.indexOf('$') === -1) {
+      return endpointUrl;
+    }
+
+    // pull out variables from the url
+    var params = endpointUrl.match(/\$[\w\.]+/g);
+
+    // replace with the argument provided
+    params.forEach(function(param) {
+      if (typeof givenArgs[param] === 'undefined') {
+        throw new Error('missing required url parameter ' + param);
+      }
+      endpointUrl = endpointUrl.replace(param, givenArgs[param]);
+    });
+
+    return endpointUrl;
+  }
+
+  /*
+     Builds the URL that we will query reddit with.
+   */
+  self._test.buildUrl = buildUrl;
+  function buildUrl(givenArgs, endpoint, options) {
+    options = options || {};
+    var serverOAuth = thisOrThat(options.serverOAuth, self._serverOAuth);
+
+    var url = 'https://' + path.join(serverOAuth, endpoint.path);
+    url = replaceUrlParams(url, givenArgs);
+    return url;
+  }
+
+  /*
+     Build the arguments that we will send to reddit in our
+     request. These customize the request that we send to reddit
+   */
+  self._test.buildArgs = buildArgs;
+  function buildArgs(endpointArgs, endpoint) {
+
+    endpointArgs = endpointArgs || {};
+    var args = {};
+
+    // Skip any url parameters (e.g. items that begin with $)
+    for (var key in endpointArgs) {
+      if (key.substring(0, 1) !== '$') {
+        args[key] = endpointArgs[key];
+      }
+    }
+
+    var apiType = thisOrThat(endpointArgs.api_type, self._apiType);
+
+    if (apiType && endpoint.needsApiTypeJson) {
+      args.api_type = apiType;
+    }
+
+    return args;
+  }
+
+  /*
+     Returns a set of options that effect how each call to reddit behaves.
+   */
+  self._test.normalizeCallContextOptions = normalizeCallContextOptions;
+  function normalizeCallContextOptions(callContextOptions) {
+
+    var ccOptions = callContextOptions || {};
+
+    // by default we do not bypass authentication
+    ccOptions.bypassAuth = thisOrThat(ccOptions.bypassAuth, false);
+
+    // decode html enntities for this call?
+    ccOptions.decodeHtmlEntities = thisOrThat(ccOptions.decodeHtmlEntities, self._decodeHtmlEntities);
+
+    // how many attempts left do we have to retry an endpoint?
+    ccOptions.retryAttemptsLeft = thisOrThat(ccOptions.retryAttemptsLeft, ccOptions.retryAttempts);
+    ccOptions.retryAttemptsLeft = thisOrThat(ccOptions.retryAttemptsLeft, self._retryAttempts);
+
+    // delay between retrying an endpoint
+    ccOptions.retryDelay = thisOrThat(ccOptions.retryDelay, self._retryDelay);
+
+    // how many reauthentication attempts do we have left?
+    ccOptions.reauthAttemptsLeft = thisOrThat(ccOptions.reauthAttemptsLeft, ccOptions.retryAttemptsLeft);
+
+    return ccOptions;
+  }
+
+
+  /*
+     Returns a uniform error for all response errors.
+   */
+  self._test.getResponseError = getResponseError;
+  function getResponseError(message, response, url, args) {
+
+    var responseError = new Error([
+      message,
+      '>>> Response Status: ' + response._status,
+      '>>> Endpoint URL: '+ url,
+      '>>> Arguments: ' + JSON.stringify(args, null, 2),
+      '>>> Response Body:',
+      response._body
+    ].join('\n\n'));
+
+    responseError.url = url;
+    responseError.args = args;
+    responseError.status = response._status;
+    responseError.body = response._body;
+
+    return responseError;
+  }
+
+  /*
+     Handle a reddit 500 / server error. This will try to call the endpoint again
+     after the given retryDelay. If we do not have any retry attempts left, it
+     will reject the promise with the error.
+   */
+  self._test.handleServerErrorResponse = handleServerErrorResponse;
+  function handleServerErrorResponse(response, endpoint, givenArgs, callContextOptions) {
+
+    --callContextOptions.retryAttemptsLeft;
+
+    var args = buildArgs(givenArgs, endpoint);
+    var url = buildUrl(givenArgs, endpoint, callContextOptions);
+
+    var responseError = getResponseError('Server Error Response', response, url, args);
+    responseError.retryAttemptsLeft = callContextOptions.retryAttemptsLeft;
+    self.emit('server_error', responseError);
+
+    if (callContextOptions.retryAttemptsLeft <= 0) {
+      responseError.message = 'All retry attempts exhausted.\n\n' + responseError.message;
+      return when.reject(responseError);
+    }
+
+    return delay(callContextOptions.retryDelay).then(function() {
+      return callRedditApi(endpoint, givenArgs, callContextOptions);
+    });
+  }
+
+  /*
+     Handle a reddit 400 / client error. This is usually caused when our access_token
+     has expired.
+
+     If we can't renew our access token, we throw an error / emit the 'access_token_expired'
+     event that users can then handle to re-authenticatet clients
+
+     If we can renew our access token, we try to reauthenticate, and call the reddit
+     endpoint again.
+   */
+  self._test.handleClientErrorResponse = handleClientErrorResponse;
+  function handleClientErrorResponse(response, endpoint, givenArgs, callContextOptions) {
+
+    var args = buildArgs(givenArgs, endpoint);
+    var url = buildUrl(givenArgs, endpoint, callContextOptions);
+
+    // If we are *not* application only oauth and can't renew the access token
+    // then we should throw an error
+    if (!isApplicationOnly() && !hasRefreshToken() && !isOAuthType('script')) {
+      self.emit('access_token_expired');
+      return when.reject(new Error('Access token has expired. Listen for ' +
+                                   'the "access_token_expired" event to handle ' +
+                                   'this gracefully in your app.'));
+
+    }
+
+    // Check reddit's response and throw a more specific error if possible
+    try {
+      var data = JSON.parse(response._body);
+    } catch(e) {} // do nothing, may be unauthenticated
+
+    if (typeof data === 'object' && data.reason === 'USER_REQUIRED') {
+      return when.reject(new Error('Must be authenticated with a user to make a call to this endpoint.'));
+    }
+
+    // If a call to an `any` OAuth scope returns a 4xx status, we need to
+    // authenticate. Else, the user has probably forgotten a scope or the
+    // endpoint requires reddit gold
+    var requestOptions = {
+      method: endpoint.method.toUpperCase(),
+      hostname: self._serverOAuth,
+      path: '/api/needs_captcha',
+      headers: buildHeaders(callContextOptions)
+    };
+
+    return Snoocore.request.https(requestOptions).then(function(anyResponse) {
+      // If we can successfuly make a call to the `any` OAuth scope
+      // then the origional call is invalid. Let the user know
+      if (String(anyResponse._status).substring(0, 1) !== '4') {
+        // make the error with the origional response object
+        return when.reject(getResponseError(
+          'Missing a required scope or this call requires reddit gold',
+          response,
+          url,
+          args));
+      }
+
+      --callContextOptions.reauthAttemptsLeft;
+
+      if (callContextOptions.reauthAttemptsLeft <= 0) {
+        return when.reject(new Error('Unable to refresh the access_token.'));
+      }
+
+      var reauth;
+
+      // If we are application only, or are bypassing authentication for a call
+      // go ahead and use application only OAuth
+      if (isApplicationOnly() || callContextOptions.bypassAuth) {
+        reauth = self.applicationOnlyAuth();
+      } else {
+        // If we have been authenticated with a permanent refresh token
+        if (hasRefreshToken()) { reauth = self.refresh(self._refreshToken); }
+        // If we are OAuth type script and not implicit authenticated
+        if (isOAuthType('script')) { reauth = self.auth(); }
+      }
+
+      return reauth.then(function() {
+        return callRedditApi(endpoint, givenArgs, callContextOptions);
+      });
+
+    });
+  }
+
+  /*
+     Handle reddit response status of 2xx.
+
+     Finally return the data if there were no problems.
+   */
+  self._test.handleSuccessResponse = handleSuccessResponse;
+  function handleSuccessResponse(response, endpoint, givenArgs, callContextOptions) {
+    var data = response._body || {};
+    var args = buildArgs(givenArgs, endpoint);
+    var url = buildUrl(givenArgs, endpoint, callContextOptions);
+
+    if (callContextOptions.decodeHtmlEntities) {
+      data = he.decode(data);
+    }
+
+    // Attempt to parse some JSON, otherwise continue on (may be empty, or text)
+    try {
+      data = JSON.parse(data);
+    } catch(e) {}
+
+    return when.resolve(data);
+  }
+
+  /*
+     Handles various reddit response cases.
+   */
+  self._test.handleRedditResponse = handleRedditResponse;
+  function handleRedditResponse(response, endpoint, givenArgs, callContextOptions) {
+
+    switch(String(response._status).substring(0, 1)) {
+      case '5':
+        return handleServerErrorResponse(response, endpoint, givenArgs, callContextOptions);
+      case '4':
+        return handleClientErrorResponse(response, endpoint, givenArgs, callContextOptions);
+      case '2':
+        return handleSuccessResponse(response, endpoint, givenArgs, callContextOptions);
+    }
+
+    return when.reject(new Error('Invalid reddit response status of ' + response._status));
+  }
+
+  /*
+     Builds up the headers for a call to reddit.
+   */
+  self._test.buildHeaders = buildHeaders;
+  function buildHeaders(callContextOptions) {
+    callContextOptions = callContextOptions || {};
+    var headers = {};
+
+    if (self._isNode) {
+      headers['User-Agent'] = self._userAgent; // Can't set User-Agent in browser
+    }
+
+    if (callContextOptions.bypassAuth || isApplicationOnly()) {
+      headers['Authorization'] = getApplicationOnlyAuthorizationHeader();
+    } else {
+      headers['Authorization'] = getAuthenticatedAuthorizationHeader();
+    }
+
+    return headers;
+  }
+
+  /*
+     Call the reddit api.
+   */
+  self._test.callRedditApi = callRedditApi;
+  function callRedditApi(endpoint, givenArgs, callContextOptions) {
+
+    callContextOptions = normalizeCallContextOptions(callContextOptions);
+
+    var args = buildArgs(givenArgs, endpoint);
+    var url = buildUrl(givenArgs, endpoint, callContextOptions);
+    var parsedUrl = urlLib.parse(url);
+
+    var requestOptions = {
+      method: endpoint.method.toUpperCase(),
+      hostname: parsedUrl.hostname,
+      path: parsedUrl.path,
+      headers: buildHeaders(callContextOptions)
+    };
+
+    if (parsedUrl.port) {
+      requestOptions.port = parsedUrl.port;
+    }
+
+    var throttle = getThrottle();
+    var startCallTime = Date.now();
+    self._throttleDelay += throttle;
+
+    // Wait for the throttle delay amount, then call the Reddit API
+    return delay(self._throttleDelay - throttle).then(function() {
+      return Snoocore.request.https(requestOptions, args);
+    }).then(function(response) {
+      return handleRedditResponse(response, endpoint, givenArgs, callContextOptions);
+    }).finally(function() {
+      // decrement the throttle delay. If the call is quick and snappy, we
+      // only decrement the total time that it took to make the call.
+      var endCallTime = Date.now();
+      var callDuration = endCallTime - startCallTime;
+
+      if (callDuration < throttle) {
+        self._throttleDelay -= callDuration;
+      } else {
+        self._throttleDelay -= throttle;
+      }
+    });
+
+  }
+
+  /*
+     Listing support.
+   */
+  function getListing(endpoint, givenArgs, options) {
+
+    givenArgs = givenArgs || {};
+    options = options || {};
+
+    // number of results that we have loaded so far. It will
+    // increase / decrease when calling next / previous.
+    var count = 0;
+    var limit = givenArgs.limit || 25;
+    // keep a reference to the start of this listing
+    var start = givenArgs.after || null;
+
+    function getSlice(givenArgs) {
+      return callRedditApi(endpoint, givenArgs, options).then(function(result) {
+
+        var slice = {};
+        var listing = result || {};
+
+        slice.get = result || {};
+
+        if (result instanceof Array) {
+          if (typeof options.listingIndex === 'undefined') {
+            throw new Error('Must specify a `listingIndex` for this listing.');
+          }
+
+          listing = result[options.listingIndex];
+        }
+
+        slice.count = count;
+
+        slice.before = listing.data.before || null;
+        slice.after = listing.data.after || null;
+        slice.allChildren = listing.data.children || [];
+
+        slice.empty = slice.allChildren.length === 0;
+
+        slice.children = slice.allChildren.filter(function(child) {
+          return !child.data.stickied;
+        });
+
+        slice.stickied = slice.allChildren.filter(function(child) {
+          return child.data.stickied;
+        });
+
+        slice.next = function() {
+          count += limit;
+
+          var args = givenArgs;
+          args.before = null;
+          args.after = slice.children[slice.children.length - 1].data.name;
+          args.count = count;
+          return getSlice(args);
+        };
+
+        slice.previous = function() {
+          count -= limit;
+
+          var args = givenArgs;
+          args.before = slice.children[0].data.name;
+          args.after = null;
+          args.count = count;
+          return getSlice(args);
+        };
+
+        slice.start = function() {
+          count = 0;
+
+          var args = givenArgs;
+          args.before = null;
+          args.after = start;
+          args.count = count;
+          return getSlice(args);
+        };
+
+        slice.requery = function() {
+          return getSlice(givenArgs);
+        };
+
+        return slice;
+      });
+
+    }
+
+    return getSlice(givenArgs);
+  }
+
+  /*
+     Enable path syntax support, e.g. reddit('/path/to/$endpoint/etc')
+
+     Can take an url as well, but the first part of the url is chopped
+     off because it is not needed. We will always use the server oauth
+     to call the API...
+
+     e.g. https://www.example.com/api/v1/me
+
+     will only use the path: /api/v1/me
+   */
+  self.path = function(urlOrPath) {
+
+    var parsed = urlLib.parse(urlOrPath);
+    var path = parsed.pathname;
+
+    var calls = {};
+
+    ['get', 'post', 'put', 'patch', 'delete', 'update'].forEach(function(verb) {
+      calls[verb] = function(givenArgs, callContextOptions) {
+        return callRedditApi(new Endpoint(verb, path),
+                             givenArgs,
+                             callContextOptions);
+      };
+    });
+
+    // Add listing support
+    calls.listing = function(givenArgs, callContextOptions) {
+      return getListing(new Endpoint('get', path),
+                        givenArgs,
+                        callContextOptions);
+    };
+
+    return calls;
+  };
+
+  /*
+     Get the Explicit Auth Url
+   */
+  self.getExplicitAuthUrl = function(state, options) {
+    var options = self._oauth;
+    options.state = state || Math.ceil(Math.random() * 1000);
+    options.serverWWW = thisOrThat(options.serverWWW, self._serverWWW);
+    return Snoocore.oauth.getExplicitAuthUrl(options);
+  };
+
+  /*
+     Get the Implicit Auth Url
+   */
+  self.getImplicitAuthUrl = function(state, options) {
+    var options = self._oauth;
+    options.state = state || Math.ceil(Math.random() * 1000);
+    options.serverWWW = thisOrThat(options.serverWWW, self._serverWWW);
+    return Snoocore.oauth.getImplicitAuthUrl(options);
+  };
+
+  /*
+     Authenticate with a refresh token
+   */
+  self.refresh = function(refreshToken, options) {
+    options = options || {};
+    var serverWWW = thisOrThat(options.serverWWW, self._serverWWW);
+
+    return Snoocore.oauth.getAuthData('refresh', {
+      refreshToken: refreshToken,
+      key: self._oauth.key,
+      secret: self._oauth.secret,
+      redirectUri: self._oauth.redirectUri,
+      scope: self._oauth.scope,
+      serverWWW: serverWWW
+    }).then(function(authDataResult) {
+      // only set the internal refresh token if reddit
+      // agrees that it was OK and sends back authData
+      self._refreshToken = refreshToken;
+
+      self._authenticatedAuthData = authDataResult;
+    });
+  };
+
+  /*
+     Sets the auth data from the oauth module to allow OAuth calls.
+
+     This function can authenticate with:
+
+     - Script based OAuth (no parameter)
+     - Raw authentication data
+     - Authorization Code (request_type = "code")
+     - Access Token (request_type = "token") / Implicit OAuth
+     - Application Only. (void 0, true);
+   */
+  self.auth = function(authDataOrAuthCodeOrAccessToken, isApplicationOnly, options) {
+
+    options = options || {};
+    var serverWWW = thisOrThat(options.serverWWW, self._serverWWW);
+
+    var authData;
+
+    switch(self._oauth.type) {
+      case 'script':
+        authData = Snoocore.oauth.getAuthData(self._oauth.type, {
+          key: self._oauth.key,
+          secret: self._oauth.secret,
+          scope: self._oauth.scope,
+          username: self._oauth.username,
+          password: self._oauth.password,
+          applicationOnly: isApplicationOnly,
+          serverWWW: serverWWW
+        });
+        break;
+
+      case 'explicit':
+        authData = Snoocore.oauth.getAuthData(self._oauth.type, {
+          authorizationCode: authDataOrAuthCodeOrAccessToken, // auth code in this case
+          key: self._oauth.key,
+          secret: self._oauth.secret,
+          redirectUri: self._oauth.redirectUri,
+          scope: self._oauth.scope,
+          applicationOnly: isApplicationOnly,
+          serverWWW: serverWWW
+        });
+        break;
+
+      case 'implicit':
+        if (isApplicationOnly) {
+          authData = Snoocore.oauth.getAuthData(self._oauth.type, {
+            key: self._oauth.key,
+            scope: self._oauth.scope,
+            applicationOnly: true,
+            serverWWW: serverWWW
+          });
+        } else {
+          // Set the access token, no need to make another call to reddit
+          // using the `Snoocore.oauth.getAuthData` call
+          authData = {
+            access_token: authDataOrAuthCodeOrAccessToken, // access token in this case
+            token_type: 'bearer',
+            expires_in: 3600,
+            scope: self._oauth.scope
+          };
+        }
+        break;
+
+      default:
+        // assume that it is the authData
+        authData = authDataOrAuthCodeOrAccessToken;
+    }
+
+    return when(authData).then(function(authDataResult) {
+
+      if (typeof authDataResult !== 'object') {
+        return when.reject(new Error(
+          'There was a problem authenticating: ', authDataResult));
+      }
+
+      if (!isApplicationOnly) {
+        self._authenticatedAuthData = authDataResult;
+      } else {
+        self._applicationOnlyAuthData = authDataResult;
+      }
+
+      // if the explicit app used a perminant duration, send
+      // back the refresh token that will be used to re-authenticate
+      // later without user interaction.
+      if (authDataResult.refresh_token) {
+        // set the internal refresh token for automatic expiring
+        // access_token management
+        self._refreshToken = authDataResult.refresh_token;
+        return authDataResult.refresh_token;
+      }
+    });
+  };
+
+  /*
+     Only authenticates with Application Only OAuth
+   */
+  self.applicationOnlyAuth = function() {
+    return self.auth(void 0, true);
+  };
+
+  /*
+     Clears any authentication data & removes OAuth authentication
+
+     By default it will only remove the "access_token". Specify
+     the users refresh token to revoke that token instead.
+   */
+  self.deauth = function(refreshToken, options) {
+
+    options = options || {};
+    var serverWWW = thisOrThat(options.serverWWW, self._serverWWW);
+
+    // no need to deauth if not authenticated
+    if (!hasAuthenticatedData()) {
+      return when.resolve();
+    }
+
+    var isRefreshToken = typeof refreshToken === 'string';
+    var token = isRefreshToken ? refreshToken : self._authenticatedAuthData.access_token;
+
+    return Snoocore.oauth.revokeToken(token, isRefreshToken, {
+      key: self._oauth.key,
+      secret: self._oauth.secret,
+      serverWWW: serverWWW
+    }).then(function() {
+      self._authenticatedAuthData = {}; // clear internal authenticated auth data.
+    });
+  };
+
+
+
+  /*
+     Make self.path the primary function that we return, but
+     still allow access to the objects defined on self
+   */
+  var key;
+  for (key in self) {
+    self.path[key] = self[key];
+  }
+
+  self = self.path;
+  return self;
+}
+
+},{"../package":89,"./endpoint":92,"./oauth":93,"./request":96,"./request/file":94,"./utils":99,"events":6,"he":69,"path":14,"url":33,"util":35,"when":88,"when/delay":70}],92:[function(require,module,exports){
+module.exports=require(90)
+},{"../build/endpointProperties":1,"/Users/trev/git/snoocore/src/Endpoint.js":90}],93:[function(require,module,exports){
 (function (Buffer){
 "use strict";
 
@@ -17612,8 +15481,6 @@ oauth.getImplicitAuthUrl = function(options) {
  */
 oauth.getAuthData = function(type, options) {
 
-  console.log('oauth.js:::', type, options);
-
   // parameters to send to reddit when requesting the access_token
   var params = {};
 
@@ -17626,7 +15493,6 @@ oauth.getAuthData = function(type, options) {
   }
   // This AuthData is for a logged out user
   else if (options.applicationOnly) {
-    console.log('oh hey! (3)');
     switch(type) {
       case 'script':
       case 'installed': // web & installed for backwards compatability
@@ -17635,7 +15501,6 @@ oauth.getAuthData = function(type, options) {
         params.grant_type = 'client_credentials';
         break;
       case 'implicit':
-        console.log('yay (4)');
         params.grant_type = 'https://oauth.reddit.com/grants/installed_client';
         params.device_id = options.deviceId || 'DO_NOT_TRACK_THIS_DEVICE';
         break;
@@ -17720,55 +15585,7 @@ oauth.revokeToken = function(token, isRefreshToken, options) {
 module.exports = oauth;
 
 }).call(this,require("buffer").Buffer)
-},{"./request":75,"./utils":84,"buffer":3,"querystring":14,"url":15,"util":17,"when":70}],72:[function(require,module,exports){
-module.exports={
-  "name": "snoocore",
-  "version": "2.6.0",
-  "description": "A minimal and complete JavaScript driver for the Reddit API.",
-  "main": "Snoocore.js",
-  "repository": {
-    "type": "git",
-    "url": "git://github.com/trevorsenior/snoocore.git"
-  },
-  "author": "Trevor Senior <trevor@tsenior.com> (http://tsenior.com/)",
-  "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/trevorsenior/snoocore/issues"
-  },
-  "dependencies": {
-    "he": "^0.5.0",
-    "when": "^3.6.3"
-  },
-  "devDependencies": {
-    "browserify": "^6.3.3",
-    "chai": "^1.10.0",
-    "chai-as-promised": "^4.1.1",
-    "karma": "^0.12.28",
-    "karma-chrome-launcher": "^0.1.5",
-    "karma-firefox-launcher": "^0.1.3",
-    "karma-mocha": "^0.1.9",
-    "karma-phantomjs-launcher": "^0.1.4",
-    "karma-safari-launcher": "^0.1.1",
-    "mocha": "^2.1.0",
-    "phantom": "^0.7.2",
-    "snooform": "0.1.0",
-    "toml": "^2.1.1"
-  },
-  "directories": {
-    "test": "test"
-  },
-  "keywords": [
-    "reddit",
-    "api",
-    "snoocore",
-    "wrapper"
-  ],
-  "scripts": {
-    "test": "./run.js mocha"
-  }
-}
-
-},{}],73:[function(require,module,exports){
+},{"./request":96,"./utils":99,"buffer":2,"querystring":19,"url":33,"util":35,"when":88}],94:[function(require,module,exports){
 (function (Buffer){
 /*
 Represents a file that we wish to upload to reddit.
@@ -17790,7 +15607,7 @@ module.exports = function(name, mimeType, data) {
 };
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":3}],74:[function(require,module,exports){
+},{"buffer":2}],95:[function(require,module,exports){
 (function (Buffer){
 
 
@@ -17932,12 +15749,12 @@ exports.getData = function(formData) {
 };
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":3,"querystring":14,"when":70}],75:[function(require,module,exports){
+},{"buffer":2,"querystring":19,"when":88}],96:[function(require,module,exports){
 var utils = require('../utils');
 
 module.exports = utils.isNode() ? require('./requestNode') : require('./requestBrowser');
 
-},{"../utils":84,"./requestBrowser":76,"./requestNode":undefined}],76:[function(require,module,exports){
+},{"../utils":99,"./requestBrowser":97,"./requestNode":98}],97:[function(require,module,exports){
 //
 // Browser requests, mirrors the syntax of the node requests
 //
@@ -17948,14 +15765,10 @@ var form = require('./form');
 
 exports.https = function(options, formData) {
 
-  console.log('REQUEST OPTIONS::::::', options);
-
   options = options || {};
   options.headers = options.headers || {};
 
   var data = form.getData(formData);
-
-  console.log('BUFFER DATA>>>', data.buffer.toString());
 
   options.headers['Content-Type'] = data.contentType;
 
@@ -17963,14 +15776,12 @@ exports.https = function(options, formData) {
 
     try {
       // https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest
-      var x = new XMLHttpRequest();
-
-      x.withCredentials = true;
+      var x = new window.XMLHttpRequest();
 
       var url = 'https://' + options.hostname + options.path;
 
       // append the form data to the end of the url
-      if (options.method === 'GET' && data.buffer.toString() !== '') {
+      if (options.method === 'GET') {
         url += '?' + data.buffer.toString();
       }
 
@@ -17983,29 +15794,14 @@ exports.https = function(options, formData) {
       x.onreadystatechange = function() {
         if (x.readyState > 3) {
           // Normalize the result to match how requestNode.js works
-
-          var normStatus = x.status;
-
-          // We can sometimes have a response status of 0
-          //
-          // This usually occurs when the browser comes back with
-          // a cross origin error (e.g. we're not authenticated properly)
-          if (normStatus < 100) {
-            normStatus = 403; // make it a client error.
-          }
-
           return resolve({
             _body: x.responseText,
-            _status: normStatus
+            _status: x.status
           });
         }
       };
 
-      if (options.method === 'GET') {
-        x.send();
-      } else {
-        x.send(data.buffer.toString());
-      }
+      x.send(options.method === 'GET' ? null : data.buffer.toString());
 
     } catch (e) {
       return reject(e);
@@ -18015,7 +15811,91 @@ exports.https = function(options, formData) {
 
 };
 
-},{"./form":74,"when":70}],77:[function(require,module,exports){
+},{"./form":95,"when":88}],98:[function(require,module,exports){
+//
+// Node requests
+//
+
+var https = require('https');
+
+var when = require('when');
+
+var form = require('./form');
+
+/*
+   Form data can be a raw string, or an object containing key/value pairs
+ */
+exports.https = function(options, formData) {
+  // console.log('\n\n\n\n');
+  // console.log('>>> request');
+  // console.log(options.method + ': ' + options.hostname + options.path);
+
+  options = options || {};
+  options.headers = options.headers || {};
+
+  formData = formData || [];
+
+  var data = form.getData(formData);
+
+  options.headers['Content-Type'] = data.contentType;
+
+  if (options.method !== 'GET') {
+    options.headers['Content-Length'] = data.contentLength;
+  }
+
+  // console.log('\n>>> headers\n', options.headers);
+
+  // stick the data at the end of the path. It is going to b
+  if (options.method === 'GET' && data.buffer.toString() !== '') {
+    options.path += '?' + data.buffer.toString();
+  }
+
+  return when.promise(function(resolve, reject) {
+
+    var req = https.request(options, function(res) {
+
+      res._req = req; // attach a reference back to the request
+
+      res.setEncoding('utf8');
+      var body = '';
+      res.on('error', function(error) { return reject(error); });
+      res.on('data', function(chunk) { body += chunk; });
+      res.on('end', function() {
+        res._body = body; // attach the response body to the object
+        res._status = res.statusCode;
+
+        // console.log('\n>>> body\n', body);
+        // console.log('\n>>> status\n', res.statusCode);
+        return resolve(res);
+      });
+    });
+
+    if (options.method !== 'GET') {
+      req.write(data.buffer);
+    }
+
+    req.end();
+
+  }).then(function(res) {
+    // @TODO no endpoints except /logout require redirects, but if it's
+    // needed in the future we can handle it here
+    return res;
+  });
+
+};
+
+},{"./form":95,"https":11,"when":88}],99:[function(require,module,exports){
+"use strict";
+
+// checks basic globals to help determine which environment we are in
+exports.isNode = function() {
+    return typeof require === "function" &&
+        typeof exports === "object" &&
+        typeof module === "object" &&
+        typeof window === "undefined";
+};
+
+},{}],100:[function(require,module,exports){
 // Files that will be tested on the browser
 
 var when = require('when');
@@ -18040,10 +15920,10 @@ describe('Snoocore Browser Tests', function() {
   require('./src/snoocore-listings-test');
 });
 
-},{"./config":78,"./src/request-test":79,"./src/snoocore-behavior-noauth-test":80,"./src/snoocore-internal-test":81,"./src/snoocore-listings-test":82,"when":70}],78:[function(require,module,exports){
+},{"./config":101,"./src/request-test":102,"./src/snoocore-behavior-noauth-test":103,"./src/snoocore-internal-test":104,"./src/snoocore-listings-test":105,"when":88}],101:[function(require,module,exports){
 (function (process){
 
-// By default it will read from the environment 
+// By default it will read from the environment
 // variables. If they do not exist, it will then
 // use the value specified
 
@@ -18075,10 +15955,16 @@ module.exports = {
     serverErrorPort: process.env.REDDIT_ERROR_SERVER_PORT || 3001
   },
 
+  // What servers to make requests with to the API
+  requestServer: {
+    oauth: 'https://oauth.reddit.com',
+    www: 'https://www.reddit.com'
+  },
+
   reddit: {
     // Must have same port as testServer
     // All app-types *must* use the same redirect uri
-    redirectUri: process.env.REDDIT_REDIRECT_URI || "https://localhost:3000", 
+    redirectUri: process.env.REDDIT_REDIRECT_URI || "https://localhost:3000",
 
     // What subreddit to run our test cases in when needed
     testSubreddit: 'snoocoreTest', // feel free to use 'snoocoreTest' for this
@@ -18109,9 +15995,8 @@ module.exports = {
   }
 };
 
-
 }).call(this,require('_process'))
-},{"_process":10}],79:[function(require,module,exports){
+},{"_process":15}],102:[function(require,module,exports){
 /* global describe, it */
 
 var chai = require('chai');
@@ -18120,7 +16005,8 @@ chai.use(chaiAsPromised);
 var expect = chai.expect;
 
 var config = require('../config');
-var Snoocore = require('../../Snoocore');
+
+var Snoocore = require('../../src/Snoocore');
 
 describe('Request Test', function () {
 
@@ -18139,7 +16025,7 @@ describe('Request Test', function () {
 
 });
 
-},{"../../Snoocore":1,"../config":78,"chai":19,"chai-as-promised":18}],80:[function(require,module,exports){
+},{"../../src/Snoocore":91,"../config":101,"chai":37,"chai-as-promised":36}],103:[function(require,module,exports){
 /* global describe, it, before, beforeEach */
 
 var path = require('path');
@@ -18151,9 +16037,10 @@ var chaiAsPromised = require('chai-as-promised');
 chai.use(chaiAsPromised);
 var expect = chai.expect;
 
-var Snoocore = require('../../Snoocore');
 var config = require('../config');
 var util = require('./util');
+
+var Snoocore = require('../../src/Snoocore');
 
 describe('Snoocore Behavior Test (noauth)', function () {
 
@@ -18214,7 +16101,7 @@ describe('Snoocore Behavior Test (noauth)', function () {
 
 });
 
-},{"../../Snoocore":1,"../config":78,"./util":83,"chai":19,"chai-as-promised":18,"path":9,"when":70,"when/delay":52}],81:[function(require,module,exports){
+},{"../../src/Snoocore":91,"../config":101,"./util":106,"chai":37,"chai-as-promised":36,"path":14,"when":88,"when/delay":70}],104:[function(require,module,exports){
 /* describe, it, afterEach, beforeEach */
 
 var chai = require('chai');
@@ -18222,9 +16109,11 @@ var chaiAsPromised = require('chai-as-promised');
 chai.use(chaiAsPromised);
 var expect = chai.expect;
 
-var Snoocore = require('../../Snoocore');
 var config = require('../config');
 var util = require('./util');
+
+var Snoocore = require('../../src/Snoocore');
+var Endpoint = require('../../src/Endpoint');
 
 describe('Snoocore Internal Tests', function () {
 
@@ -18233,104 +16122,104 @@ describe('Snoocore Internal Tests', function () {
   describe('Configuration Checks', function() {
     it('should complain about missing userAgent', function() {
       expect(function() {
-	new Snoocore({
-	  oauth: {
-	    type: 'implicit',
-	    key: 'test',
-	    redirectUri: 'http:foo'
-	  }
-	})
+        new Snoocore({
+          oauth: {
+            type: 'implicit',
+            key: 'test',
+            redirectUri: 'http:foo'
+          }
+        })
       }).to.throw('Missing required config value `userAgent`');
     });
 
     it('should complain about missing oauth.type', function() {
       expect(function() {
-	new Snoocore({
-	  userAgent: 'foobar',
-	  oauth: {
-	    key: 'test',
-	    secret: 'testsecret'
-	  }
-	})
+        new Snoocore({
+          userAgent: 'foobar',
+          oauth: {
+            key: 'test',
+            secret: 'testsecret'
+          }
+        })
       }).to.throw('Missing required config value `oauth.type`');
     });
 
     it('should complain about wrong oauth.type', function() {
       expect(function() {
-	new Snoocore({
-	  userAgent: 'foobar',
-	  oauth: {
-	    type: 'invalid',
-	    key: 'somekey',
-	    secret: 'somesecret'
-	  }
-	});
+        new Snoocore({
+          userAgent: 'foobar',
+          oauth: {
+            type: 'invalid',
+            key: 'somekey',
+            secret: 'somesecret'
+          }
+        });
       }).to.throw('Invalid `oauth.type`. Must be one of: explicit, implicit, or script');
     });
 
     it('should complain about missing oauth.key', function() {
       expect(function() {
-	new Snoocore({
-	  userAgent: 'foobar',
-	  oauth: {
-	    type: 'implicit',
-	    redirectUri: 'http:foo'
-	  }
-	})
+        new Snoocore({
+          userAgent: 'foobar',
+          oauth: {
+            type: 'implicit',
+            redirectUri: 'http:foo'
+          }
+        })
       }).to.throw('Missing required config value `oauth.key`');
     });
 
     it('should complain about missing oauth.secret', function() {
       expect(function() {
-	new Snoocore({
-	  userAgent: 'foobar',
-	  oauth: {
-	    type: 'explicit',
-	    key: 'test',
-	    redirectUri: 'http:foo'
-	  }
-	})
+        new Snoocore({
+          userAgent: 'foobar',
+          oauth: {
+            type: 'explicit',
+            key: 'test',
+            redirectUri: 'http:foo'
+          }
+        })
       }).to.throw('Missing required config value `oauth.secret` for type explicit/script');
     });
 
     it('should complain about missing oauth.username', function() {
       expect(function() {
-	new Snoocore({
-	  userAgent: 'foobar',
-	  oauth: {
-	    type: 'script',
-	    key: 'test',
-	    secret: 'testsecret',
-	    password: 'foobar'
-	  }
-	})
+        new Snoocore({
+          userAgent: 'foobar',
+          oauth: {
+            type: 'script',
+            key: 'test',
+            secret: 'testsecret',
+            password: 'foobar'
+          }
+        })
       }).to.throw('Missing required config value `oauth.username` for type script');
     });
 
     it('should complain about missing oauth.password', function() {
       expect(function() {
-	new Snoocore({
-	  userAgent: 'foobar',
-	  oauth: {
-	    type: 'script',
-	    key: 'test',
-	    secret: 'testsecret',
-	    username: 'user'
-	  }
-	})
+        new Snoocore({
+          userAgent: 'foobar',
+          oauth: {
+            type: 'script',
+            key: 'test',
+            secret: 'testsecret',
+            username: 'user'
+          }
+        })
       }).to.throw('Missing required config value `oauth.password` for type script');
     });
 
     it('should complain about missing oauth.redirectUri', function() {
       expect(function() {
-	new Snoocore({
-	  userAgent: 'foobar',
-	  oauth: {
-	    type: 'explicit',
-	    key: 'test',
-	    secret: 'testsecret',
-	  }
-	})
+        new Snoocore({
+          userAgent: 'foobar',
+          oauth: {
+            type: 'explicit',
+            key: 'test',
+            secret: 'testsecret',
+          }
+        })
       }).to.throw('Missing required config value `oauth.redirectUri` for type implicit/explicit');
     });
 
@@ -18367,36 +16256,9 @@ describe('Snoocore Internal Tests', function () {
 
   });
 
-  describe('#addUrlExtension()', function() {
-
-    it('should not add anything', function() {
-      var reddit = util.getScriptInstance();
-      var url = reddit._test.addUrlExtension('http://foo', []);
-      expect(url).to.equal('http://foo');
-    });
-
-    it('should add *.json extension', function() {
-      var reddit = util.getScriptInstance();
-      var url = reddit._test.addUrlExtension(
-        'http://foo', [ '.xml', '.json' ]);
-      expect(url).to.equal('http://foo.json');
-    });
-
-    it('should throw an error if json is not an extension', function() {
-      var reddit = util.getScriptInstance();
-      expect(function() {
-        reddit._test.addUrlExtension('http://foo', [ '.xml' ]);
-      }).to.throw();
-    });
-
-  });
-
   describe('#buildUrl()', function() {
-    var endpoint = {
-      path: '/$urlparam/bar',
-      method: 'GET',
-      oauth: [ 'identity' ]
-    };
+
+    var endpoint = new Endpoint('get', '/$urlparam/bar');
 
     it('should build an url', function() {
       var reddit = util.getScriptInstance();
@@ -18408,19 +16270,19 @@ describe('Snoocore Internal Tests', function () {
         $urlparam: 'something'
       }, endpoint);
 
-      expect(url).to.equal('https://oauth.reddit.com/something/bar');
+      expect(url).to.equal(config.requestServer.oauth + '/something/bar');
     });
 
     it('should build an url with a custom hostname (global)', function() {
       var reddit = new Snoocore({
-	userAgent: util.USER_AGENT,
-	serverOAuth: 'foo.bar.com',
-	oauth: {
-	  type: 'implicit',
-	  key: config.reddit.installed.key,
-	  redirectUri: config.reddit.redirectUri,
-	  scope: []
-	}
+        userAgent: util.USER_AGENT,
+        serverOAuth: 'foo.bar.com',
+        oauth: {
+          type: 'implicit',
+          key: config.reddit.installed.key,
+          redirectUri: config.reddit.redirectUri,
+          scope: []
+        }
       });
 
       var url = reddit._test.buildUrl({
@@ -18443,7 +16305,7 @@ describe('Snoocore Internal Tests', function () {
         passwd: 'foo',
         $urlparam: 'something'
       }, endpoint, {
-	serverOAuth: 'foo.bar.com'
+        serverOAuth: 'foo.bar.com'
       });
 
       expect(url).to.equal('https://foo.bar.com/something/bar');
@@ -18454,17 +16316,17 @@ describe('Snoocore Internal Tests', function () {
 
     it('should remove `$` arguments', function() {
       var reddit = util.getScriptInstance();
-      expect(reddit._test.buildArgs({ $foo: 'bar' })).to.eql({});
+      var args = { $foo: 'bar' };
+      var endpoint = new Endpoint('get', '/foo/bar');
+      expect(reddit._test.buildArgs(args, endpoint)).to.eql({});
     });
 
     it('should add in the default api type', function() {
       var reddit = util.getScriptInstance();
-
       var args = {};
-      var endpoint = { args: { api_type: '' } };
-
+      var endpoint = new Endpoint('post', '/api/new_captcha');
       expect(reddit._test.buildArgs(args, endpoint)).to.eql({
-	api_type: 'json'
+        api_type: 'json'
       });
     });
 
@@ -18474,51 +16336,15 @@ describe('Snoocore Internal Tests', function () {
       // will get the default reddit behavior. This is generally
       // what most users want to avoid.
       reddit = new Snoocore({
-	userAgent: 'foobar',
-	apiType: false,
-	oauth: { type: 'implicit', key: '_', redirectUri: '_' }
+        userAgent: 'foobar',
+        apiType: false,
+        oauth: { type: 'implicit', key: '_', redirectUri: '_' }
       });
 
       var args = {};
-      var endpoint = { args: { api_type: '' } };
+      var endpoint = new Endpoint('post', '/api/new_captcha');
 
       expect(reddit._test.buildArgs(args, endpoint)).to.eql({});
-    });
-
-  });
-
-  describe('#raw()', function() {
-
-    it('should call a raw route', function() {
-      var reddit = util.getScriptInstance([ 'read' ]);
-      return reddit.raw('https://oauth.reddit.com/r/netsec/hot.json')
-		   .get()
-		   .then(function(result) {
-		     expect(result).to.haveOwnProperty('kind', 'Listing');
-		   });
-    });
-
-    it('should call a raw route (with parameters)', function() {
-      var reddit = util.getScriptInstance([ 'read' ]);
-      return reddit.raw('https://www.reddit.com/r/$subreddit/hot.json')
-		   .get({ $subreddit: 'netsec' })
-		   .then(function(result) {
-		     expect(result).to.haveOwnProperty('kind', 'Listing');
-		   });
-    });
-
-    it('should call a raw route just using a path', function() {
-      var reddit = util.getScriptInstance([ 'read' ]);
-      return reddit.raw('/r/netsec/hot.json').get().then(function(result) {
-	expect(result).to.haveOwnProperty('kind', 'Listing');
-      });
-    });
-
-    it('it should redirect to reddit.raw when the path is unknown in `reddit(path)`', function() {
-      var reddit = util.getScriptInstance([ 'read' ]);
-      return reddit('/.json').get().then(function(result) {
-	expect(result).to.haveOwnProperty('kind', 'Listing');
-      });
     });
 
   });
@@ -18528,68 +16354,68 @@ describe('Snoocore Internal Tests', function () {
     it('should allow a "path" syntax', function() {
       var reddit = util.getScriptInstance([ 'read' ]);
       return reddit
-		       .path('/r/$subreddit/hot')
-		       .get({ $subreddit: 'aww' })
-		       .then(function(result) {
-			 expect(result).to.haveOwnProperty('kind', 'Listing');
-		       });
+                       .path('/r/$subreddit/hot')
+                       .get({ $subreddit: 'aww' })
+                       .then(function(result) {
+                         expect(result).to.haveOwnProperty('kind', 'Listing');
+                       });
     });
 
     it('should tolerate a missing beginning slash', function() {
       var reddit = util.getScriptInstance([ 'read' ]);
       return reddit
-		       .path('r/$subreddit/hot')
-		       .get({ $subreddit: 'aww' })
-		       .then(function(result) {
-			 expect(result).to.haveOwnProperty('kind', 'Listing');
-		       });
+                       .path('r/$subreddit/hot')
+                       .get({ $subreddit: 'aww' })
+                       .then(function(result) {
+                         expect(result).to.haveOwnProperty('kind', 'Listing');
+                       });
     });
 
     it('should allow a "path" syntax (where reddit === path fn)', function() {
       var reddit = util.getScriptInstance([ 'read' ]);
       return reddit('/r/$subreddit/hot')
-		       .get({ $subreddit: 'aww' })
-		       .then(function(result) {
-			 expect(result).to.haveOwnProperty('kind', 'Listing');
-		       });
+                       .get({ $subreddit: 'aww' })
+                       .then(function(result) {
+                         expect(result).to.haveOwnProperty('kind', 'Listing');
+                       });
     });
 
     it('should allow for alternate placeholder names', function() {
       var reddit = util.getScriptInstance([ 'read' ]);
       return reddit('/r/$sub/hot').get({ $sub: 'aww' }).then(function(result) {
-	expect(result).to.haveOwnProperty('kind', 'Listing');
+        expect(result).to.haveOwnProperty('kind', 'Listing');
       });
     });
 
     it('should allow for embedding of url parameters', function() {
       var reddit = util.getScriptInstance([ 'read' ]);
       return reddit('/r/aww/hot').get().then(function(result) {
-	expect(result).to.haveOwnProperty('kind', 'Listing');
+        expect(result).to.haveOwnProperty('kind', 'Listing');
       });
     });
 
     it('should allow for embedding of url parameters (listings)', function() {
       var reddit = util.getScriptInstance([ 'read', 'history' ]);
       return reddit('/user/kemitche/comments').listing({
-	sort: 'new'
+        sort: 'new'
       }).then(function(result) {
-	expect(result).to.haveOwnProperty('empty', false);
+        expect(result).to.haveOwnProperty('empty', false);
       });
     });
 
     it('should allow a variable at the beginning of a path', function() {
       var reddit = util.getScriptInstance([ 'read' ]);
       return reddit('/$sort').get({
-	$sort: 'top'
+        $sort: 'top'
       }).then(function(result) {
-	expect(result).to.haveOwnProperty('kind', 'Listing');
+        expect(result).to.haveOwnProperty('kind', 'Listing');
       });
     });
 
   });
 });
 
-},{"../../Snoocore":1,"../config":78,"./util":83,"chai":19,"chai-as-promised":18}],82:[function(require,module,exports){
+},{"../../src/Endpoint":90,"../../src/Snoocore":91,"../config":101,"./util":106,"chai":37,"chai-as-promised":36}],105:[function(require,module,exports){
 /* global describe, it, before */
 
 var path = require('path');
@@ -18599,9 +16425,10 @@ var chaiAsPromised = require('chai-as-promised');
 chai.use(chaiAsPromised);
 var expect = chai.expect;
 
-var Snoocore = require('../../Snoocore');
 var config = require('../config');
 var util = require('./util');
+
+var Snoocore = require('../../src/Snoocore');
 
 describe('Snoocore Listings Test', function () {
 
@@ -18669,19 +16496,6 @@ describe('Snoocore Listings Test', function () {
     });
   });
 
-  it('should work with reddit.raw', function() {
-
-    var reddit = util.getScriptInstance([ 'read' ]);
-
-    return reddit.raw('https://www.reddit.com/domain/$domain/hot.json').listing({
-      $domain: 'google.com'
-    }).then(function(slice) {
-      expect(slice.get.kind).to.equal('Listing');
-    });
-
-  });
-
-
   it('should handle listings with multiple listings', function() {
 
     var reddit = util.getScriptInstance([ 'read' ]);
@@ -18693,26 +16507,26 @@ describe('Snoocore Listings Test', function () {
     }).then(function(getResult) {
       // check that the first result matches what we get back
       return reddit('duplicates/$article').listing({
-	limit: 2,
-	$article: '13wml3'
+        limit: 2,
+        $article: '13wml3'
       }, { listingIndex: 0 }).then(function(slice) {
-	// slice.get should equal the getResult
-	expect(slice.get).to.eql(getResult);
+        // slice.get should equal the getResult
+        expect(slice.get).to.eql(getResult);
 
-	// should equal the first listings children
-	expect(slice.allChildren).to.eql(getResult[0].data.children);
+        // should equal the first listings children
+        expect(slice.allChildren).to.eql(getResult[0].data.children);
 
-	// check the second index
-	return reddit('duplicates/$article').listing({
-	  limit: 2,
-	  $article: '13wml3'
-	}, { listingIndex: 1 }).then(function(slice) {
-	  // slice.get should equal the getResult
-	  expect(slice.get).to.eql(getResult);
+        // check the second index
+        return reddit('duplicates/$article').listing({
+          limit: 2,
+          $article: '13wml3'
+        }, { listingIndex: 1 }).then(function(slice) {
+          // slice.get should equal the getResult
+          expect(slice.get).to.eql(getResult);
 
-	  // should equal the first listings children
-	  expect(slice.allChildren).to.eql(getResult[1].data.children);
-	})
+          // should equal the first listings children
+          expect(slice.allChildren).to.eql(getResult[1].data.children);
+        })
       });
     });
 
@@ -18721,7 +16535,7 @@ describe('Snoocore Listings Test', function () {
 
   it('throw error - listing has multiple listings w/o specifying index', function() {
     var reddit = util.getScriptInstance([ 'read' ]);
-    
+
     return reddit('duplicates/$article').listing({
       limit: 2,
       $article: '13wml3'
@@ -18731,17 +16545,18 @@ describe('Snoocore Listings Test', function () {
       expect(error.message).to.equal('Must specify a `listingIndex` for this listing.');
     });
   });
-  
+
 });
 
-},{"../../Snoocore":1,"../config":78,"./util":83,"chai":19,"chai-as-promised":18,"path":9}],83:[function(require,module,exports){
+},{"../../src/Snoocore":91,"../config":101,"./util":106,"chai":37,"chai-as-promised":36,"path":14}],106:[function(require,module,exports){
 
-var Snoocore = require('../../Snoocore');
+var Snoocore = require('../../src/Snoocore');
+
 var config = require('../config');
 
 var USER_AGENT = exports.USER_AGENT = 'Snoocore v.' + Snoocore.version +
-				      ' /u/' + config.reddit.login.username +
-				      ' << AUTOMATED TEST SUITE >>';
+                                      ' /u/' + config.reddit.login.username +
+                                      ' << AUTOMATED TEST SUITE >>';
 
 exports.isNode = function() {
   return (typeof require === 'function' &&
@@ -18790,15 +16605,4 @@ exports.getScriptInstance = function(scopes) {
   });
 };
 
-},{"../../Snoocore":1,"../config":78}],84:[function(require,module,exports){
-"use strict";
-
-// checks basic globals to help determine which environment we are in
-exports.isNode = function() {
-    return typeof require === "function" &&
-        typeof exports === "object" &&
-        typeof module === "object" &&
-        typeof window === "undefined";
-};
-
-},{}]},{},[77]);
+},{"../../src/Snoocore":91,"../config":101}]},{},[100]);

@@ -9,7 +9,6 @@ var config = require('../config');
 var util = require('./util');
 
 var Snoocore = require('../../src/Snoocore');
-var Endpoint = require('../../src/Endpoint');
 
 describe('Snoocore Internal Tests', function () {
 
@@ -25,7 +24,7 @@ describe('Snoocore Internal Tests', function () {
             redirectUri: 'http:foo'
           }
         })
-      }).to.throw('Missing required config value `userAgent`');
+      }).to.throw('Missing required userConfiguration value `userAgent`');
     });
 
     it('should complain about missing oauth.type', function() {
@@ -37,7 +36,7 @@ describe('Snoocore Internal Tests', function () {
             secret: 'testsecret'
           }
         })
-      }).to.throw('Missing required config value `oauth.type`');
+      }).to.throw('Missing required userConfiguration value `oauth.type`');
     });
 
     it('should complain about wrong oauth.type', function() {
@@ -62,7 +61,7 @@ describe('Snoocore Internal Tests', function () {
             redirectUri: 'http:foo'
           }
         })
-      }).to.throw('Missing required config value `oauth.key`');
+      }).to.throw('Missing required userConfiguration value `oauth.key`');
     });
 
     it('should complain about missing oauth.secret', function() {
@@ -75,7 +74,7 @@ describe('Snoocore Internal Tests', function () {
             redirectUri: 'http:foo'
           }
         })
-      }).to.throw('Missing required config value `oauth.secret` for type explicit/script');
+      }).to.throw('Missing required userConfiguration value `oauth.secret` for type explicit/script');
     });
 
     it('should complain about missing oauth.username', function() {
@@ -89,7 +88,7 @@ describe('Snoocore Internal Tests', function () {
             password: 'foobar'
           }
         })
-      }).to.throw('Missing required config value `oauth.username` for type script');
+      }).to.throw('Missing required userConfiguration value `oauth.username` for type script');
     });
 
     it('should complain about missing oauth.password', function() {
@@ -103,7 +102,7 @@ describe('Snoocore Internal Tests', function () {
             username: 'user'
           }
         })
-      }).to.throw('Missing required config value `oauth.password` for type script');
+      }).to.throw('Missing required userConfiguration value `oauth.password` for type script');
     });
 
     it('should complain about missing oauth.redirectUri', function() {
@@ -116,132 +115,9 @@ describe('Snoocore Internal Tests', function () {
             secret: 'testsecret',
           }
         })
-      }).to.throw('Missing required config value `oauth.redirectUri` for type implicit/explicit');
+      }).to.throw('Missing required userConfiguration value `oauth.redirectUri` for type implicit/explicit');
     });
 
-
-  });
-
-  describe('#replaceUrlParams()', function() {
-
-    it('should not replace anything', function() {
-      var reddit = util.getScriptInstance();
-      var url = reddit._test.replaceUrlParams(
-        'http://foo/bar/baz', { hello: 'world' });
-      expect(url).to.equal('http://foo/bar/baz');
-    });
-
-    it('should replace parameters', function() {
-      var reddit = util.getScriptInstance();
-      var url = reddit._test.replaceUrlParams(
-        'http://foo/$hello/baz', {
-          $hello: 'world'
-        });
-      expect(url).to.equal('http://foo/world/baz');
-    });
-
-    it('should replace more than one parameter', function() {
-      var reddit = util.getScriptInstance();
-      var url = reddit._test.replaceUrlParams(
-        'http://foo/$hello/$foo', {
-          $hello: 'world',
-          $foo: 'bar'
-        });
-      expect(url).to.equal('http://foo/world/bar');
-    });
-
-  });
-
-  describe('#buildUrl()', function() {
-
-    var endpoint = new Endpoint('get', '/$urlparam/bar');
-
-    it('should build an url', function() {
-      var reddit = util.getScriptInstance();
-
-      var url = reddit._test.buildUrl({
-        extensions: [],
-        user: 'foo',
-        passwd: 'foo',
-        $urlparam: 'something'
-      }, endpoint);
-
-      expect(url).to.equal(config.requestServer.oauth + '/something/bar');
-    });
-
-    it('should build an url with a custom hostname (global)', function() {
-      var reddit = new Snoocore({
-        userAgent: util.USER_AGENT,
-        serverOAuth: 'foo.bar.com',
-        oauth: {
-          type: 'implicit',
-          key: config.reddit.installed.key,
-          redirectUri: config.reddit.redirectUri,
-          scope: []
-        }
-      });
-
-      var url = reddit._test.buildUrl({
-        extensions: [],
-        user: 'foo',
-        passwd: 'foo',
-        $urlparam: 'something'
-      }, endpoint);
-
-      expect(url).to.equal('https://foo.bar.com/something/bar');
-    });
-
-
-    it('should build an url with a custom hostname (local)', function() {
-      var reddit = util.getScriptInstance();
-
-      var url = reddit._test.buildUrl({
-        extensions: [],
-        user: 'foo',
-        passwd: 'foo',
-        $urlparam: 'something'
-      }, endpoint, {
-        serverOAuth: 'foo.bar.com'
-      });
-
-      expect(url).to.equal('https://foo.bar.com/something/bar');
-    });
-  });
-
-  describe('#buildArgs()', function() {
-
-    it('should remove `$` arguments', function() {
-      var reddit = util.getScriptInstance();
-      var args = { $foo: 'bar' };
-      var endpoint = new Endpoint('get', '/foo/bar');
-      expect(reddit._test.buildArgs(args, endpoint)).to.eql({});
-    });
-
-    it('should add in the default api type', function() {
-      var reddit = util.getScriptInstance();
-      var args = {};
-      var endpoint = new Endpoint('post', '/api/new_captcha');
-      expect(reddit._test.buildArgs(args, endpoint)).to.eql({
-        api_type: 'json'
-      });
-    });
-
-    it('Should NOT add in the default api type', function() {
-      var reddit = util.getScriptInstance();
-      // By setting apiType to false / '' / anything else falsy, we
-      // will get the default reddit behavior. This is generally
-      // what most users want to avoid.
-      reddit = new Snoocore({
-        userAgent: 'foobar',
-        apiType: false,
-        oauth: { type: 'implicit', key: '_', redirectUri: '_' }
-      });
-
-      var args = {};
-      var endpoint = new Endpoint('post', '/api/new_captcha');
-
-      expect(reddit._test.buildArgs(args, endpoint)).to.eql({});
-    });
 
   });
 
@@ -249,12 +125,11 @@ describe('Snoocore Internal Tests', function () {
 
     it('should allow a "path" syntax', function() {
       var reddit = util.getScriptInstance([ 'read' ]);
-      return reddit
-                       .path('/r/$subreddit/hot')
-                       .get({ $subreddit: 'aww' })
-                       .then(function(result) {
-                         expect(result).to.haveOwnProperty('kind', 'Listing');
-                       });
+      return reddit.path('/r/$subreddit/hot')
+                   .get({ $subreddit: 'aww' })
+                   .then(function(result) {
+                     expect(result).to.haveOwnProperty('kind', 'Listing');
+                   });
     });
 
     it('should tolerate a missing beginning slash', function() {

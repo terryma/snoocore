@@ -33,5 +33,6 @@ describe('Snoocore Node Tests', function() {
   require('./src/snoocore-internal-test');
   require('./src/snoocore-listings-test');
   require('./src/snoocore-oauth-test');
-
+  require('./src/Endpoint-test');
+  require('./src/Throttle-test');
 });

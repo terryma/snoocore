@@ -25,8 +25,8 @@ describe('Snoocore OAuth Test', function () {
       return reddit('/api/v1/me').get().then(function(data) {
         throw new Error('should not pass, expect to fail with error');
       }).catch(function(error) {
-        return expect(error.message).to.eql(
-          'Must be authenticated with a user to make a call to this endpoint.');
+        return expect(error.message.indexOf(
+          'Must be authenticated with a user to make this call')).to.not.equal(-1);
       });
     });
 
@@ -139,8 +139,8 @@ describe('Snoocore OAuth Test', function () {
       }).then(function() {
         return reddit('/api/v1/me').get();
       }).catch(function(error) {
-        return expect(error.message).to.eql(
-          'Must be authenticated with a user to make a call to this endpoint.');
+        return expect(error.message.indexOf(
+          'Must be authenticated with a user to make this call')).to.not.equal(-1);
       });
     });
 
@@ -223,10 +223,10 @@ describe('Snoocore OAuth Test', function () {
               reject(); // should have failed, reject this promise if it didn't
             }, function(error) {
               --i; if (i === 0) { return resolve(); }
-              expect(error.message).to.equal(
+              expect(error.message.indexOf(
                 'Access token has expired. ' +
                 'Listen for the "access_token_expired" event to ' +
-                'handle this gracefully in your app.');
+                'handle this gracefully in your app.')).to.not.equal(-1);
               resolve();
             });
 

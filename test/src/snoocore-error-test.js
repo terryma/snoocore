@@ -16,6 +16,7 @@ var config = require('../config');
 var util = require('./util');
 
 var Snoocore = require('../../src/Snoocore');
+var Endpoint = require('../../src/Endpoint');
 
 describe('Snoocore Error Test', function () {
 
@@ -24,16 +25,25 @@ describe('Snoocore Error Test', function () {
   it('should get a proper response error', function() {
     var reddit = util.getScriptInstance([ 'identity', 'modconfig' ]);
 
-    var responseError = reddit._test.getResponseError('', {
-      _status: 200,
-      _body: 300
-    }, 'someurl', { some: 'args' });
+    var message = 'oh hello there';
+    var response = { _status: 200, _body: 300 };
+
+    var userConfig = util.getScriptUserConfig();
+    var endpoint = new Endpoint(userConfig,
+                                'get',
+                                '/some/path',
+                                { some: 'args' });
+
+    var responseError = reddit._test.getResponseError(message,
+                                                      response,
+                                                      endpoint);
 
     expect(responseError instanceof Error);
     expect(responseError.status).to.eql(200);
-    expect(responseError.url).to.eql('someurl');
+    expect(responseError.url).to.eql('https://oauth.reddit.com/some/path');
     expect(responseError.args).to.eql({ some: 'args' });
 
+    expect(responseError.message.indexOf('oh hello there')).to.not.eql(-1);
     expect(responseError.message.indexOf('Response Status')).to.not.eql(-1);
     expect(responseError.message.indexOf('Endpoint URL')).to.not.eql(-1);
     expect(responseError.message.indexOf('Arguments')).to.not.eql(-1);
@@ -81,20 +91,31 @@ describe('Snoocore Error Test', function () {
 
   });
 
-  it('should explain that a scope or reddit gold is missing', function() {
-
-    var reddit = util.getScriptInstance([ 'identity' ]);
+  it('should explain that a scope is missing', function() {
+    var reddit = util.getScriptInstance([ 'read' ]);
 
     return reddit.auth().then(function() {
-      return reddit('/comments/$article').get({
-        sort: 'hot',
-        context: 8,
-        $article: '2j8u16'
-      });
+      return reddit('/api/v1/me').get();
     }).then(function() {
       throw new Error('expected this to fail with invalid scope');
     }).catch(function(error) {
-      return expect(error.message.indexOf('Missing a required scope or this call requires reddit gold')).to.not.equal(-1);
+      return expect(error.message.indexOf(
+        'Insufficient scopes provided for this call')).to.not.equal(-1);
+    });
+  });
+
+  it('should give an assortment of reasons why call errored', function() {
+
+    var reddit = util.getScriptInstance();
+
+    return reddit.auth().then(function() {
+      return reddit('/api/saved_categories').get();
+    }).then(function() {
+      throw new Error('expected this to fail (missing reddit gold)');
+    }).catch(function(error) {
+      console.log(error.stack);
+      return expect(error.message.indexOf(
+        'Is the user missing reddit gold?')).to.not.equal(-1);
     });
   });
 
@@ -131,8 +152,8 @@ describe('Snoocore Error Test', function () {
     return reddit.auth().then(function() {
 
       // Switch servers to use error test server (returns 500 errors every time)
-      reddit._serverOAuth = 'localhost:' + config.testServer.serverErrorPort;
-      reddit._serverWWW = 'localhost:' + config.testServer.serverErrorPort;
+      reddit._userConfig.serverOAuth = 'localhost:' + config.testServer.serverErrorPort;
+      reddit._userConfig.serverWWW = 'localhost:' + config.testServer.serverErrorPort;
 
       return when.promise(function(resolve, reject) {
         var hotPromise;
@@ -150,17 +171,22 @@ describe('Snoocore Error Test', function () {
           // don't allow self signed certs again
           delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
 
-          // switch to the proper reddit servers
-          reddit._serverWWW = redditWWW;
-          reddit._serverOAuth = redditOAuth;
-
-          expect(reddit._serverWWW).to.eql(redditWWW);
-          expect(reddit._serverOAuth).to.eql(redditOAuth);
+          // --
+          // Very dirty way to hot swap the endpoint's url.
+          // Please do not use this in actual code -- this is a test case
+          reddit._userConfig.serverWWW = redditWWW;
+          reddit._userConfig.serverOAuth = redditOAuth;
+          expect(reddit._userConfig.serverWWW).to.eql(redditWWW);
+          expect(reddit._userConfig.serverOAuth).to.eql(redditOAuth);
+          var modifiedEndpoint = new Endpoint(reddit._userConfig, 'get', 'hot');
+          error.endpoint.url = modifiedEndpoint.url;
+          // -- end filth
 
           // this should resolve now that the servers are correct
           hotPromise.done(resolve);
         });
 
+        process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0; // allow self signed certs
         hotPromise = reddit('/hot').get();
       });
 
@@ -177,8 +203,8 @@ describe('Snoocore Error Test', function () {
     return reddit.auth().then(function() {
 
       // Switch servers to use error test server (returns 500 errors every time)
-      reddit._serverOAuth = 'localhost:' + config.testServer.serverErrorPort;
-      reddit._serverWWW = 'localhost:' + config.testServer.serverErrorPort;
+      reddit._userConfig.serverOAuth = 'localhost:' + config.testServer.serverErrorPort;
+      reddit._userConfig.serverWWW = 'localhost:' + config.testServer.serverErrorPort;
 
       var retryAttempts = 3; // let's only retry 3 times to keep it short
 
