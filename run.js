@@ -71,7 +71,7 @@ exports.buildEndpointProperties = function(done) {
 exports.buildNodeStandalone = function(done) {
   return exec(path.join(__dirname, 'node_modules', '.bin', 'browserify') +
               ' --standalone Snoocore' +
-              ' --exclude request/requestBrowser.js' +
+              ' --exclude src/request/requestBrowser.js' +
               ' --outfile dist/Snoocore-node.js' +
               ' src/Snoocore.js',
               { cwd: __dirname },

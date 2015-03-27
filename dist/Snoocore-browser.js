@@ -6684,9 +6684,9 @@ define(function (require) {
 },{"./lib/Promise":19,"./lib/TimeoutError":21,"./lib/apply":22,"./lib/decorators/array":23,"./lib/decorators/flow":24,"./lib/decorators/fold":25,"./lib/decorators/inspect":26,"./lib/decorators/iterate":27,"./lib/decorators/progress":28,"./lib/decorators/timed":29,"./lib/decorators/unhandledRejection":30,"./lib/decorators/with":31}],37:[function(require,module,exports){
 module.exports={
   "name": "snoocore",
-  "version": "2.6.0",
+  "version": "3.0.0",
   "description": "A minimal and complete JavaScript driver for the Reddit API.",
-  "main": "Snoocore.js",
+  "main": "dist/Snoocore-node.js",
   "repository": {
     "type": "git",
     "url": "git://github.com/trevorsenior/snoocore.git"
@@ -6722,7 +6722,8 @@ module.exports={
     "reddit",
     "api",
     "snoocore",
-    "wrapper"
+    "wrapper",
+    "client"
   ],
   "scripts": {
     "test": "./run.js mocha"
@@ -6730,249 +6731,125 @@ module.exports={
 }
 
 },{}],38:[function(require,module,exports){
-"use strict";
-
-var urlLib = require('url');
-var events = require('events');
-var util = require('util');
 var path = require('path');
 
-var he = require('he');
-var when = require('when');
-var delay = require('when/delay');
-
-var Endpoint = require('./endpoint');
 var utils = require('./utils');
 
-var pkg = require('../package');
+// Precompiled list of properties for specific endpoints
+var endpointProperties = require('../build/endpointProperties');
 
-module.exports = Snoocore;
+// Build a more parseable tree for the properties. Built here vs. simply
+// requiring an already build tree to save on bytes.
+var PROPERTY_TREE = buildPropertyTree(endpointProperties);
 
-Snoocore.version = pkg.version;
-
-Snoocore.oauth = require('./oauth');
-Snoocore.request = require('./request');
-Snoocore.file = require('./request/file');
-
-Snoocore.when = when;
-
-
-// - - -
-
-
-util.inherits(Snoocore, events.EventEmitter);
-function Snoocore(config) {
-
+module.exports = Endpoint;
+function Endpoint(userConfig, method, endpointPath, givenArgs, contextOptions) {
   var self = this;
 
-  events.EventEmitter.call(self);
+  self.method = method;
+  self.path = endpointPath;
 
-  self._test = {}; // expose internal functions for testing
+  self.properties = getProperties();
 
-  self._serverOAuth = thisOrThat(config.serverOAuth, 'oauth.reddit.com');
-  self._serverWWW = thisOrThat(config.serverWWW, 'www.reddit.com');
+  // if this endpoint requires the `api_type` string of "json"
+  // in it's request
+  self.needsApiTypeJson = self.properties.indexOf('a') !== -1;
 
-  var missingMsg = 'Missing required config value ';
+  self.contextOptions = normalizeContextOptions();
+  self.args = buildArgs();
+  self.url = buildUrl();
 
-  self._userAgent = thisOrThrow(config.userAgent, 'Missing required config value `userAgent`');
-  self._isNode = thisOrThat(config.browser, utils.isNode());
-  self._apiType = thisOrThat(config.apiType, 'json');
-  self._decodeHtmlEntities = thisOrThat(config.decodeHtmlEntities, false);
-  self._retryAttempts = thisOrThat(config.retryAttempts, 60);
-  self._retryDelay = thisOrThat(config.retryDelay, 5000);
+  function getProperties() {
+    // remove leading slash if any
+    var sections = self.path.replace(/^\//, '').split('/');
 
-  self._authenticatedAuthData = {}; // Set if Authenticated with OAuth
-  self._applicationOnlyAuthData = {}; // Set if authenticated with Application Only OAuth
+    // the top level of the endpoint tree that we will traverse down
+    var leaf = PROPERTY_TREE;
 
-  self._refreshToken = ''; // Set when calling `refresh` and when duration: 'permanent'
+    var section;
 
-  self._oauth = thisOrThat(config.oauth, {});
-  self._oauth.scope = thisOrThat(self._oauth.scope, []);
-  self._oauth.deviceId = thisOrThat(self._oauth.deviceId, 'DO_NOT_TRACK_THIS_DEVICE');
-  self._oauth.type = thisOrThrow(self._oauth.type, missingMsg + '`oauth.type`');
-  self._oauth.key = thisOrThrow(self._oauth.key, missingMsg + '`oauth.key`');
+    for (var i = 0, len = sections.length; i < len; ++i) {
+      section = sections[i];
 
-  if (!isOAuthType('explicit') && !isOAuthType('implicit') && !isOAuthType('script')) {
-    throw new Error('Invalid `oauth.type`. Must be one of: explicit, implicit, or script');
-  }
+      // We can go down further in the tree
+      if (typeof leaf[section] !== 'undefined') {
+        leaf = leaf[section];
+        continue;
+      }
 
-  if (isOAuthType('explicit') || isOAuthType('script')) {
-    self._oauth.secret = thisOrThrow(self._oauth.secret, missingMsg + '`oauth.secret` for type explicit/script');
-  }
+      // Check if there is a placeholder we can go down
+      if (typeof leaf['$'] !== 'undefined') {
+        leaf = leaf['$'];
+        continue;
+      }
 
-
-  if (isOAuthType('script')) {
-    self._oauth.username = thisOrThrow(self._oauth.username,  missingMsg + '`oauth.username` for type script');
-    self._oauth.password = thisOrThrow(self._oauth.password, missingMsg + '`oauth.password` for type script');
-  }
-
-  if (isOAuthType('implicit') || isOAuthType('explicit')) {
-    self._oauth.redirectUri = thisOrThrow(self._oauth.redirectUri,
-                                          missingMsg + '`oauth.redirectUri` for type implicit/explicit');
-  }
-
-  //
-  //--- end of initial configuration
-  //
-
-  /*
-     The current throttle delay before a request will go through
-     increments every time a call is made, and is reduced when a
-     call finishes.
-
-     Time is added & removed based on the throttle variable.
-   */
-  self._throttleDelay = 1;
-
-
-  self._test.getThrottle = getThrottle;
-  function getThrottle() {
-    return 1000; // OAuth only requires 1000ms
-  }
-
-  /*
-     Return the value of `tryThis` unless it's undefined, then return `that`
-   */
-  self._test.thisOrThat = thisOrThat;
-  function thisOrThat(tryThis, that) {
-    return (typeof tryThis !== 'undefined') ? tryThis : that;
-  }
-
-  self._test.thisOrThrow = thisOrThrow;
-  function thisOrThrow(tryThis, orThrowMessage) {
-    if (typeof tryThis !== 'undefined') { return tryThis; }
-    throw new Error(orThrowMessage);
-  }
-
-  /*
-     Have we authorized with OAuth?
-   */
-  self._test.hasAuthenticatedData = hasAuthenticatedData;
-  function hasAuthenticatedData() {
-    return (typeof self._authenticatedAuthData.access_token !== 'undefined' &&
-      typeof self._authenticatedAuthData.token_type !== 'undefined');
-  }
-
-  /*
-     Have we authenticated with application only OAuth?
-   */
-  self._test.hasApplicationOnlyData = hasApplicationOnlyData;
-  function hasApplicationOnlyData() {
-    return (typeof self._applicationOnlyAuthData.access_token !== 'undefined' &&
-      typeof self._applicationOnlyAuthData.token_type !== 'undefined');
-  }
-
-  /*
-     Checks if the oauth is of a specific type, e.g.
-
-     isOAuthType('script')
-   */
-  self._test.isOAuthType = isOAuthType;
-  function isOAuthType(type) {
-    return self._oauth.type === type;
-  }
-
-  /*
-     Do we have a refresh token defined?
-   */
-  self._test.hasRefreshToken = hasRefreshToken;
-  function hasRefreshToken() {
-    return self._refreshToken !== '';
-  }
-
-  /*
-     Are we in application only mode?
-     Has the user not called `.auth()` yet?
-     Or has the user called `.deauth()`?
-   */
-  self._test.isApplicationOnly = isApplicationOnly;
-  function isApplicationOnly() {
-    return !hasAuthenticatedData();
-  }
-
-  /*
-     Gets the authorization header for when we are using application only OAuth
-   */
-  self._test.getApplicationOnlyAuthorizationHeader = getApplicationOnlyAuthorizationHeader;
-  function getApplicationOnlyAuthorizationHeader() {
-    return self._applicationOnlyAuthData.token_type + ' ' + self._applicationOnlyAuthData.access_token;
-  }
-
-  /*
-     Gets the authorization header for when we are authenticated with OAuth
-   */
-  self._test.getAuthenticatedAuthorizationHeader = getAuthenticatedAuthorizationHeader;
-  function getAuthenticatedAuthorizationHeader() {
-    return self._authenticatedAuthData.token_type + ' ' + self._authenticatedAuthData.access_token;
-  }
-
-  /*
-     Takes an url, and an object of url parameters and replaces
-     them, e.g.
-
-     endpointUrl:
-     'http://example.com/$foo/$bar/test.html'
-
-     givenArgs: { $foo: 'hello', $bar: 'world' }
-
-     would output:
-
-     'http://example.com/hello/world/test.html'
-   */
-  self._test.replaceUrlParams = replaceUrlParams;
-  function replaceUrlParams(endpointUrl, givenArgs) {
-    // nothing to replace!
-    if (endpointUrl.indexOf('$') === -1) {
-      return endpointUrl;
+      break; // else, dead end
     }
 
-    // pull out variables from the url
-    var params = endpointUrl.match(/\$[\w\.]+/g);
+    if (leaf._endpoints && leaf._endpoints[self.method]) {
+      return leaf._endpoints[self.method];
+    }
 
-    // replace with the argument provided
-    params.forEach(function(param) {
-      if (typeof givenArgs[param] === 'undefined') {
-        throw new Error('missing required url parameter ' + param);
-      }
-      endpointUrl = endpointUrl.replace(param, givenArgs[param]);
-    });
-
-    return endpointUrl;
+    return '';
   }
 
   /*
-     Builds the URL that we will query reddit with.
+     Returns a set of options that effect how each call to reddit behaves.
    */
-  self._test.buildUrl = buildUrl;
-  function buildUrl(givenArgs, endpoint, options) {
-    options = options || {};
-    var serverOAuth = thisOrThat(options.serverOAuth, self._serverOAuth);
+  function normalizeContextOptions() {
 
-    var url = 'https://' + path.join(serverOAuth, endpoint.path);
-    url = replaceUrlParams(url, givenArgs);
-    return url;
+    var cOptions = contextOptions || {};
+
+    // by default we do not bypass authentication
+    cOptions.bypassAuth = utils.thisOrThat(cOptions.bypassAuth, false);
+
+    // decode html enntities for this call?
+    cOptions.decodeHtmlEntities = utils.thisOrThat(cOptions.decodeHtmlEntities,
+                                                   userConfig.decodeHtmlEntities);
+
+    // how many attempts left do we have to retry an endpoint?
+
+    // use the given retryAttemptsLeft, or the retryAttempts passed in the
+    // context options if not specified
+    cOptions.retryAttemptsLeft = utils.thisOrThat(cOptions.retryAttemptsLeft,
+                                                  cOptions.retryAttempts);
+
+    // use the given retryAttemptsLeft, or the retryAttempts passed in the
+    // user configuration
+    cOptions.retryAttemptsLeft = utils.thisOrThat(cOptions.retryAttemptsLeft,
+                                                  userConfig.retryAttempts);
+
+    // delay between retrying an endpoint
+    cOptions.retryDelay = utils.thisOrThat(cOptions.retryDelay,
+                                           userConfig.retryDelay);
+
+    // how many reauthentication attempts do we have left?
+    cOptions.reauthAttemptsLeft = utils.thisOrThat(cOptions.reauthAttemptsLeft,
+                                                   cOptions.retryAttemptsLeft);
+
+    return cOptions;
   }
 
   /*
      Build the arguments that we will send to reddit in our
      request. These customize the request that we send to reddit
    */
-  self._test.buildArgs = buildArgs;
-  function buildArgs(endpointArgs, endpoint) {
+  function buildArgs() {
 
-    endpointArgs = endpointArgs || {};
+    givenArgs = givenArgs || {};
     var args = {};
 
     // Skip any url parameters (e.g. items that begin with $)
-    for (var key in endpointArgs) {
+    for (var key in givenArgs) {
       if (key.substring(0, 1) !== '$') {
-        args[key] = endpointArgs[key];
+        args[key] = givenArgs[key];
       }
     }
 
-    var apiType = thisOrThat(endpointArgs.api_type, self._apiType);
+    var apiType = utils.thisOrThat(self.contextOptions.api_type,
+                                   userConfig.apiType);
 
-    if (apiType && endpoint.needsApiTypeJson) {
+    if (apiType && self.needsApiTypeJson) {
       args.api_type = apiType;
     }
 
@@ -6980,596 +6857,26 @@ function Snoocore(config) {
   }
 
   /*
-     Returns a set of options that effect how each call to reddit behaves.
+     Builds the URL that we will query reddit with.
    */
-  self._test.normalizeCallContextOptions = normalizeCallContextOptions;
-  function normalizeCallContextOptions(callContextOptions) {
+  function buildUrl() {
+    var serverOAuth = utils.thisOrThat(self.contextOptions.serverOAuth,
+                                       userConfig.serverOAuth);
 
-    var ccOptions = callContextOptions || {};
-
-    // by default we do not bypass authentication
-    ccOptions.bypassAuth = thisOrThat(ccOptions.bypassAuth, false);
-
-    // decode html enntities for this call?
-    ccOptions.decodeHtmlEntities = thisOrThat(ccOptions.decodeHtmlEntities, self._decodeHtmlEntities);
-
-    // how many attempts left do we have to retry an endpoint?
-    ccOptions.retryAttemptsLeft = thisOrThat(ccOptions.retryAttemptsLeft, ccOptions.retryAttempts);
-    ccOptions.retryAttemptsLeft = thisOrThat(ccOptions.retryAttemptsLeft, self._retryAttempts);
-
-    // delay between retrying an endpoint
-    ccOptions.retryDelay = thisOrThat(ccOptions.retryDelay, self._retryDelay);
-
-    // how many reauthentication attempts do we have left?
-    ccOptions.reauthAttemptsLeft = thisOrThat(ccOptions.reauthAttemptsLeft, ccOptions.retryAttemptsLeft);
-
-    return ccOptions;
+    var url = 'https://' + path.join(serverOAuth, self.path);
+    url = replaceUrlParams(url, givenArgs);
+    return url;
   }
 
 
-  /*
-     Returns a uniform error for all response errors.
-   */
-  self._test.getResponseError = getResponseError;
-  function getResponseError(message, response, url, args) {
-
-    var responseError = new Error([
-      message,
-      '>>> Response Status: ' + response._status,
-      '>>> Endpoint URL: '+ url,
-      '>>> Arguments: ' + JSON.stringify(args, null, 2),
-      '>>> Response Body:',
-      response._body
-    ].join('\n\n'));
-
-    responseError.url = url;
-    responseError.args = args;
-    responseError.status = response._status;
-    responseError.body = response._body;
-
-    return responseError;
-  }
-
-  /*
-     Handle a reddit 500 / server error. This will try to call the endpoint again
-     after the given retryDelay. If we do not have any retry attempts left, it
-     will reject the promise with the error.
-   */
-  self._test.handleServerErrorResponse = handleServerErrorResponse;
-  function handleServerErrorResponse(response, endpoint, givenArgs, callContextOptions) {
-
-    --callContextOptions.retryAttemptsLeft;
-
-    var args = buildArgs(givenArgs, endpoint);
-    var url = buildUrl(givenArgs, endpoint, callContextOptions);
-
-    var responseError = getResponseError('Server Error Response', response, url, args);
-    responseError.retryAttemptsLeft = callContextOptions.retryAttemptsLeft;
-    self.emit('server_error', responseError);
-
-    if (callContextOptions.retryAttemptsLeft <= 0) {
-      responseError.message = 'All retry attempts exhausted.\n\n' + responseError.message;
-      return when.reject(responseError);
-    }
-
-    return delay(callContextOptions.retryDelay).then(function() {
-      return callRedditApi(endpoint, givenArgs, callContextOptions);
-    });
-  }
-
-  /*
-     Handle a reddit 400 / client error. This is usually caused when our access_token
-     has expired.
-
-     If we can't renew our access token, we throw an error / emit the 'access_token_expired'
-     event that users can then handle to re-authenticatet clients
-
-     If we can renew our access token, we try to reauthenticate, and call the reddit
-     endpoint again.
-   */
-  self._test.handleClientErrorResponse = handleClientErrorResponse;
-  function handleClientErrorResponse(response, endpoint, givenArgs, callContextOptions) {
-
-    var args = buildArgs(givenArgs, endpoint);
-    var url = buildUrl(givenArgs, endpoint, callContextOptions);
-
-    // If we are *not* application only oauth and can't renew the access token
-    // then we should throw an error
-    if (!isApplicationOnly() && !hasRefreshToken() && !isOAuthType('script')) {
-      self.emit('access_token_expired');
-      return when.reject(new Error('Access token has expired. Listen for ' +
-                                   'the "access_token_expired" event to handle ' +
-                                   'this gracefully in your app.'));
-
-    }
-
-    // Check reddit's response and throw a more specific error if possible
-    try {
-      var data = JSON.parse(response._body);
-    } catch(e) {} // do nothing, may be unauthenticated
-
-    if (typeof data === 'object' && data.reason === 'USER_REQUIRED') {
-      return when.reject(new Error('Must be authenticated with a user to make a call to this endpoint.'));
-    }
-
-    // If a call to an `any` OAuth scope returns a 4xx status, we need to
-    // authenticate. Else, the user has probably forgotten a scope or the
-    // endpoint requires reddit gold
-    var requestOptions = {
-      method: endpoint.method.toUpperCase(),
-      hostname: self._serverOAuth,
-      path: '/api/needs_captcha',
-      headers: buildHeaders(callContextOptions)
-    };
-
-    return Snoocore.request.https(requestOptions).then(function(anyResponse) {
-      // If we can successfuly make a call to the `any` OAuth scope
-      // then the origional call is invalid. Let the user know
-      if (String(anyResponse._status).substring(0, 1) !== '4') {
-        // make the error with the origional response object
-        return when.reject(getResponseError(
-          'Missing a required scope or this call requires reddit gold',
-          response,
-          url,
-          args));
-      }
-
-      --callContextOptions.reauthAttemptsLeft;
-
-      if (callContextOptions.reauthAttemptsLeft <= 0) {
-        return when.reject(new Error('Unable to refresh the access_token.'));
-      }
-
-      var reauth;
-
-      // If we are application only, or are bypassing authentication for a call
-      // go ahead and use application only OAuth
-      if (isApplicationOnly() || callContextOptions.bypassAuth) {
-        reauth = self.applicationOnlyAuth();
-      } else {
-        // If we have been authenticated with a permanent refresh token
-        if (hasRefreshToken()) { reauth = self.refresh(self._refreshToken); }
-        // If we are OAuth type script and not implicit authenticated
-        if (isOAuthType('script')) { reauth = self.auth(); }
-      }
-
-      return reauth.then(function() {
-        return callRedditApi(endpoint, givenArgs, callContextOptions);
-      });
-
-    });
-  }
-
-  /*
-     Handle reddit response status of 2xx.
-
-     Finally return the data if there were no problems.
-   */
-  self._test.handleSuccessResponse = handleSuccessResponse;
-  function handleSuccessResponse(response, endpoint, givenArgs, callContextOptions) {
-    var data = response._body || {};
-    var args = buildArgs(givenArgs, endpoint);
-    var url = buildUrl(givenArgs, endpoint, callContextOptions);
-
-    if (callContextOptions.decodeHtmlEntities) {
-      data = he.decode(data);
-    }
-
-    // Attempt to parse some JSON, otherwise continue on (may be empty, or text)
-    try {
-      data = JSON.parse(data);
-    } catch(e) {}
-
-    return when.resolve(data);
-  }
-
-  /*
-     Handles various reddit response cases.
-   */
-  self._test.handleRedditResponse = handleRedditResponse;
-  function handleRedditResponse(response, endpoint, givenArgs, callContextOptions) {
-
-    switch(String(response._status).substring(0, 1)) {
-      case '5':
-        return handleServerErrorResponse(response, endpoint, givenArgs, callContextOptions);
-      case '4':
-        return handleClientErrorResponse(response, endpoint, givenArgs, callContextOptions);
-      case '2':
-        return handleSuccessResponse(response, endpoint, givenArgs, callContextOptions);
-    }
-
-    return when.reject(new Error('Invalid reddit response status of ' + response._status));
-  }
-
-  /*
-     Builds up the headers for a call to reddit.
-   */
-  self._test.buildHeaders = buildHeaders;
-  function buildHeaders(callContextOptions) {
-    callContextOptions = callContextOptions || {};
-    var headers = {};
-
-    if (self._isNode) {
-      headers['User-Agent'] = self._userAgent; // Can't set User-Agent in browser
-    }
-
-    if (callContextOptions.bypassAuth || isApplicationOnly()) {
-      headers['Authorization'] = getApplicationOnlyAuthorizationHeader();
-    } else {
-      headers['Authorization'] = getAuthenticatedAuthorizationHeader();
-    }
-
-    return headers;
-  }
-
-  /*
-     Call the reddit api.
-   */
-  self._test.callRedditApi = callRedditApi;
-  function callRedditApi(endpoint, givenArgs, callContextOptions) {
-
-    callContextOptions = normalizeCallContextOptions(callContextOptions);
-
-    var args = buildArgs(givenArgs, endpoint);
-    var url = buildUrl(givenArgs, endpoint, callContextOptions);
-    var parsedUrl = urlLib.parse(url);
-
-    var requestOptions = {
-      method: endpoint.method.toUpperCase(),
-      hostname: parsedUrl.hostname,
-      path: parsedUrl.path,
-      headers: buildHeaders(callContextOptions)
-    };
-
-    if (parsedUrl.port) {
-      requestOptions.port = parsedUrl.port;
-    }
-
-    var throttle = getThrottle();
-    var startCallTime = Date.now();
-    self._throttleDelay += throttle;
-
-    // Wait for the throttle delay amount, then call the Reddit API
-    return delay(self._throttleDelay - throttle).then(function() {
-      return Snoocore.request.https(requestOptions, args);
-    }).then(function(response) {
-      return handleRedditResponse(response, endpoint, givenArgs, callContextOptions);
-    }).finally(function() {
-      // decrement the throttle delay. If the call is quick and snappy, we
-      // only decrement the total time that it took to make the call.
-      var endCallTime = Date.now();
-      var callDuration = endCallTime - startCallTime;
-
-      if (callDuration < throttle) {
-        self._throttleDelay -= callDuration;
-      } else {
-        self._throttleDelay -= throttle;
-      }
-    });
-
-  }
-
-  /*
-     Listing support.
-   */
-  function getListing(endpoint, givenArgs, options) {
-
-    givenArgs = givenArgs || {};
-    options = options || {};
-
-    // number of results that we have loaded so far. It will
-    // increase / decrease when calling next / previous.
-    var count = 0;
-    var limit = givenArgs.limit || 25;
-    // keep a reference to the start of this listing
-    var start = givenArgs.after || null;
-
-    function getSlice(givenArgs) {
-      return callRedditApi(endpoint, givenArgs, options).then(function(result) {
-
-        var slice = {};
-        var listing = result || {};
-
-        slice.get = result || {};
-
-        if (result instanceof Array) {
-          if (typeof options.listingIndex === 'undefined') {
-            throw new Error('Must specify a `listingIndex` for this listing.');
-          }
-
-          listing = result[options.listingIndex];
-        }
-
-        slice.count = count;
-
-        slice.before = listing.data.before || null;
-        slice.after = listing.data.after || null;
-        slice.allChildren = listing.data.children || [];
-
-        slice.empty = slice.allChildren.length === 0;
-
-        slice.children = slice.allChildren.filter(function(child) {
-          return !child.data.stickied;
-        });
-
-        slice.stickied = slice.allChildren.filter(function(child) {
-          return child.data.stickied;
-        });
-
-        slice.next = function() {
-          count += limit;
-
-          var args = givenArgs;
-          args.before = null;
-          args.after = slice.children[slice.children.length - 1].data.name;
-          args.count = count;
-          return getSlice(args);
-        };
-
-        slice.previous = function() {
-          count -= limit;
-
-          var args = givenArgs;
-          args.before = slice.children[0].data.name;
-          args.after = null;
-          args.count = count;
-          return getSlice(args);
-        };
-
-        slice.start = function() {
-          count = 0;
-
-          var args = givenArgs;
-          args.before = null;
-          args.after = start;
-          args.count = count;
-          return getSlice(args);
-        };
-
-        slice.requery = function() {
-          return getSlice(givenArgs);
-        };
-
-        return slice;
-      });
-
-    }
-
-    return getSlice(givenArgs);
-  }
-
-  /*
-     Enable path syntax support, e.g. reddit('/path/to/$endpoint/etc')
-
-     Can take an url as well, but the first part of the url is chopped
-     off because it is not needed. We will always use the server oauth
-     to call the API...
-
-     e.g. https://www.example.com/api/v1/me
-
-     will only use the path: /api/v1/me
-   */
-  self.path = function(urlOrPath) {
-
-    var parsed = urlLib.parse(urlOrPath);
-    var path = parsed.pathname;
-
-    var calls = {};
-
-    ['get', 'post', 'put', 'patch', 'delete', 'update'].forEach(function(verb) {
-      calls[verb] = function(givenArgs, callContextOptions) {
-        return callRedditApi(new Endpoint(verb, path),
-                             givenArgs,
-                             callContextOptions);
-      };
-    });
-
-    // Add listing support
-    calls.listing = function(givenArgs, callContextOptions) {
-      return getListing(new Endpoint('get', path),
-                        givenArgs,
-                        callContextOptions);
-    };
-
-    return calls;
-  };
-
-  /*
-     Get the Explicit Auth Url
-   */
-  self.getExplicitAuthUrl = function(state, options) {
-    var options = self._oauth;
-    options.state = state || Math.ceil(Math.random() * 1000);
-    options.serverWWW = thisOrThat(options.serverWWW, self._serverWWW);
-    return Snoocore.oauth.getExplicitAuthUrl(options);
-  };
-
-  /*
-     Get the Implicit Auth Url
-   */
-  self.getImplicitAuthUrl = function(state, options) {
-    var options = self._oauth;
-    options.state = state || Math.ceil(Math.random() * 1000);
-    options.serverWWW = thisOrThat(options.serverWWW, self._serverWWW);
-    return Snoocore.oauth.getImplicitAuthUrl(options);
-  };
-
-  /*
-     Authenticate with a refresh token
-   */
-  self.refresh = function(refreshToken, options) {
-    options = options || {};
-    var serverWWW = thisOrThat(options.serverWWW, self._serverWWW);
-
-    return Snoocore.oauth.getAuthData('refresh', {
-      refreshToken: refreshToken,
-      key: self._oauth.key,
-      secret: self._oauth.secret,
-      redirectUri: self._oauth.redirectUri,
-      scope: self._oauth.scope,
-      serverWWW: serverWWW
-    }).then(function(authDataResult) {
-      // only set the internal refresh token if reddit
-      // agrees that it was OK and sends back authData
-      self._refreshToken = refreshToken;
-
-      self._authenticatedAuthData = authDataResult;
-    });
-  };
-
-  /*
-     Sets the auth data from the oauth module to allow OAuth calls.
-
-     This function can authenticate with:
-
-     - Script based OAuth (no parameter)
-     - Raw authentication data
-     - Authorization Code (request_type = "code")
-     - Access Token (request_type = "token") / Implicit OAuth
-     - Application Only. (void 0, true);
-   */
-  self.auth = function(authDataOrAuthCodeOrAccessToken, isApplicationOnly, options) {
-
-    options = options || {};
-    var serverWWW = thisOrThat(options.serverWWW, self._serverWWW);
-
-    var authData;
-
-    switch(self._oauth.type) {
-      case 'script':
-        authData = Snoocore.oauth.getAuthData(self._oauth.type, {
-          key: self._oauth.key,
-          secret: self._oauth.secret,
-          scope: self._oauth.scope,
-          username: self._oauth.username,
-          password: self._oauth.password,
-          applicationOnly: isApplicationOnly,
-          serverWWW: serverWWW
-        });
-        break;
-
-      case 'explicit':
-        authData = Snoocore.oauth.getAuthData(self._oauth.type, {
-          authorizationCode: authDataOrAuthCodeOrAccessToken, // auth code in this case
-          key: self._oauth.key,
-          secret: self._oauth.secret,
-          redirectUri: self._oauth.redirectUri,
-          scope: self._oauth.scope,
-          applicationOnly: isApplicationOnly,
-          serverWWW: serverWWW
-        });
-        break;
-
-      case 'implicit':
-        if (isApplicationOnly) {
-          authData = Snoocore.oauth.getAuthData(self._oauth.type, {
-            key: self._oauth.key,
-            scope: self._oauth.scope,
-            applicationOnly: true,
-            serverWWW: serverWWW
-          });
-        } else {
-          // Set the access token, no need to make another call to reddit
-          // using the `Snoocore.oauth.getAuthData` call
-          authData = {
-            access_token: authDataOrAuthCodeOrAccessToken, // access token in this case
-            token_type: 'bearer',
-            expires_in: 3600,
-            scope: self._oauth.scope
-          };
-        }
-        break;
-
-      default:
-        // assume that it is the authData
-        authData = authDataOrAuthCodeOrAccessToken;
-    }
-
-    return when(authData).then(function(authDataResult) {
-
-      if (typeof authDataResult !== 'object') {
-        return when.reject(new Error(
-          'There was a problem authenticating: ', authDataResult));
-      }
-
-      if (!isApplicationOnly) {
-        self._authenticatedAuthData = authDataResult;
-      } else {
-        self._applicationOnlyAuthData = authDataResult;
-      }
-
-      // if the explicit app used a perminant duration, send
-      // back the refresh token that will be used to re-authenticate
-      // later without user interaction.
-      if (authDataResult.refresh_token) {
-        // set the internal refresh token for automatic expiring
-        // access_token management
-        self._refreshToken = authDataResult.refresh_token;
-        return authDataResult.refresh_token;
-      }
-    });
-  };
-
-  /*
-     Only authenticates with Application Only OAuth
-   */
-  self.applicationOnlyAuth = function() {
-    return self.auth(void 0, true);
-  };
-
-  /*
-     Clears any authentication data & removes OAuth authentication
-
-     By default it will only remove the "access_token". Specify
-     the users refresh token to revoke that token instead.
-   */
-  self.deauth = function(refreshToken, options) {
-
-    options = options || {};
-    var serverWWW = thisOrThat(options.serverWWW, self._serverWWW);
-
-    // no need to deauth if not authenticated
-    if (!hasAuthenticatedData()) {
-      return when.resolve();
-    }
-
-    var isRefreshToken = typeof refreshToken === 'string';
-    var token = isRefreshToken ? refreshToken : self._authenticatedAuthData.access_token;
-
-    return Snoocore.oauth.revokeToken(token, isRefreshToken, {
-      key: self._oauth.key,
-      secret: self._oauth.secret,
-      serverWWW: serverWWW
-    }).then(function() {
-      self._authenticatedAuthData = {}; // clear internal authenticated auth data.
-    });
-  };
-
-
-
-  /*
-     Make self.path the primary function that we return, but
-     still allow access to the objects defined on self
-   */
-  var key;
-  for (key in self) {
-    self.path[key] = self[key];
-  }
-
-  self = self.path;
-  return self;
 }
 
-},{"../package":37,"./endpoint":39,"./oauth":40,"./request":43,"./request/file":41,"./utils":45,"events":6,"he":17,"path":8,"url":14,"util":16,"when":36,"when/delay":18}],39:[function(require,module,exports){
-// Precompiled list of properties for specific endpoints
-var endpointProperties = require('../build/endpointProperties');
-// Build a more parseable tree for the properties. Built here vs. simply
-// requireing to save on bytes
-var PROPERTY_TREE = buildPropertyTree(endpointProperties);
 
 /*
-   Converts a list of endpoint properties into a tree:
+   Converts a list of endpoint properties into a tree for
+   faster traversal during runtime.
  */
+module.exports.buildPropertyTree = buildPropertyTree;
 function buildPropertyTree(endpointProperties) {
   var propertyTree = {};
 
@@ -7610,58 +6917,43 @@ function buildPropertyTree(endpointProperties) {
 }
 
 
-module.exports = Endpoint;
-function Endpoint(method, path) {
-  var self = this;
+/*
+   Takes an url, and an object of url parameters and replaces
+   them, e.g.
 
-  self.method = method;
-  self.path = path;
+   endpointUrl:
+   'http://example.com/$foo/$bar/test.html'
 
-  self.properties = getProperties();
+   givenArgs: { $foo: 'hello', $bar: 'world' }
 
-  // if this endpoint requires the `api_type` string of "json"
-  // in it's request
-  self.needsApiTypeJson = self.properties.indexOf('a') !== -1;
+   would output:
 
-  function getProperties() {
-    // remove leading slash if any
-    var sections = self.path.replace(/^\//, '').split('/');
+   'http://example.com/hello/world/test.html'
+ */
 
-    // the top level of the endpoint tree that we will traverse down
-    var leaf = PROPERTY_TREE;
-
-    var section;
-
-    for (var i = 0, len = sections.length; i < len; ++i) {
-      section = sections[i];
-
-      // We can go down further in the tree
-      if (typeof leaf[section] !== 'undefined') {
-        leaf = leaf[section];
-        continue;
-      }
-
-      // Check if there is a placeholder we can go down
-      if (typeof leaf['$'] !== 'undefined') {
-        leaf = leaf['$'];
-        continue;
-      }
-
-      // this endpoint does not have any properties
-      return '';
-    }
-
-    var properties = leaf._endpoints[self.method];
-
-    return properties;
+module.exports.replaceUrlParams = replaceUrlParams;
+function replaceUrlParams(endpointUrl, givenArgs) {
+  // nothing to replace!
+  if (endpointUrl.indexOf('$') === -1) {
+    return endpointUrl;
   }
 
+  // pull out variables from the url
+  var params = endpointUrl.match(/\$[\w\.]+/g);
+
+  // replace with the argument provided
+  params.forEach(function(param) {
+    if (typeof givenArgs[param] === 'undefined') {
+      throw new Error('missing required url parameter ' + param);
+    }
+    endpointUrl = endpointUrl.replace(param, givenArgs[param]);
+  });
+
+  return endpointUrl;
 }
 
-},{"../build/endpointProperties":1}],40:[function(require,module,exports){
+},{"../build/endpointProperties":1,"./utils":47,"path":8}],39:[function(require,module,exports){
 (function (Buffer){
-"use strict";
-
 var querystring = require('querystring');
 var util = require('util');
 var urlLib = require('url');
@@ -7671,61 +6963,16 @@ var when = require('when');
 var utils = require('./utils');
 var request = require('./request');
 
-var oauth = {};
+module.exports = OAuth;
 
-function normalizeScope(scope) {
-  // Set options.scope if not set, or convert an array into a string
-  if (typeof scope === 'undefined') {
-    scope = 'identity';
-  } else if (util.isArray(scope)) {
-    scope = scope.join(' ');
-  }
-  return scope;
-}
-
-oauth.getExplicitAuthUrl = function(options) {
-  var query = {};
-
-  query.client_id = options.key;
-  query.state = options.state;
-  query.redirect_uri = options.redirectUri;
-  query.duration = options.duration || 'temporary';
-  query.response_type = 'code';
-  query.scope = normalizeScope(options.scope);
-
-  var baseUrl = 'https://' + options.serverWWW + '/api/v1/authorize';
-
-  if (options.mobile) {
-    baseUrl += '.compact';
-  }
-
-  return baseUrl + '?' + querystring.stringify(query);
-};
-
-oauth.getImplicitAuthUrl = function(options) {
-  var query = {};
-
-  query.client_id = options.key;
-  query.state = options.state;
-  query.redirect_uri = options.redirectUri;
-  query.response_type = 'token';
-  query.scope = normalizeScope(options.scope);
-
-  var baseUrl = 'https://' + options.serverWWW + '/api/v1/authorize';
-
-  if (options.mobile) {
-    baseUrl += '.compact';
-  }
-
-  return baseUrl + '?' + querystring.stringify(query);
-};
+module.exports.INVALID_TOKEN = 'invalid_token';
 
 /*
    `type` can be one of 'script', 'explicit', or 'refresh'
    depending on the type of token (and accompanying auth data) is
    needed.
  */
-oauth.getAuthData = function(type, options) {
+module.exports.getAuthData = function(type, options) {
 
   // parameters to send to reddit when requesting the access_token
   var params = {};
@@ -7741,8 +6988,6 @@ oauth.getAuthData = function(type, options) {
   else if (options.applicationOnly) {
     switch(type) {
       case 'script':
-      case 'installed': // web & installed for backwards compatability
-      case 'web':
       case 'explicit':
         params.grant_type = 'client_credentials';
         break;
@@ -7751,7 +6996,8 @@ oauth.getAuthData = function(type, options) {
         params.device_id = options.deviceId || 'DO_NOT_TRACK_THIS_DEVICE';
         break;
       default:
-        return when.reject(new Error('Invalid OAuth type specified (Application only OAuth).'));
+        return when.reject(new Error(
+          'Invalid OAuth type specified (Application only OAuth).'));
     }
   }
   // This AuthData is for an actual logged in user
@@ -7762,8 +7008,6 @@ oauth.getAuthData = function(type, options) {
         params.username = options.username;
         params.password = options.password;
         break;
-      case 'web': // web & installed for backwards compatability
-      case 'installed':
       case 'explicit':
         params.grant_type = 'authorization_code';
         params.client_id = options.key;
@@ -7806,32 +7050,913 @@ oauth.getAuthData = function(type, options) {
 
 };
 
-oauth.revokeToken = function(token, isRefreshToken, options) {
 
-  var tokenTypeHint = isRefreshToken ? 'refresh_token' : 'access_token';
-  var params = { token: token, token_type_hint: tokenTypeHint };
+/*
+   Represents a single OAuth instance. Used primarily for internal
+   use within the Snoocore class to manage two OAuth instances -
+   Applicaton Only and an Authenticated Session.
+ */
+function OAuth(userConfig) {
+  var self = this;
 
-  var auth = 'Basic ' + (new Buffer(
-    options.key + ':' + options.secret)).toString('base64');
+  self._userConfig = userConfig;
 
-  return request.https({
-    method: 'POST',
-    hostname: options.serverWWW,
-    path: '/api/v1/revoke_token',
-    headers: {
-      'Authorization': auth
+  self.accessToken = module.exports.INVALID_TOKEN;
+  self.refreshToken = module.exports.INVALID_TOKEN;
+  self.tokenType = module.exports.INVALID_TOKEN;
+
+  self.scope = normalizeScope();
+
+  /*
+     Takes a given scope, and normalizes it to a proper string.
+   */
+  function normalizeScope() {
+    var scope;
+    // Set options.scope if not set, or convert an array into a string
+    if (typeof self._userConfig.oauth.scope === 'undefined') {
+      scope = '';
+    } else if (util.isArray(scope)) {
+      scope = scope.join(' ');
     }
-  }, querystring.stringify(params)).then(function(response) {
-    if (response._status !== 204) {
-      throw new Error('Unable to revoke the given token');
-    }
-  });
-};
+    return scope;
+  }
 
-module.exports = oauth;
+  /*
+     Do we have a refresh token defined?
+   */
+  self.hasRefreshToken = function() {
+    return self.refreshToken !== module.exports.INVALID_TOKEN;
+  };
+
+  /*
+     Are we currently authenticated?
+   */
+  self.isAuthenticated = function() {
+    return (
+      typeof self.accessToken !== module.exports.INVALID_TOKEN &&
+      typeof self.tokenType !== module.exports.INVALID_TOKEN);
+  };
+
+  self.getAuthorizationHeader = function() {
+    return self.tokenType + ' ' + self.accessToken;
+  };
+
+  /*
+     Get the Explicit Auth Url.
+   */
+  self.getExplicitAuthUrl = function(state) {
+
+    var query = {};
+
+    query.client_id = self._userConfig.oauth.key;
+    query.state = state || Math.ceil(Math.random() * 1000);
+    query.redirect_uri = self._userConfig.oauth.redirectUri;
+    query.duration = self._userConfig.oauth.duration || 'temporary';
+    query.response_type = 'code';
+    query.scope = self.scope;
+
+    var baseUrl = 'https://' + self._userConfig.serverWWW + '/api/v1/authorize';
+
+    if (self._userConfig.mobile) {
+      baseUrl += '.compact';
+    }
+
+    return baseUrl + '?' + querystring.stringify(query);
+  };
+
+  /*
+     Get the Implicit Auth Url.
+   */
+  self.getImplicitAuthUrl = function(state) {
+
+    var query = {};
+
+    query.client_id = self._userConfig.oauth.key;
+    query.state = state || Math.ceil(Math.random() * 1000);
+    query.redirect_uri = self._userConfig.oauth.redirectUri;
+    query.response_type = 'token';
+    query.scope = self.scope;
+
+    var baseUrl = 'https://' + self._userConfig.serverWWW + '/api/v1/authorize';
+
+    if (self._userConfig.mobile) {
+      baseUrl += '.compact';
+    }
+
+    return baseUrl + '?' + querystring.stringify(query);
+  };
+
+  /*
+     Authenticate with a refresh token
+   */
+  self.refresh = function(refreshToken) {
+
+    // use the provided refresh token, or the current
+    // one that we have for this class
+    refreshToken = refreshToken || self.refreshToken;
+
+    return Snoocore.oauth.getAuthData('refresh', {
+      refreshToken: refreshToken,
+      key: self._userConfig.oauth.key,
+      secret: self._userConfig.oauth.secret,
+      redirectUri: self._userConfig.oauth.redirectUri,
+      scope: self._userConfig.oauth.scope,
+      serverWWW: self._userConfig.serverWWW
+    }).then(function(authDataResult) {
+      // only set the internal refresh token if reddit
+      // agrees that it was OK and sends back authData
+      self.refreshToken = refreshToken;
+
+      self.accessToken = authDataResult.access_token;
+      self.tokenType = authDataResult.token_type;
+    });
+  };
+
+  /*
+     Sets the auth data from the oauth module to allow OAuth calls.
+
+     This function can authenticate with:
+
+     - Script based OAuth (no parameter)
+     - Raw authentication data
+     - Authorization Code (request_type = "code")
+     - Access Token (request_type = "token") / Implicit OAuth
+     - Application Only. (void 0, true);
+   */
+  self.auth = function(authDataOrAuthCodeOrAccessToken, isApplicationOnly) {
+    var authData;
+
+    switch(self._userConfig.oauth.type) {
+      case 'script':
+        authData = Snoocore.oauth.getAuthData(self._userConfig.oauth.type, {
+          key: self._userConfig.oauth.key,
+          secret: self._userConfig.oauth.secret,
+          scope: self._userConfig.oauth.scope,
+          username: self._userConfig.oauth.username,
+          password: self._userConfig.oauth.password,
+          applicationOnly: isApplicationOnly,
+          serverWWW: self._userConfig.serverWWW
+        });
+        break;
+
+      case 'explicit':
+        authData = Snoocore.oauth.getAuthData(self._userConfig.oauth.type, {
+          // auth code in this case
+          authorizationCode: authDataOrAuthCodeOrAccessToken,
+          key: self._userConfig.oauth.key,
+          secret: self._userConfig.oauth.secret,
+          redirectUri: self._userConfig.oauth.redirectUri,
+          scope: self._userConfig.oauth.scope,
+          applicationOnly: isApplicationOnly,
+          serverWWW: self._userConfig.serverWWW
+        });
+        break;
+
+      case 'implicit':
+        if (isApplicationOnly) {
+          authData = Snoocore.oauth.getAuthData(self._userConfig.oauth.type, {
+            key: self._userConfig.oauth.key,
+            scope: self._userConfig.oauth.scope,
+            applicationOnly: true,
+            serverWWW: self._userConfig.serverWWW
+          });
+        } else {
+          // Set the access token, no need to make another call to reddit
+          // using the `Snoocore.oauth.getAuthData` call
+          authData = {
+            // access token in this case
+            access_token: authDataOrAuthCodeOrAccessToken,
+            token_type: 'bearer',
+            expires_in: 3600,
+            scope: self._userConfig.oauth.scope
+          };
+        }
+        break;
+
+      default:
+        // assume that it is the authData
+        authData = authDataOrAuthCodeOrAccessToken;
+    }
+
+    return when(authData).then(function(authDataResult) {
+
+      if (typeof authDataResult !== 'object') {
+        return when.reject(new Error(
+          'There was a problem authenticating: ', authDataResult));
+      }
+
+      self.accessToken = authDataResult.access_token;
+      self.tokenType = authDataResult.token_type;
+
+      // If the explicit app used a perminant duration, send
+      // back the refresh token that will be used to re-authenticate
+      // later without user interaction.
+      if (authDataResult.refresh_token) {
+        // set the internal refresh token for automatic expiring
+        // access_token management
+        self.refreshToken = authDataResult.refresh_token;
+        return authDataResult.refresh_token;
+      }
+    });
+  };
+
+  /*
+     Only authenticates with Application Only OAuth
+   */
+  self.applicationOnlyAuth = function() {
+    return self.auth(void 0, true);
+  };
+
+  /*
+     Clears any authentication data & removes OAuth authentication
+
+     By default it will only remove the "access_token". Specify
+     the users refresh token to revoke that token instead.
+   */
+  self.deauth = function(refreshToken) {
+
+    // no need to deauth if not authenticated
+    if (!self.isAuthenticated()) {
+      return when.resolve();
+    }
+
+    var isRefreshToken = typeof refreshToken === 'string';
+
+    var token = isRefreshToken ? refreshToken : self.accessToken;
+
+    var tokenTypeHint = isRefreshToken ? 'refresh_token' : 'access_token';
+
+    var params = {
+      token: token,
+      token_type_hint: tokenTypeHint
+    };
+
+    var auth = 'Basic ' + (new Buffer(
+      self._userConfig.oauth.key + ':' +
+      self._userConfig.oauth.secret)).toString('base64');
+
+    return request.https({
+      method: 'POST',
+      hostname: self._userConfig.serverWWW,
+      path: '/api/v1/revoke_token',
+      headers: { 'Authorization': auth }
+    }, querystring.stringify(params)).then(function(response) {
+      if (response._status !== 204) {
+        throw new Error('Unable to revoke the given token');
+      }
+    }).then(function() {
+      // clear the data for this OAuth object
+      self.accessToken = module.exports.INVALID_TOKEN;
+      self.tokenType = module.exports.INVALID_TOKEN;
+
+      if (isRefreshToken) {
+        self.refreshToken = module.exports.INVALID_TOKEN;
+      }
+    });
+  };
+
+
+  return self;
+}
 
 }).call(this,require("buffer").Buffer)
-},{"./request":43,"./utils":45,"buffer":2,"querystring":13,"url":14,"util":16,"when":36}],41:[function(require,module,exports){
+},{"./request":45,"./utils":47,"buffer":2,"querystring":13,"url":14,"util":16,"when":36}],40:[function(require,module,exports){
+"use strict";
+
+// Node.js libraries
+var urlLib = require('url');
+var events = require('events');
+var util = require('util');
+var path = require('path');
+
+// npm modules
+var he = require('he');
+var when = require('when');
+var delay = require('when/delay');
+
+// Our modules
+var pkg = require('../package');
+var utils = require('./utils');
+
+var Endpoint = require('./Endpoint');
+var Throttle = require('./Throttle');
+var UserConfig = require('./UserConfig');
+var OAuth = require('./OAuth');
+
+Snoocore.version = pkg.version;
+
+Snoocore.request = require('./request');
+Snoocore.file = require('./request/file');
+
+Snoocore.when = when;
+
+// - - -
+module.exports = Snoocore;
+util.inherits(Snoocore, events.EventEmitter);
+function Snoocore(userConfiguration) {
+
+  var self = this;
+
+  events.EventEmitter.call(self);
+
+  // @TODO - this is a "god object" of sorts.
+  self._userConfig = new UserConfig(userConfiguration);
+
+  self._throttle = new Throttle(self._userConfig.throttle);
+
+  // Two OAuth instances. One for authenticated users, and another for
+  // Application only OAuth. Two are needed in the instance where
+  // a user wants to bypass authentication for a call - we don't want
+  // to waste time by creating a new app only instance, authenticating,
+  // etc.
+  self.oauth = new OAuth(self._userConfig);
+  self.oauthAppOnly = new OAuth(self._userConfig);
+
+  // Expose OAuth functions in here
+  self.getExplicitAuthUrl = self.oauth.getExplicitAuthUrl;
+  self.getImplicitAuthUrl = self.oauth.getImplicitAuthUrl;
+  self.autuh = self.oauth.auth;
+  self.refresh = self.oauth.refresh;
+  self.deauth = self.oauth.deauth;
+
+  self._test = {}; // expose internal functions for testing
+
+  /*
+     Currently application only?
+   */
+  function isApplicationOnly() {
+    return !self.oauth.isAuthenticated();
+  }
+
+  /*
+     Builds up the headers for an endpoint.
+   */
+  self._test.buildHeaders = buildHeaders;
+  function buildHeaders(endpoint) {
+    var headers = {};
+
+    if (self._userConfig.isNode) {
+      // Can't set User-Agent in browser
+      headers['User-Agent'] = self._userConfig.userAgent;
+    }
+
+    if (endpoint.contextOptions.bypassAuth || isApplicationOnly()) {
+      headers['Authorization'] = self.oauthAppOnly.getAuthorizationHeader();
+    } else {
+      headers['Authorization'] = self.oauth.getAuthorizationHeader();
+    }
+
+    return headers;
+  }
+
+  /*
+     Returns a uniform error for all response errors.
+   */
+  self._test.getResponseError = getResponseError;
+  function getResponseError(message, response, endpoint) {
+
+    var responseError = new Error([
+      message,
+      '>>> Response Status: ' + response._status,
+      '>>> Endpoint URL: '+ endpoint.url,
+      '>>> Arguments: ' + JSON.stringify(endpoint.args, null, 2),
+      '>>> Response Body:',
+      response._body
+    ].join('\n\n'));
+
+    responseError.url = endpoint.url;
+    responseError.args = endpoint.args;
+    responseError.status = response._status;
+    responseError.body = response._body;
+    responseError.endpoint = endpoint;
+
+    return responseError;
+  }
+
+  /*
+     Handle a reddit 500 / server error. This will try to call the endpoint again
+     after the given retryDelay. If we do not have any retry attempts left, it
+     will reject the promise with the error.
+   */
+  self._test.handleServerErrorResponse = handleServerErrorResponse;
+  function handleServerErrorResponse(response, endpoint) {
+
+    endpoint.contextOptions.retryAttemptsLeft--;
+
+    var responseError = getResponseError('Server Error Response',
+                                         response,
+                                         endpoint);
+
+    responseError.retryAttemptsLeft = endpoint.contextOptions.retryAttemptsLeft;
+
+    self.emit('server_error', responseError);
+
+    if (endpoint.contextOptions.retryAttemptsLeft <= 0) {
+      responseError.message = ('All retry attempts exhausted.\n\n' +
+                               responseError.message);
+      return when.reject(responseError);
+    }
+
+    return delay(endpoint.contextOptions.retryDelay).then(function() {
+      return callRedditApi(endpoint);
+    });
+  }
+
+  /*
+     Handle a reddit 4xx / client error. This is usually caused when our
+     access_token has expired.
+
+     If we can't renew our access token, we throw an error / emit the
+     'access_token_expired' event that users can then handle to
+     re-authenticatet clients
+
+     If we can renew our access token, we try to reauthenticate, and call the
+     reddit endpoint again.
+   */
+  self._test.handleClientErrorResponse = handleClientErrorResponse;
+  function handleClientErrorResponse(response, endpoint) {
+
+    // - - -
+    // Check headers for more specific errors.
+
+    var wwwAuth = response._headers['www-authenticate'];
+
+    if (wwwAuth && wwwAuth.indexOf('insufficient_scope') !== -1) {
+      return when.reject(getResponseError(
+        'Insufficient scopes provided for this call',
+        response,
+        endpoint));
+    }
+
+    // - - -
+    // Parse the response for more specific errors.
+
+    try {
+      var data = JSON.parse(response._body);
+
+      if (data.reason === 'USER_REQUIRED') {
+        var msg = 'Must be authenticated with a user to make this call';
+        return when.reject(getResponseError(msg, response, endpoint));
+      }
+
+    } catch(e) {}
+
+    // - - -
+    // Access token has expired
+
+    if (response._status === 401) {
+
+      var canRenewAccessToken = (isApplicationOnly() ||
+                                 self.oauth.hasRefreshToken() ||
+                                 self._userConfig.isOAuthType('script'));
+
+      if (!canRenewAccessToken) {
+        self.emit('access_token_expired');
+        var errmsg = 'Access token has expired. Listen for ' +
+                     'the "access_token_expired" event to ' +
+                     'handle this gracefully in your app.';
+        return when.reject(getResponseError(errmsg, response, endpoint));
+      } else {
+
+        // Renew our access token
+
+        --endpoint.contextOptions.reauthAttemptsLeft;
+
+        if (endpoint.contextOptions.reauthAttemptsLeft <= 0) {
+          return when.reject(getResponseError(
+            'Unable to refresh the access_token.',
+            response,
+            endpoint));
+        }
+
+        var reauth;
+
+        // If we are application only, or are bypassing authentication
+        // therefore we're using application only OAuth
+        if (isApplicationOnly() || endpoint.contextOptions.bypassAuth) {
+          reauth = self.oauthAppOnly.applicationOnlyAuth();
+        } else {
+
+          // If we have been authenticated with a permanent refresh token use it
+          if (self.oauth.hasRefreshToken()) {
+            reauth = self.oauth.refresh();
+          }
+
+          // If we are OAuth type script we can call `.auth` again
+          if (self._userConfig.isOAuthType('script')) {
+            reauth = self.auth();
+          }
+
+        }
+
+        return reauth.then(function() {
+          return callRedditApi(endpoint);
+        });
+
+      }
+    }
+
+    // - - -
+    // At the end of the day, we just throw an error stating that there
+    // is nothing we can do & give general advice
+    return when.reject(getResponseError(
+      ('This call failed. ' +
+       'Is the user missing reddit gold? ' +
+       'Trying to change a subreddit that the user does not moderate? ' +
+       'This is an unrecoverable error.'),
+      response,
+      endpoint));
+  }
+
+  /*
+     Handle reddit response status of 2xx.
+
+     Finally return the data if there were no problems.
+   */
+  self._test.handleSuccessResponse = handleSuccessResponse;
+  function handleSuccessResponse(response, endpoint) {
+    var data = response._body || '';
+
+    if (endpoint.contextOptions.decodeHtmlEntities) {
+      data = he.decode(data);
+    }
+
+    // Attempt to parse some JSON, otherwise continue on (may be empty, or text)
+    try {
+      data = JSON.parse(data);
+    } catch(e) {}
+
+    return when.resolve(data);
+  }
+
+  /*
+     Handles various reddit response cases.
+   */
+  self._test.handleRedditResponse = handleRedditResponse;
+  function handleRedditResponse(response, endpoint) {
+
+    switch(String(response._status).substring(0, 1)) {
+      case '5':
+        return handleServerErrorResponse(response, endpoint);
+      case '4':
+        return handleClientErrorResponse(response, endpoint);
+      case '2':
+        return handleSuccessResponse(response, endpoint);
+    }
+
+    return when.reject(new Error('Invalid reddit response status of ' + response._status));
+  }
+
+  /*
+     Call the reddit api.
+   */
+  self._test.callRedditApi = callRedditApi;
+  function callRedditApi(endpoint) {
+
+    var parsedUrl = urlLib.parse(endpoint.url);
+
+    var requestOptions = {
+      method: endpoint.method.toUpperCase(),
+      hostname: parsedUrl.hostname,
+      path: parsedUrl.path,
+      headers: buildHeaders(endpoint)
+    };
+
+    if (parsedUrl.port) {
+      requestOptions.port = parsedUrl.port;
+    }
+
+    return self._throttle.wait().then(function() {
+      return Snoocore.request.https(requestOptions, endpoint.args);
+    }).then(function(response) {
+      return handleRedditResponse(response, endpoint);
+    });
+  }
+
+  /*
+     Listing support.
+   */
+  function getListing(endpoint) {
+
+    // number of results that we have loaded so far. It will
+    // increase / decrease when calling next / previous.
+    var count = 0;
+    var limit = endpoint.args.limit || 25;
+    // keep a reference to the start of this listing
+    var start = endpoint.args.after || null;
+
+    function getSlice(endpoint) {
+
+      return callRedditApi(endpoint).then(function(result) {
+
+        var slice = {};
+        var listing = result || {};
+
+        slice.get = result || {};
+
+        if (result instanceof Array) {
+          if (typeof endpoint.contextOptions.listingIndex === 'undefined') {
+            throw new Error('Must specify a `listingIndex` for this listing.');
+          }
+
+          listing = result[endpoint.contextOptions.listingIndex];
+        }
+
+        slice.count = count;
+
+        slice.before = listing.data.before || null;
+        slice.after = listing.data.after || null;
+        slice.allChildren = listing.data.children || [];
+
+        slice.empty = slice.allChildren.length === 0;
+
+        slice.children = slice.allChildren.filter(function(child) {
+          return !child.data.stickied;
+        });
+
+        slice.stickied = slice.allChildren.filter(function(child) {
+          return child.data.stickied;
+        });
+
+        slice.next = function() {
+          count += limit;
+
+          var newArgs = endpoint.args;
+          newArgs.before = null;
+          newArgs.after = slice.children[slice.children.length - 1].data.name;
+          newArgs.count = count;
+          return getSlice(new Endpoint(self._userConfig,
+                                       endpoint.method,
+                                       endpoint.path,
+                                       newArgs,
+                                       endpoint.contextOptions));
+        };
+
+        slice.previous = function() {
+          count -= limit;
+
+          var newArgs = endpoint.args;
+          newArgs.before = slice.children[0].data.name;
+          newArgs.after = null;
+          newArgs.count = count;
+          return getSlice(new Endpoint(self._userConfig,
+                                       endpoint.method,
+                                       endpoint.path,
+                                       newArgs,
+                                       endpoint.contextOptions));
+        };
+
+        slice.start = function() {
+          count = 0;
+
+          var newArgs = endpoint.args;
+          newArgs.before = null;
+          newArgs.after = start;
+          newArgs.count = count;
+          return getSlice(new Endpoint(self._userConfig,
+                                       endpoint.method,
+                                       endpoint.path,
+                                       newArgs,
+                                       endpoint.contextOptions));
+        };
+
+        slice.requery = function() {
+          return getSlice(endpoint);
+        };
+
+        return slice;
+      });
+
+    }
+
+    return getSlice(endpoint);
+  }
+
+  /*
+     Enable path syntax support, e.g. reddit('/path/to/$endpoint/etc')
+
+     Can take an url as well, but the first part of the url is chopped
+     off because it is not needed. We will always use the server oauth
+     to call the API...
+
+     e.g. https://www.example.com/api/v1/me
+
+     will only use the path: /api/v1/me
+   */
+  self.path = function(urlOrPath) {
+
+    var parsed = urlLib.parse(urlOrPath);
+    var path = parsed.pathname;
+
+    var calls = {};
+
+    ['get', 'post', 'put', 'patch', 'delete', 'update'].forEach(function(verb) {
+      calls[verb] = function(userGivenArgs, userContextOptions) {
+        return callRedditApi(new Endpoint(self._userConfig,
+                                          verb,
+                                          path,
+                                          userGivenArgs,
+                                          userContextOptions));
+      };
+    });
+
+    // Add listing support
+    calls.listing = function(userGivenArgs, userContextOptions) {
+      return getListing(new Endpoint(self._userConfig,
+                                     'get',
+                                     path,
+                                     userGivenArgs,
+                                     userContextOptions));
+    };
+
+    return calls;
+  };
+
+  /*
+     Make self.path the primary function that we return, but
+     still allow access to the objects defined on self
+   */
+  var key;
+  for (key in self) {
+    self.path[key] = self[key];
+  }
+
+  self = self.path;
+  return self;
+}
+
+},{"../package":37,"./Endpoint":38,"./OAuth":39,"./Throttle":41,"./UserConfig":42,"./request":45,"./request/file":43,"./utils":47,"events":6,"he":17,"path":8,"url":14,"util":16,"when":36,"when/delay":18}],41:[function(require,module,exports){
+/*
+   A basic throttle manager. Exposes 1 functoin `wait` that
+   will return a promise that resolves once we've waited the proper
+   amount of time, e.g.
+
+   var throttle = new Throttle();
+
+   throttle.wait() // resolves after 1ms
+   throttle.wait() // resolves after 10001ms
+   throttle.wait() // resolves after 2001ms
+
+ */
+
+var when = require('when');
+var delay = require('when/delay');
+
+module.exports = Throttle;
+function Throttle(throttleMs) {
+
+  var self = this;
+
+  // default to 1000ms delay
+  self._throttleMs = throttleMs || 1000;
+
+  /*
+     The current throttle delay before a request will go through
+     increments every time a call is made, and is reduced when a
+     call finishes.
+
+     Time is added & removed based on the throttle variable.
+   */
+  self._throttleDelay = 1;
+
+  self.wait = function() {
+    // resolve this promise after the current throttleDelay
+    var delayPromise = delay(self._throttleDelay);
+
+    // add throttleMs to the total throttleDelay
+    self._throttleDelay += self._throttleMs;
+
+    // after throttleMs time, subtract throttleMs from
+    // the throttleDelay
+    setTimeout(function() {
+      self._throttleDelay -= self._throttleMs;
+    }, self._throttleMs);
+
+    return delayPromise;
+  };
+
+  return self;
+}
+
+},{"when":36,"when/delay":18}],42:[function(require,module,exports){
+var utils = require('./utils');
+
+/*
+   A class made up of the user configuration.
+
+   Normalizes the configuraiton & checks for simple errors.
+
+   Provides some helper functons for getting user set values.
+ */
+module.exports = UserConfig
+function UserConfig(userConfiguration) {
+
+  var self = this;
+
+
+  //
+  // - - - CONFIGURATION VALUES - - -
+  //
+
+  var missingMsg = 'Missing required userConfiguration value ';
+
+  // ** SERVERS
+  self.serverOAuth = utils.thisOrThat(userConfiguration.serverOAuth,
+                                      'oauth.reddit.com');
+
+  self.serverWWW = utils.thisOrThat(userConfiguration.serverWWW,
+                                    'www.reddit.com');
+
+
+  // ** IDENFIFICATION
+  self.userAgent = utils.thisOrThrow(
+    userConfiguration.userAgent,
+    'Missing required userConfiguration value `userAgent`');
+
+  self.isNode = utils.thisOrThat(userConfiguration.browser, utils.isNode());
+
+  self.mobile = utils.thisOrThat(userConfiguration.mobile, false);
+
+  // ** CALL MODIFICATIONS
+  self.decodeHtmlEntities = utils.thisOrThat(
+    userConfiguration.decodeHtmlEntities,
+    false);
+
+  self.apiType = utils.thisOrThat(userConfiguration.apiType, 'json');
+
+
+
+  // ** RETRY ATTEMPTS
+  self.retryAttempts = utils.thisOrThat(userConfiguration.retryAttempts, 60);
+
+  self.retryDelay = utils.thisOrThat(userConfiguration.retryDelay, 5000);
+
+
+  // ** OAUTH
+  self.oauth = utils.thisOrThat(userConfiguration.oauth, {});
+
+  self.oauth.scope = utils.thisOrThat(self.oauth.scope, []);
+
+  self.oauth.deviceId = utils.thisOrThat(self.oauth.deviceId,
+                                         'DO_NOT_TRACK_THIS_DEVICE');
+  self.oauth.type = utils.thisOrThrow(self.oauth.type,
+                                      missingMsg + '`oauth.type`');
+  self.oauth.key = utils.thisOrThrow(self.oauth.key,
+                                     missingMsg + '`oauth.key`');
+
+
+  //
+  // - - - FUNCTIONS - - -
+  //
+
+  /*
+     Checks if the oauth is of a specific type, e.g.
+
+     isOAuthType('script')
+   */
+  self.isOAuthType = function(type) {
+    return self.oauth.type === type;
+  }
+
+
+  //
+  // - - - VALIDATION
+  //
+
+  if (!self.isOAuthType('explicit') &&
+    !self.isOAuthType('implicit') &&
+    !self.isOAuthType('script'))
+  {
+    throw new Error(
+      'Invalid `oauth.type`. Must be one of: explicit, implicit, or script');
+  }
+
+  if (self.isOAuthType('explicit') || self.isOAuthType('script')) {
+    self.oauth.secret = utils.thisOrThrow(
+      self.oauth.secret,
+      missingMsg + '`oauth.secret` for type explicit/script');
+  }
+
+
+  if (self.isOAuthType('script')) {
+    self.oauth.username = utils.thisOrThrow(
+      self.oauth.username,
+      missingMsg + '`oauth.username` for type script');
+    self.oauth.password = utils.thisOrThrow(
+      self.oauth.password,
+      missingMsg + '`oauth.password` for type script');
+  }
+
+  if (self.isOAuthType('implicit') || self.isOAuthType('explicit')) {
+    self.oauth.redirectUri = utils.thisOrThrow(
+      self.oauth.redirectUri,
+      missingMsg + '`oauth.redirectUri` for type implicit/explicit');
+  }
+
+  return self;
+}
+
+},{"./utils":47}],43:[function(require,module,exports){
 (function (Buffer){
 /*
 Represents a file that we wish to upload to reddit.
@@ -7853,7 +7978,7 @@ module.exports = function(name, mimeType, data) {
 };
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":2}],42:[function(require,module,exports){
+},{"buffer":2}],44:[function(require,module,exports){
 (function (Buffer){
 
 
@@ -7995,12 +8120,12 @@ exports.getData = function(formData) {
 };
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":2,"querystring":13,"when":36}],43:[function(require,module,exports){
+},{"buffer":2,"querystring":13,"when":36}],45:[function(require,module,exports){
 var utils = require('../utils');
 
 module.exports = utils.isNode() ? require('./requestNode') : require('./requestBrowser');
 
-},{"../utils":45,"./requestBrowser":44,"./requestNode":undefined}],44:[function(require,module,exports){
+},{"../utils":47,"./requestBrowser":46,"./requestNode":undefined}],46:[function(require,module,exports){
 //
 // Browser requests, mirrors the syntax of the node requests
 //
@@ -8008,6 +8133,9 @@ module.exports = utils.isNode() ? require('./requestNode') : require('./requestB
 var when = require('when');
 
 var form = require('./form');
+
+// https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest#getAllResponseHeaders()
+throw new Error('@TODO normalize the request headers to match node.js');
 
 exports.https = function(options, formData) {
 
@@ -8028,23 +8156,25 @@ exports.https = function(options, formData) {
 
       // append the form data to the end of the url
       if (options.method === 'GET') {
-	url += '?' + data.buffer.toString();
+        url += '?' + data.buffer.toString();
       }
 
       x.open(options.method, url, true);
 
       Object.keys(options.headers).forEach(function(headerKey) {
-	x.setRequestHeader(headerKey, options.headers[headerKey]);
+        x.setRequestHeader(headerKey, options.headers[headerKey]);
       });
 
       x.onreadystatechange = function() {
-	if (x.readyState > 3) {
-	  // Normalize the result to match how requestNode.js works
-	  return resolve({
-	    _body: x.responseText,
-	    _status: x.status
-	  });
-	}
+        if (x.readyState > 3) {
+          // Normalize the result to match how requestNode.js works
+
+          return resolve({
+            _body: x.responseText,
+            _status: x.status,
+            _headers: x.getAllResponseHeaders()
+          });
+        }
       };
 
       x.send(options.method === 'GET' ? null : data.buffer.toString());
@@ -8057,16 +8187,32 @@ exports.https = function(options, formData) {
 
 };
 
-},{"./form":42,"when":36}],45:[function(require,module,exports){
+},{"./form":44,"when":36}],47:[function(require,module,exports){
 "use strict";
 
 // checks basic globals to help determine which environment we are in
 exports.isNode = function() {
-    return typeof require === "function" &&
-        typeof exports === "object" &&
-        typeof module === "object" &&
-        typeof window === "undefined";
+  return typeof require === "function" &&
+  typeof exports === "object" &&
+  typeof module === "object" &&
+  typeof window === "undefined";
 };
 
-},{}]},{},[38])(38)
+
+/*
+   Return the value of `tryThis` unless it's undefined, then return `that`
+ */
+exports.thisOrThat = function(tryThis, that) {
+  return (typeof tryThis !== 'undefined') ? tryThis : that;
+};
+
+/*
+   Return the value of `tryThir` or throw an error (with provided message);
+ */
+exports.thisOrThrow = function(tryThis, orThrowMessage) {
+  if (typeof tryThis !== 'undefined') { return tryThis; }
+  throw new Error(orThrowMessage);
+};
+
+},{}]},{},[40])(40)
 });

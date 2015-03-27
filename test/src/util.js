@@ -1,3 +1,4 @@
+var path = require('path');
 
 var Snoocore = require('../../src/Snoocore');
 var UserConfig = require('../../src/UserConfig');
@@ -15,20 +16,46 @@ exports.isNode = function() {
     typeof window === 'undefined');
 }
 
-exports.getScriptUserConfig = function() {
+exports.getScriptUserConfig = function(scopes) {
   return new UserConfig({
     userAgent: USER_AGENT,
     oauth: {
       type: 'script',
       key: config.reddit.script.key,
       secret: config.reddit.script.secret,
-      scope: [],
+      scope: scopes || [],
       username: config.reddit.login.username,
       password: config.reddit.login.password
     }
   });
 };
 
+exports.getExplicitUserConfig = function(scopes, duration, isMobile) {
+  return new UserConfig({
+    userAgent: USER_AGENT,
+    mobile: isMobile || false,
+    oauth: {
+      type: 'explicit',
+      duration: duration || 'temporary',
+      key: config.reddit.web.key,
+      secret: config.reddit.web.secret,
+      redirectUri: config.reddit.redirectUri,
+      scope: scopes
+    }
+  });
+};
+
+exports.getImplicitUserConfig = function(scopes) {
+  return new UserConfig({
+    userAgent: USER_AGENT,
+    oauth: {
+      type: 'implicit',
+      key: config.reddit.installed.key,
+      redirectUri: config.reddit.redirectUri,
+      scope: scopes
+    }
+  });
+};
 
 exports.getExplicitInstance = function(scopes, duration) {
   return new Snoocore({

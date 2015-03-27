@@ -12,21 +12,20 @@ var when = require('when');
 var delay = require('when/delay');
 
 // Our modules
-var utils = require('./utils');
-var Endpoint = require('./endpoint');
-var Throttle = require('./throttle');
-var UserConfig = require('./userconfig');
 var pkg = require('../package');
+var utils = require('./utils');
 
+var Endpoint = require('./Endpoint');
+var Throttle = require('./Throttle');
+var UserConfig = require('./UserConfig');
+var OAuth = require('./OAuth');
 
 Snoocore.version = pkg.version;
 
-Snoocore.oauth = require('./oauth');
 Snoocore.request = require('./request');
 Snoocore.file = require('./request/file');
 
 Snoocore.when = when;
-
 
 // - - -
 module.exports = Snoocore;
@@ -36,73 +35,34 @@ function Snoocore(userConfiguration) {
   var self = this;
 
   events.EventEmitter.call(self);
+
+  // @TODO - this is a "god object" of sorts.
   self._userConfig = new UserConfig(userConfiguration);
+
   self._throttle = new Throttle(self._userConfig.throttle);
 
-  // Set if Authenticated with OAuth
-  self._authenticatedAuthData = {};
-  // Set if authenticated with Application Only OAuth
-  self._applicationOnlyAuthData = {};
+  // Two OAuth instances. One for authenticated users, and another for
+  // Application only OAuth. Two are needed in the instance where
+  // a user wants to bypass authentication for a call - we don't want
+  // to waste time by creating a new app only instance, authenticating,
+  // etc.
+  self.oauth = new OAuth(self._userConfig);
+  self.oauthAppOnly = new OAuth(self._userConfig);
 
-  // Set when calling `refresh` and when duration: 'permanent'
-  self._refreshToken = '';
+  // Expose OAuth functions in here
+  self.getExplicitAuthUrl = self.oauth.getExplicitAuthUrl;
+  self.getImplicitAuthUrl = self.oauth.getImplicitAuthUrl;
+  self.autuh = self.oauth.auth;
+  self.refresh = self.oauth.refresh;
+  self.deauth = self.oauth.deauth;
 
   self._test = {}; // expose internal functions for testing
 
   /*
-     Have we authorized with OAuth?
+     Currently application only?
    */
-  self._test.hasAuthenticatedData = hasAuthenticatedData;
-  function hasAuthenticatedData() {
-    return (typeof self._authenticatedAuthData.access_token !== 'undefined' &&
-      typeof self._authenticatedAuthData.token_type !== 'undefined');
-  }
-
-  /*
-     Have we authenticated with application only OAuth?
-   */
-  self._test.hasApplicationOnlyData = hasApplicationOnlyData;
-  function hasApplicationOnlyData() {
-    return (typeof self._applicationOnlyAuthData.access_token !== 'undefined' &&
-      typeof self._applicationOnlyAuthData.token_type !== 'undefined');
-  }
-
-  /*
-     Do we have a refresh token defined?
-   */
-  self._test.hasRefreshToken = hasRefreshToken;
-  function hasRefreshToken() {
-    return self._refreshToken !== '';
-  }
-
-  /*
-     Are we in application only mode?
-     Has the user not called `.auth()` yet?
-     Or has the user called `.deauth()`?
-   */
-  self._test.isApplicationOnly = isApplicationOnly;
   function isApplicationOnly() {
-    return !hasAuthenticatedData();
-  }
-
-  /*
-     Gets the authorization header for when we are using application only OAuth
-   */
-  self._test.getApplicationOnlyAuthorizationHeader = getApplicationOnlyAuthorizationHeader;
-  function getApplicationOnlyAuthorizationHeader() {
-    var bearer = self._applicationOnlyAuthData.token_type || 'bearer';
-    var accessToken = self._applicationOnlyAuthData.access_token || 'invalid_token';
-    return (bearer + ' ' + accessToken);
-  }
-
-  /*
-     Gets the authorization header for when we are authenticated with OAuth
-   */
-  self._test.getAuthenticatedAuthorizationHeader = getAuthenticatedAuthorizationHeader;
-  function getAuthenticatedAuthorizationHeader() {
-    var bearer = self._authenticatedAuthData.token_type || 'bearer';
-    var accessToken = self._authenticatedAuthData.access_token || 'invalid_token';
-    return (bearer + ' ' + accessToken);
+    return !self.oauth.isAuthenticated();
   }
 
   /*
@@ -118,9 +78,9 @@ function Snoocore(userConfiguration) {
     }
 
     if (endpoint.contextOptions.bypassAuth || isApplicationOnly()) {
-      headers['Authorization'] = getApplicationOnlyAuthorizationHeader();
+      headers['Authorization'] = self.oauthAppOnly.getAuthorizationHeader();
     } else {
-      headers['Authorization'] = getAuthenticatedAuthorizationHeader();
+      headers['Authorization'] = self.oauth.getAuthorizationHeader();
     }
 
     return headers;
@@ -212,7 +172,7 @@ function Snoocore(userConfiguration) {
       var data = JSON.parse(response._body);
 
       if (data.reason === 'USER_REQUIRED') {
-        var msg = 'Must be authenticated with a user to make this call'
+        var msg = 'Must be authenticated with a user to make this call';
         return when.reject(getResponseError(msg, response, endpoint));
       }
 
@@ -224,15 +184,15 @@ function Snoocore(userConfiguration) {
     if (response._status === 401) {
 
       var canRenewAccessToken = (isApplicationOnly() ||
-                                 hasRefreshToken() ||
+                                 self.oauth.hasRefreshToken() ||
                                  self._userConfig.isOAuthType('script'));
 
       if (!canRenewAccessToken) {
         self.emit('access_token_expired');
-        var msg = ('Access token has expired. Listen for ' +
-                   'the "access_token_expired" event to ' +
-                   'handle this gracefully in your app.');
-        return when.reject(getResponseError(msg, response, endpoint));
+        var errmsg = 'Access token has expired. Listen for ' +
+                     'the "access_token_expired" event to ' +
+                     'handle this gracefully in your app.';
+        return when.reject(getResponseError(errmsg, response, endpoint));
       } else {
 
         // Renew our access token
@@ -251,12 +211,12 @@ function Snoocore(userConfiguration) {
         // If we are application only, or are bypassing authentication
         // therefore we're using application only OAuth
         if (isApplicationOnly() || endpoint.contextOptions.bypassAuth) {
-          reauth = self.applicationOnlyAuth();
+          reauth = self.oauthAppOnly.applicationOnlyAuth();
         } else {
 
           // If we have been authenticated with a permanent refresh token use it
-          if (hasRefreshToken()) {
-            reauth = self.refresh(self._refreshToken);
+          if (self.oauth.hasRefreshToken()) {
+            reauth = self.oauth.refresh();
           }
 
           // If we are OAuth type script we can call `.auth` again
@@ -488,188 +448,6 @@ function Snoocore(userConfiguration) {
 
     return calls;
   };
-
-  /*
-     Get the Explicit Auth Url
-   */
-  self.getExplicitAuthUrl = function(state, options) {
-    var options = self._userConfig.oauth;
-    options.state = state || Math.ceil(Math.random() * 1000);
-    options.serverWWW = utils.thisOrThat(options.serverWWW,
-                                         self._userConfig.serverWWW);
-    return Snoocore.oauth.getExplicitAuthUrl(options);
-  };
-
-  /*
-     Get the Implicit Auth Url
-   */
-  self.getImplicitAuthUrl = function(state, options) {
-    var options = self._userConfig.oauth;
-    options.state = state || Math.ceil(Math.random() * 1000);
-    options.serverWWW = utils.thisOrThat(options.serverWWW,
-                                         self._userConfig.serverWWW);
-    return Snoocore.oauth.getImplicitAuthUrl(options);
-  };
-
-  /*
-     Authenticate with a refresh token
-   */
-  self.refresh = function(refreshToken, options) {
-    options = options || {};
-    var serverWWW = utils.thisOrThat(options.serverWWW,
-                                     self._userConfig.serverWWW);
-
-    return Snoocore.oauth.getAuthData('refresh', {
-      refreshToken: refreshToken,
-      key: self._userConfig.oauth.key,
-      secret: self._userConfig.oauth.secret,
-      redirectUri: self._userConfig.oauth.redirectUri,
-      scope: self._userConfig.oauth.scope,
-      serverWWW: serverWWW
-    }).then(function(authDataResult) {
-      // only set the internal refresh token if reddit
-      // agrees that it was OK and sends back authData
-      self._refreshToken = refreshToken;
-
-      self._authenticatedAuthData = authDataResult;
-    });
-  };
-
-  /*
-     Sets the auth data from the oauth module to allow OAuth calls.
-
-     This function can authenticate with:
-
-     - Script based OAuth (no parameter)
-     - Raw authentication data
-     - Authorization Code (request_type = "code")
-     - Access Token (request_type = "token") / Implicit OAuth
-     - Application Only. (void 0, true);
-   */
-  self.auth = function(authDataOrAuthCodeOrAccessToken,
-                       isApplicationOnly,
-                       options)
-  {
-    options = options || {};
-    var serverWWW = utils.thisOrThat(options.serverWWW,
-                                     self._userConfig.serverWWW);
-
-    var authData;
-
-    switch(self._userConfig.oauth.type) {
-      case 'script':
-        authData = Snoocore.oauth.getAuthData(self._userConfig.oauth.type, {
-          key: self._userConfig.oauth.key,
-          secret: self._userConfig.oauth.secret,
-          scope: self._userConfig.oauth.scope,
-          username: self._userConfig.oauth.username,
-          password: self._userConfig.oauth.password,
-          applicationOnly: isApplicationOnly,
-          serverWWW: serverWWW
-        });
-        break;
-
-      case 'explicit':
-        authData = Snoocore.oauth.getAuthData(self._userConfig.oauth.type, {
-          // auth code in this case
-          authorizationCode: authDataOrAuthCodeOrAccessToken,
-          key: self._userConfig.oauth.key,
-          secret: self._userConfig.oauth.secret,
-          redirectUri: self._userConfig.oauth.redirectUri,
-          scope: self._userConfig.oauth.scope,
-          applicationOnly: isApplicationOnly,
-          serverWWW: serverWWW
-        });
-        break;
-
-      case 'implicit':
-        if (isApplicationOnly) {
-          authData = Snoocore.oauth.getAuthData(self._userConfig.oauth.type, {
-            key: self._userConfig.oauth.key,
-            scope: self._userConfig.oauth.scope,
-            applicationOnly: true,
-            serverWWW: serverWWW
-          });
-        } else {
-          // Set the access token, no need to make another call to reddit
-          // using the `Snoocore.oauth.getAuthData` call
-          authData = {
-            // access token in this case
-            access_token: authDataOrAuthCodeOrAccessToken,
-            token_type: 'bearer',
-            expires_in: 3600,
-            scope: self._userConfig.oauth.scope
-          };
-        }
-        break;
-
-      default:
-        // assume that it is the authData
-        authData = authDataOrAuthCodeOrAccessToken;
-    }
-
-    return when(authData).then(function(authDataResult) {
-
-      if (typeof authDataResult !== 'object') {
-        return when.reject(new Error(
-          'There was a problem authenticating: ', authDataResult));
-      }
-
-      if (!isApplicationOnly) {
-        self._authenticatedAuthData = authDataResult;
-      } else {
-        self._applicationOnlyAuthData = authDataResult;
-      }
-
-      // if the explicit app used a perminant duration, send
-      // back the refresh token that will be used to re-authenticate
-      // later without user interaction.
-      if (authDataResult.refresh_token) {
-        // set the internal refresh token for automatic expiring
-        // access_token management
-        self._refreshToken = authDataResult.refresh_token;
-        return authDataResult.refresh_token;
-      }
-    });
-  };
-
-  /*
-     Only authenticates with Application Only OAuth
-   */
-  self.applicationOnlyAuth = function() {
-    return self.auth(void 0, true);
-  };
-
-  /*
-     Clears any authentication data & removes OAuth authentication
-
-     By default it will only remove the "access_token". Specify
-     the users refresh token to revoke that token instead.
-   */
-  self.deauth = function(refreshToken, options) {
-
-    options = options || {};
-    var serverWWW = utils.thisOrThat(options.serverWWW,
-                                     self._userConfig.serverWWW);
-
-    // no need to deauth if not authenticated
-    if (!hasAuthenticatedData()) {
-      return when.resolve();
-    }
-
-    var isRefreshToken = typeof refreshToken === 'string';
-    var token = isRefreshToken ? refreshToken : self._authenticatedAuthData.access_token;
-
-    return Snoocore.oauth.revokeToken(token, isRefreshToken, {
-      key: self._userConfig.oauth.key,
-      secret: self._userConfig.oauth.secret,
-      serverWWW: serverWWW
-    }).then(function() {
-      // clear internal authenticated auth data.
-      self._authenticatedAuthData = {};
-    });
-  };
-
 
   /*
      Make self.path the primary function that we return, but

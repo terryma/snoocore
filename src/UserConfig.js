@@ -34,7 +34,7 @@ function UserConfig(userConfiguration) {
 
   self.isNode = utils.thisOrThat(userConfiguration.browser, utils.isNode());
 
-
+  self.mobile = utils.thisOrThat(userConfiguration.mobile, false);
 
   // ** CALL MODIFICATIONS
   self.decodeHtmlEntities = utils.thisOrThat(

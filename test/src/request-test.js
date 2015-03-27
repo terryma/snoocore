@@ -7,14 +7,14 @@ var expect = chai.expect;
 
 var config = require('../config');
 
-var Snoocore = require('../../src/Snoocore');
+var request = require('../../src/request');
 
 describe('Request Test', function () {
 
   this.timeout(config.testTimeout);
 
   it('should GET resources from reddit', function() {
-    return Snoocore.request.https({
+    return request.https({
       hostname: 'www.reddit.com',
       path: '/r/askreddit/hot.json',
       method: 'GET'

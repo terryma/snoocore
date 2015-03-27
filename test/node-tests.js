@@ -5,7 +5,7 @@ var when = require('when');
 var config = require('./config');
 var tsi = require('./src/testServerInstance');
 
-describe('Snoocore Node Tests', function() {
+describe('[Node]', function() {
 
   this.timeout(config.testTimeout);
 
