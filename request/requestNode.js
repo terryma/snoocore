@@ -36,6 +36,12 @@ exports.https = function(options, formData) {
     options.path += '?' + data.buffer.toString();
   }
 
+  // make sure headers['X-Modhash'] has a defined value
+  if (options.headers.hasOwnProperty('X-Modhash') && 
+      typeof options.headers['X-Modhash'] === 'undefined') {
+    options.headers['X-Modhash'] = ''; 
+  }
+
   return when.promise(function(resolve, reject) {
 
     var req = https.request(options, function(res) {
