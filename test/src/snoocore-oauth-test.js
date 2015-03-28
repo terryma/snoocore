@@ -55,7 +55,7 @@ describe('Snoocore OAuth Test', function () {
               return reddit.refresh(refreshToken);
             });
           }).then(function() {
-            expect(reddit._authenticatedAuthData.access_token).to.be.a('string');
+            expect(reddit.oauth.isAuthenticated()).to.equal(true);
             // deauthenticae by removing the refresh token
             return reddit.deauth(refreshToken).then(function() {
               // does NOT automatically get a net access token as we have
@@ -71,7 +71,7 @@ describe('Snoocore OAuth Test', function () {
       });
     });
 
-    it('should auth, deauth (simulate expired access_token), call endpoint which will request a new access_token', function() {
+    it('should auth, deauth (simulate expired access token), call endpoint which will request a new access token', function() {
 
       var reddit = util.getExplicitInstance([ 'identity' ], 'permanent');
 
@@ -84,11 +84,11 @@ describe('Snoocore OAuth Test', function () {
           return reddit('/api/v1/me').get().then(function(data) {
             expect(data.name).to.be.a('string');
             // invalidate the current access token (as if it expired)
-            reddit._authenticatedAuthData.access_token = 'invalidToken';
+            reddit.oauth.accessToken = 'invalidToken';
           }).then(function() {
             // by calling this, it will automatically request a new refresh token
             // if the one we were using has expired. The call will take a bit
-            // longer to complete as it requests a new access_token first
+            // longer to complete as it requests a new access token first
             return reddit('/api/v1/me').get();
           }).then(function(data) {
             expect(data.name).to.be.a('string');
@@ -116,14 +116,14 @@ describe('Snoocore OAuth Test', function () {
         return reddit('/api/v1/me').get();
       }).then(function(data) {
         expect(data.name).to.be.a('string');
-        authTokenA = reddit._authenticatedAuthData.access_token;
+        authTokenA = reddit.oauth.accessToken;
         // "timeout" - simulate expired access token
-        reddit._authenticatedAuthData.access_token = 'invalidToken';
+        reddit.oauth.accessToken = 'invalidToken';
       }).then(function() {
         return reddit('/api/v1/me').get();
       }).then(function(data) {
         expect(data.name).to.be.a('string');
-        authTokenB = reddit._authenticatedAuthData.access_token;
+        authTokenB = reddit.oauth.accessToken;
         expect(authTokenA === authTokenB).to.equal(false);
       });
     });
@@ -209,29 +209,37 @@ describe('Snoocore OAuth Test', function () {
           expect(data.error).to.be.undefined;
           expect(data.name).to.be.a('string');
           // "expire" the access token
-          reddit._authenticatedAuthData.access_token = 'invalid_token';
+
+
+          reddit.oauth.accessToken = 'some_invalid_token_1234';
 
           return when.promise(function(resolve, reject) {
 
-            var i = 2;
+            var tokenExpired = false;
 
-            reddit.on('auth_token_expired', function() {
-              --i; if (i === 0) { resolve(); }
+            reddit.on('access_token_expired', function() {
+              tokenExpired = true;
             });
 
-            reddit('/api/v1/me').get().done(function() {
-              reject(); // should have failed, reject this promise if it didn't
-            }, function(error) {
-              --i; if (i === 0) { return resolve(); }
+            reddit('/api/v1/me').get().then(function() {
+              // Should fail! reject this promise if it did not.
+              return reject(new Error('should not GET'));
+            }).catch(function(error) {
+              // If the token did not expire, this is a fail!
+              if (!tokenExpired) {
+                return reject(new Error('did not fire when token expired'));
+              }
+
               expect(error.message.indexOf(
                 'Access token has expired. ' +
                 'Listen for the "access_token_expired" event to ' +
                 'handle this gracefully in your app.')).to.not.equal(-1);
+
               resolve();
             });
-
-
           });
+
+
         });
       });
 

@@ -38,7 +38,7 @@ function OAuth(userConfig) {
 
   self.accessToken = INVALID_TOKEN;
   self.refreshToken = INVALID_TOKEN;
-  self.tokenType = INVALID_TOKEN;
+  self.tokenType = 'bearer';
 
   self.scope = normalizeScope();
 

@@ -113,7 +113,6 @@ describe('Snoocore Error Test', function () {
     }).then(function() {
       throw new Error('expected this to fail (missing reddit gold)');
     }).catch(function(error) {
-      console.log(error.stack);
       return expect(error.message.indexOf(
         'Is the user missing reddit gold?')).to.not.equal(-1);
     });

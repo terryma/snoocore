@@ -8,7 +8,6 @@ exports.isNode = function() {
   typeof window === "undefined";
 };
 
-
 /*
    Return the value of `tryThis` unless it's undefined, then return `that`
  */

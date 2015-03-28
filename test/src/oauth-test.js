@@ -13,7 +13,7 @@ var config = require('../config');
 
 var OAuth = require('../../src/OAuth');
 
-describe.only(__filename, function (require) {
+describe(__filename, function (require) {
 
   this.timeout(config.testTimeout);
 
@@ -52,7 +52,7 @@ describe.only(__filename, function (require) {
       var userConfig = util.getExplicitUserConfig([ 'flair', 'foobar' ]);
       var oauth = new OAuth(userConfig);
       expect(oauth.getAuthorizationHeader()).to.equal(
-        OAuth.INVALID_TOKEN + ' ' + OAuth.INVALID_TOKEN);
+        'bearer ' + OAuth.INVALID_TOKEN);
     });
   });
 
@@ -427,7 +427,6 @@ describe.only(__filename, function (require) {
       return oauth.refresh().then(function() {
         done(new Error('should not get here & should fail'));
       }).catch(function(error) {
-        console.log(error);
         done();
       });
     });
@@ -521,7 +520,6 @@ describe.only(__filename, function (require) {
           return oauth.refresh(refreshToken).then(function() {
             done(new Error('should have errored'));
           }).catch(function(error) {
-            console.log(error);
             done();
           });
         });

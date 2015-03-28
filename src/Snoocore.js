@@ -14,15 +14,16 @@ var delay = require('when/delay');
 // Our modules
 var pkg = require('../package');
 var utils = require('./utils');
+var request = require('./request');
 
 var Endpoint = require('./Endpoint');
 var Throttle = require('./Throttle');
 var UserConfig = require('./UserConfig');
 var OAuth = require('./OAuth');
 
+
 Snoocore.version = pkg.version;
 
-Snoocore.request = require('./request');
 Snoocore.file = require('./request/file');
 
 Snoocore.when = when;
@@ -52,7 +53,7 @@ function Snoocore(userConfiguration) {
   // Expose OAuth functions in here
   self.getExplicitAuthUrl = self.oauth.getExplicitAuthUrl;
   self.getImplicitAuthUrl = self.oauth.getImplicitAuthUrl;
-  self.autuh = self.oauth.auth;
+  self.auth = self.oauth.auth;
   self.refresh = self.oauth.refresh;
   self.deauth = self.oauth.deauth;
 
@@ -183,12 +184,13 @@ function Snoocore(userConfiguration) {
 
     if (response._status === 401) {
 
+      self.emit('access_token_expired');
+
       var canRenewAccessToken = (isApplicationOnly() ||
                                  self.oauth.hasRefreshToken() ||
                                  self._userConfig.isOAuthType('script'));
 
       if (!canRenewAccessToken) {
-        self.emit('access_token_expired');
         var errmsg = 'Access token has expired. Listen for ' +
                      'the "access_token_expired" event to ' +
                      'handle this gracefully in your app.';
@@ -304,7 +306,7 @@ function Snoocore(userConfiguration) {
     }
 
     return self._throttle.wait().then(function() {
-      return Snoocore.request.https(requestOptions, endpoint.args);
+      return request.https(requestOptions, endpoint.args);
     }).then(function(response) {
       return handleRedditResponse(response, endpoint);
     });
