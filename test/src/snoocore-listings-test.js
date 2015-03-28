@@ -12,7 +12,7 @@ var util = require('./util');
 
 var Snoocore = require('../../src/Snoocore');
 
-describe('Snoocore Listings Test', function () {
+describe(__filename, function () {
 
   this.timeout(config.testTimeout);
 

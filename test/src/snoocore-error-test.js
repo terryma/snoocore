@@ -18,7 +18,7 @@ var util = require('./util');
 var Snoocore = require('../../src/Snoocore');
 var Endpoint = require('../../src/Endpoint');
 
-describe('Snoocore Error Test', function () {
+describe(__filename, function () {
 
   this.timeout(config.testTimeout);
 

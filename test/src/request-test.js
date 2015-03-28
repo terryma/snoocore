@@ -9,7 +9,7 @@ var config = require('../config');
 
 var request = require('../../src/request');
 
-describe('Request Test', function () {
+describe(__filename, function () {
 
   this.timeout(config.testTimeout);
 

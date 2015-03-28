@@ -14,7 +14,7 @@ var util = require('./util');
 
 var Snoocore = require('../../src/Snoocore');
 
-describe('Snoocore OAuth Test', function () {
+describe(__filename, function () {
 
   this.timeout(config.testTimeout);
 
