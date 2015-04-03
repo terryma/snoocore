@@ -1,5 +1,7 @@
-/* global describe, it, beforeEach */
+/* global describe, it, before, beforeEach */
 
+var fs = require('fs');
+var path = require('path');
 var when = require('when');
 var delay = require('when/delay');
 
@@ -8,8 +10,8 @@ var chaiAsPromised = require('chai-as-promised');
 chai.use(chaiAsPromised);
 var expect = chai.expect;
 
-var config = require('../config');
 var tsi = require('./testServerInstance');
+var config = require('../config');
 var util = require('./util');
 
 var Snoocore = require('../../src/Snoocore');
@@ -18,18 +20,192 @@ describe(__filename, function () {
 
   this.timeout(config.testTimeout);
 
-  describe('Unauthenticated test cases', function() {
+  it('should get resources when logged in', function() {
+    var reddit = util.getScriptInstance([ 'identity' ]);
+    return reddit.auth().then(reddit('/api/v1/me').get).then(function(result) {
+      expect(result.name).to.equal(config.reddit.login.username);
+    });
+  });
 
-    it('application only oauth calling a user specific endpoint should fail', function() {
-      var reddit = util.getScriptInstance();
-      return reddit('/api/v1/me').get().then(function(data) {
-        throw new Error('should not pass, expect to fail with error');
-      }).catch(function(error) {
-        return expect(error.message.indexOf(
-          'Must be authenticated with a user to make this call')).to.not.equal(-1);
+  it('should GET resources when logged in (respect parameters)', function() {
+    var reddit = util.getScriptInstance([ 'mysubreddits' ]);
+
+    return reddit.auth().then(function() {
+      return reddit('/subreddits/mine/$where').get({
+        $where: 'subscriber',
+        limit: 2
+      });
+    }).then(function(result) {
+      expect(result.data.children.length).to.equal(2);
+    });
+  });
+
+  it('should be able to upload files in Node', function() {
+    var reddit = util.getScriptInstance([ 'modconfig' ]);
+    var appIcon = path.join(__dirname, 'img', 'appicon.png');
+
+    return reddit.auth().then(function() {
+      return reddit('/r/$subreddit/api/delete_sr_header').post({
+        $subreddit: config.reddit.testSubreddit
+      });
+    }).then(function() {
+      return reddit('/r/$subreddit/api/upload_sr_img').post({
+        $subreddit: config.reddit.testSubreddit,
+        file: Snoocore.file('appicon.png', 'image/png', fs.readFileSync(appIcon)),
+        header: 1,
+        img_type: 'png',
+        name: 'test-foo-bar'
+      });
+    });
+  });
+
+  it('should sub/unsub from a subreddit (POST)', function() {
+
+    var reddit = util.getScriptInstance([ 'read', 'subscribe' ]);
+
+    return reddit.auth().then(function() {
+      return reddit('/r/$subreddit/about').get({
+        $subreddit: config.reddit.testSubreddit
+      });
+    }).then(function(response) {
+
+      var subName = response.data.name;
+      var isSubbed = response.data.user_is_subscriber;
+
+
+
+      return reddit('api/subscribe').post({
+        action: isSubbed ? 'unsub' : 'sub',
+        sr: subName
+      }).then(function() {
+        return reddit('/r/$subreddit/about').get({
+          $subreddit: config.reddit.testSubreddit
+        });
+      }).then(function(secondResp) {
+        // should have subbed / unsubbed from the subreddit
+        expect(secondResp.data.user_is_subscriber).to.equal(!isSubbed);
       });
     });
 
+  });
+
+  it('should auto-fill api_type to be "json"', function() {
+
+    var reddit = util.getScriptInstance([ 'read', 'modconfig' ]);
+
+    return reddit.auth().then(function() {
+      return reddit('/r/$subreddit/about/edit.json').get({
+        $subreddit: config.reddit.testSubreddit
+      });
+    }).then(function(result) {
+      var data = result.data;
+      return reddit('/api/site_admin').post(data);
+    }).catch(function(error) {
+      expect(error.message.indexOf('BAD_SR_NAME')).to.not.equal(-1);
+    });
+  });
+
+  // Can only test this in node based environments. The browser tests
+  // are unable to unset the cookies (when using user/pass auth).
+  //
+  // Browsers are unable to authenticate anyway, unless using a chrome
+  // extension. If this is the case, they should use OAuth for authentication
+  // and then bypass will work.
+  it('should bypass authentication for calls when set', function() {
+
+    var reddit = util.getScriptInstance([ 'read', 'subscribe' ]);
+
+    return reddit.auth().then(function() {
+      return reddit('/r/$subreddit/about').get({
+        $subreddit: config.reddit.testSubreddit
+      });
+    }).then(function(response) {
+      var subName = response.data.name;
+      var isSubbed = response.data.user_is_subscriber;
+
+      // make sure the user is subscribed
+      return isSubbed ? when.resolve() : reddit('/api/subscribe').post({
+        action: 'sub',
+        sr: subName
+      });
+
+    }).then(function() {
+      return reddit('/r/$subreddit/about').get({
+        $subreddit: config.reddit.testSubreddit
+      });
+    }).then(function(result) {
+      // check that they are subscribed!
+      expect(result.data.user_is_subscriber).to.equal(true);
+      // run another request, but make it unauthenticated (bypass)
+      return reddit('/r/$subreddit/about').get(
+        { $subreddit: config.reddit.testSubreddit },
+        { bypassAuth: true });
+    }).then(function(result) {
+      expect(result.data.user_is_subscriber).to.not.equal(true);
+    });
+  });
+
+  it('should GET resources while not logged in', function() {
+
+    var reddit = util.getImplicitInstance([ 'read' ]);
+
+    return reddit('/r/$subreddit/new').get({
+      $subreddit: 'pcmasterrace'
+    }).then(function(result) {
+      var subreddit = result.data.children[0].data.subreddit;
+      expect(subreddit).to.equal('pcmasterrace');
+    });
+  });
+
+  it('should not decode html', function() {
+    var reddit = util.getScriptInstance([ 'read' ]);
+    return reddit('/r/snoocoreTest/about.json').get().then(function(result) {
+      expect(result.data.description_html.indexOf('&lt;/p&gt;')).to.not.equal(-1);
+    });
+  });
+
+  it('should decode html on a per call basis', function() {
+    var reddit = util.getScriptInstance([ 'read' ]);
+    return reddit('/r/snoocoreTest/about.json').get(null, {
+      decodeHtmlEntities: true
+    }).then(function(result) {
+      expect(result.data.description_html.indexOf('</p>')).to.not.equal(-1);
+    });
+  });
+
+  it('should decode html globally & respect per call override', function() {
+
+    var reddit = util.getScriptInstance([ 'read' ]);
+
+    var secondReddit = new Snoocore({
+      userAgent: 'foobar',
+      decodeHtmlEntities: true,
+      oauth: {
+        type: 'implicit',
+        key: config.reddit.installed.key,
+        redirectUri: '_',
+        scope: [ 'read' ]
+      }
+    });
+
+    return secondReddit('/r/snoocoreTest/about.json').get().then(function(result) {
+      expect(result.data.description_html.indexOf('</p>')).to.not.equal(-1);
+
+      // override global 'true'
+      return reddit('/r/snoocoreTest/about.json').get(null, { decodeHtmlEntities: false });
+    }).then(function(result) {
+      expect(result.data.description_html.indexOf('&lt;/p&gt;')).to.not.equal(-1);
+    });
+  });
+
+  it('application only oauth calling a user specific endpoint should fail', function() {
+    var reddit = util.getScriptInstance();
+    return reddit('/api/v1/me').get().then(function(data) {
+      throw new Error('should not pass, expect to fail with error');
+    }).catch(function(error) {
+      return expect(error.message.indexOf(
+        'Must be authenticated with a user to make this call')).to.not.equal(-1);
+    });
   });
 
   describe('Explicit internal configuration (duration permanent)', function() {
@@ -314,6 +490,5 @@ describe(__filename, function () {
     });
 
   });
-
 
 });

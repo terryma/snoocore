@@ -25,14 +25,12 @@ describe('[Node]', function() {
     });
   });
 
-  require('./src/oauth-test');
-  require('./src/request-test');
-  require('./src/snoocore-behavior-noauth-test');
-  require('./src/snoocore-behavior-test');
-  require('./src/snoocore-error-test');
-  require('./src/snoocore-internal-test');
-  require('./src/snoocore-listings-test');
-  require('./src/snoocore-oauth-test');
   require('./src/Endpoint-test');
+  require('./src/OAuth-test');
+  require('./src/RedditRequest-test.js');
+  require('./src/Request-test');
   require('./src/Throttle-test');
+  require('./src/UserConfig-test.js');
+  require('./src/behavior-test.js');
+  
 });

@@ -2,6 +2,10 @@ var path = require('path');
 
 var Snoocore = require('../../src/Snoocore');
 var UserConfig = require('../../src/UserConfig');
+var Throttle = require('../../src/Throttle');
+var Request = require('../../src/Request');
+var OAuth = require('../../src/OAuth');
+var RedditRequest = require('../../src/RedditRequest');
 
 var config = require('../config');
 
@@ -15,6 +19,11 @@ exports.isNode = function() {
     typeof module === 'object' &&
     typeof window === 'undefined');
 }
+
+
+// - - -
+// UserConfig instances
+//
 
 exports.getScriptUserConfig = function(scopes) {
   return new UserConfig({
@@ -56,6 +65,44 @@ exports.getImplicitUserConfig = function(scopes) {
     }
   });
 };
+
+
+// - - -
+// RedditRequest Instances
+//
+
+exports.getExplicitRedditRequest = function(scopes, duration) {
+  var throttle = new Throttle(1000);
+  var request = new Request(throttle);
+  var userConfig = exports.getExplicitUserConfig(scopes, duration);
+  var oauth = new OAuth(userConfig, request);
+  var oauthAppOnly = new OAuth(userConfig, request);
+  return new RedditRequest(userConfig, request, oauth, oauthAppOnly);
+};
+
+exports.getImplicitRedditRequest = function(scopes) {
+  var throttle = new Throttle(1000);
+  var request = new Request(throttle);
+  var userConfig = exports.getImplicitUserConfig(scopes);
+  var oauth = new OAuth(userConfig, request);
+  var oauthAppOnly = new OAuth(userConfig, request);
+  return new RedditRequest(userConfig, request, oauth, oauthAppOnly);
+};
+
+exports.getScriptRedditRequest = function(scopes) {
+  var throttle = new Throttle(1000);
+  var request = new Request(throttle);
+  var userConfig = exports.getScriptUserConfig(scopes);
+  var oauth = new OAuth(userConfig, request);
+  var oauthAppOnly = new OAuth(userConfig, request);
+  return new RedditRequest(userConfig, request, oauth, oauthAppOnly);
+};
+
+
+
+// - - -
+// Snoocore instances
+//
 
 exports.getExplicitInstance = function(scopes, duration) {
   return new Snoocore({

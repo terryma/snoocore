@@ -12,15 +12,20 @@ var util = require('./util');
 var config = require('../config');
 
 var OAuth = require('../../src/OAuth');
+var Throttle = require('../../src/Throttle');
+var Request = require('../../src/Request');
 
 describe(__filename, function (require) {
 
   this.timeout(config.testTimeout);
 
+  var throttle = new Throttle(1000);
+  var request = new Request(throttle);
+
   describe('normalizeScope()', function() {
     it('should convert an array of scopes into a CSV string', function() {
       var userConfig = util.getExplicitUserConfig([ 'flair', 'foobar' ]);
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
       expect(oauth.scope).to.equal('flair,foobar');
     });
   });
@@ -28,7 +33,7 @@ describe(__filename, function (require) {
   describe('hasRefreshToken()', function() {
     it('should not have a refresh token starting out', function() {
       var userConfig = util.getExplicitUserConfig([ 'flair', 'foobar' ]);
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
       expect(oauth.hasRefreshToken()).to.equal(false);
     });
 
@@ -39,7 +44,7 @@ describe(__filename, function (require) {
   describe('isAuthenticated()', function() {
     it('should not be authenticated initially', function() {
       var userConfig = util.getExplicitUserConfig([ 'flair', 'foobar' ]);
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
       expect(oauth.isAuthenticated()).to.equal(false);
     });
 
@@ -50,7 +55,7 @@ describe(__filename, function (require) {
   describe('getAuthorizationHeader()', function() {
     it('should initially be set to invalid token', function() {
       var userConfig = util.getExplicitUserConfig([ 'flair', 'foobar' ]);
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
       expect(oauth.getAuthorizationHeader()).to.equal(
         'bearer ' + OAuth.INVALID_TOKEN);
     });
@@ -59,7 +64,7 @@ describe(__filename, function (require) {
   describe('getExplicitAuthUrl()', function() {
     it('should get a proper authorization url (WEB/INSTALLED)', function() {
       var userConfig = util.getExplicitUserConfig([ 'identity' ]);
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
       var url = oauth.getExplicitAuthUrl('foo');
 
       expect(url.indexOf('https://www.reddit.com/api/v1/authorize?')).to.not.equal(-1);
@@ -73,7 +78,7 @@ describe(__filename, function (require) {
 
     it('should get a proper authorization url (mobile friendly) (WEB/INSTALLED)', function() {
       var userConfig = util.getExplicitUserConfig([ 'identity' ], void 0, true);
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
       var url = oauth.getExplicitAuthUrl('foo');
 
       expect(url.indexOf('https://www.reddit.com/api/v1/authorize.compact?')).to.not.equal(-1);
@@ -91,7 +96,7 @@ describe(__filename, function (require) {
         'read',
         'subscribe'
       ]);
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
       var url = oauth.getExplicitAuthUrl('foo');
 
       expect(url.indexOf('https://www.reddit.com/api/v1/authorize?')).to.not.equal(-1);
@@ -109,7 +114,7 @@ describe(__filename, function (require) {
     it('should get back an implicit grant authorization url', function() {
 
       var userConfig = util.getImplicitUserConfig([ 'identity' ]);
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
       var url = oauth.getImplicitAuthUrl('foo');
 
       expect(url.indexOf('https://www.reddit.com/api/v1/authorize?')).to.not.equal(-1);
@@ -125,7 +130,7 @@ describe(__filename, function (require) {
 
     it('should get the explicit auth url', function() {
       var userConfig = util.getExplicitUserConfig([ 'identity' ]);
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
 
       // EXPLICIT
       var url = oauth.getAuthUrl('foo');
@@ -141,7 +146,7 @@ describe(__filename, function (require) {
 
     it('should get the implicit auth url', function() {
       var userConfig = util.getImplicitUserConfig([ 'identity' ]);
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
 
       // IMPLICIT
       var url = oauth.getAuthUrl('foo');
@@ -159,7 +164,7 @@ describe(__filename, function (require) {
   describe('getAppOnlyTokenData()', function() {
     it('get the correct data for script / explicit', function() {
       var userConfig = util.getExplicitUserConfig([ 'identity' ]);
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
 
       expect(oauth.getAppOnlyTokenData()).to.eql({
         scope: 'identity',
@@ -169,7 +174,7 @@ describe(__filename, function (require) {
 
     it('get the correct data for implicit', function() {
       var userConfig = util.getImplicitUserConfig([ 'identity' ]);
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
 
       expect(oauth.getAppOnlyTokenData()).to.eql({
         scope: 'identity',
@@ -182,7 +187,7 @@ describe(__filename, function (require) {
   describe('getAuthenticatedTokenData()', function() {
     it('should get the correct data for script', function() {
       var userConfig = util.getScriptUserConfig([ 'identity' ]);
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
 
       expect(oauth.getAuthenticatedTokenData()).to.eql({
         scope: 'identity',
@@ -194,7 +199,7 @@ describe(__filename, function (require) {
 
     it('should get the correct data for explicit', function() {
       var userConfig = util.getExplicitUserConfig([ 'identity' ]);
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
 
       expect(oauth.getAuthenticatedTokenData('some_auth_code')).to.eql({
         scope: 'identity',
@@ -210,7 +215,7 @@ describe(__filename, function (require) {
   describe('getRefreshTokenData()', function() {
     it('should get the correct data for a refresh token', function() {
       var userConfig = util.getExplicitUserConfig([ 'identity' ]);
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
 
       expect(oauth.getRefreshTokenData('a_refresh_token')).to.eql({
         scope: 'identity',
@@ -225,7 +230,7 @@ describe(__filename, function (require) {
     it('(Explicit) it should get an access token', function() {
 
       var userConfig = util.getExplicitUserConfig([ 'identity' ]);
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
       var url = oauth.getAuthUrl('foo');
 
       return tsi.standardServer.allowAuthUrl(url).then(function(params) {
@@ -254,7 +259,7 @@ describe(__filename, function (require) {
     it('(Script) should get an access token', function() {
 
       var userConfig = util.getScriptUserConfig();
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
 
       return oauth.getToken(OAuth.TOKEN.SCRIPT).then(function(authData) {
         expect(authData).to.be.an('object');
@@ -271,7 +276,7 @@ describe(__filename, function (require) {
     it('(Script + 1 scope) should get an access token', function() {
 
       var userConfig = util.getScriptUserConfig([ 'flair' ]);
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
 
       return oauth.getToken(OAuth.TOKEN.SCRIPT).then(function(authData) {
         expect(authData).to.be.an('object');
@@ -287,7 +292,7 @@ describe(__filename, function (require) {
 
     it('(Script + multiple scopes) should get an access token', function() {
       var userConfig = util.getScriptUserConfig([ 'flair', 'identity' ]);
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
 
       return oauth.getToken(OAuth.TOKEN.SCRIPT).then(function(authData) {
         expect(authData).to.be.an('object');
@@ -303,7 +308,7 @@ describe(__filename, function (require) {
 
     it('(Application only implicit) should get Application only access token', function() {
       var userConfig = util.getImplicitUserConfig();
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
 
       return oauth.getToken(OAuth.TOKEN.APP_ONLY).then(function(authData) {
         expect(authData).to.be.an('object');
@@ -320,7 +325,7 @@ describe(__filename, function (require) {
     it('(Application only script/web) should get Application only access token', function() {
 
       var userConfig = util.getScriptUserConfig();
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
 
       return oauth.getToken(OAuth.TOKEN.APP_ONLY).then(function(authData) {
         expect(authData).to.be.an('object');
@@ -340,7 +345,7 @@ describe(__filename, function (require) {
 
     it('application only auth (explicit/script)', function() {
       var userConfig = util.getScriptUserConfig();
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
 
       return oauth.auth(void 0, true).then(function(authData) {
         expect(oauth.isAuthenticated()).to.equal(true);
@@ -349,7 +354,7 @@ describe(__filename, function (require) {
 
     it('script oauth', function() {
       var userConfig = util.getScriptUserConfig();
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
 
       return oauth.auth().then(function() {
         expect(oauth.isAuthenticated()).to.equal(true);
@@ -358,7 +363,7 @@ describe(__filename, function (require) {
 
     it('explicit oauth (duration temporary)', function() {
       var userConfig = util.getExplicitUserConfig([ 'identity' ]);
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
       var url = oauth.getAuthUrl('foo');
 
       return tsi.standardServer.allowAuthUrl(url).then(function(params) {
@@ -377,7 +382,7 @@ describe(__filename, function (require) {
 
     it('explicit oauth (duration permanent)', function() {
       var userConfig = util.getExplicitUserConfig([ 'identity' ], 'permanent');
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
       var url = oauth.getAuthUrl('foo');
 
       return tsi.standardServer.allowAuthUrl(url).then(function(params) {
@@ -393,7 +398,7 @@ describe(__filename, function (require) {
 
     it('implicit oauth', function() {
       var userConfig = util.getImplicitUserConfig([ 'identity' ]);
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
       var url = oauth.getAuthUrl('foo');
 
       return tsi.standardServer.allowAuthUrl(url).then(function(params) {
@@ -411,7 +416,7 @@ describe(__filename, function (require) {
   describe('applicationOnlyOAuth()', function() {
     it('application only auth (script)', function() {
       var userConfig = util.getScriptUserConfig();
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
       return oauth.applicationOnlyAuth().then(function(authData) {
         expect(oauth.isAuthenticated()).to.equal(true);
       });
@@ -421,7 +426,7 @@ describe(__filename, function (require) {
   describe('refresh()', function() {
     it('should not refresh', function(done) {
       var userConfig = util.getExplicitUserConfig([ 'identity' ], 'permanent');
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
       var url = oauth.getAuthUrl('foo');
 
       return oauth.refresh().then(function() {
@@ -433,7 +438,7 @@ describe(__filename, function (require) {
 
     it('should refresh the access token (internal / same instance)', function() {
       var userConfig = util.getExplicitUserConfig([ 'identity' ], 'permanent');
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
       var url = oauth.getAuthUrl('foo');
 
       return tsi.standardServer.allowAuthUrl(url).then(function(params) {
@@ -453,8 +458,8 @@ describe(__filename, function (require) {
 
     it('should refresh the access token (new instance)', function() {
       var userConfig = util.getExplicitUserConfig([ 'identity' ], 'permanent');
-      var oauthA = new OAuth(userConfig);
-      var oauthB = new OAuth(userConfig);
+      var oauthA = new OAuth(userConfig, request);
+      var oauthB = new OAuth(userConfig, request);
       var url = oauthA.getAuthUrl('foo');
 
       return tsi.standardServer.allowAuthUrl(url).then(function(params) {
@@ -481,7 +486,7 @@ describe(__filename, function (require) {
   describe('deauth()', function() {
     it('should auth (script), deauth, and not reauth', function() {
       var userConfig = util.getScriptUserConfig();
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
       return oauth.auth().then(function(authData) {
         expect(oauth.isAuthenticated()).to.equal(true);
         return oauth.deauth();
@@ -492,7 +497,7 @@ describe(__filename, function (require) {
 
     it('should auth (explicit), deauth, and reauth with refresh token', function(done) {
       var userConfig = util.getExplicitUserConfig([ 'identity' ], 'permanent');
-      var oauth = new OAuth(userConfig);
+      var oauth = new OAuth(userConfig, request);
       var url = oauth.getAuthUrl('foo');
 
       return tsi.standardServer.allowAuthUrl(url).then(function(params) {

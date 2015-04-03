@@ -7,13 +7,18 @@ var expect = chai.expect;
 
 var config = require('../config');
 
-var request = require('../../src/request');
+var Throttle = require('../../src/throttle');
+var Request = require('../../src/Request');
 
 describe(__filename, function () {
 
   this.timeout(config.testTimeout);
 
   it('should GET resources from reddit', function() {
+
+    var throttle = new Throttle(1000);
+    var request = new Request(throttle);
+
     return request.https({
       hostname: 'www.reddit.com',
       path: '/r/askreddit/hot.json',

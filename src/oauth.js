@@ -4,7 +4,6 @@ var urlLib = require('url');
 
 var when = require('when');
 
-var request = require('./request');
 var utils = require('./utils');
 
 module.exports = OAuth;
@@ -31,10 +30,12 @@ var INVALID_TOKEN = module.exports.INVALID_TOKEN = 'invalid_token';
    Applicaton Only and an Authenticated Session.
 
  */
-function OAuth(userConfig) {
+function OAuth(userConfig, request) {
   var self = this;
 
   self._userConfig = userConfig;
+
+  self._request = request;
 
   self.accessToken = INVALID_TOKEN;
   self.refreshToken = INVALID_TOKEN;
@@ -243,7 +244,7 @@ function OAuth(userConfig) {
 
     headers['Authorization'] = auth;
 
-    return request.https({
+    return self._request.https({
       method: 'POST',
       hostname: self._userConfig.serverWWW,
       path: '/api/v1/access_token',
@@ -392,7 +393,7 @@ function OAuth(userConfig) {
       self._userConfig.oauth.key + ':' +
       self._userConfig.oauth.secret)).toString('base64');
 
-    return request.https({
+    return self._request.https({
       method: 'POST',
       hostname: self._userConfig.serverWWW,
       path: '/api/v1/revoke_token',
