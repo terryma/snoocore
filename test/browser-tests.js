@@ -4,7 +4,7 @@ var when = require('when');
 
 var config = require('./config');
 
-describe('Snoocore Browser Tests', function() {
+describe('[Browser]', function() {
 
   this.timeout(config.testTimeout);
 
@@ -16,8 +16,12 @@ describe('Snoocore Browser Tests', function() {
     return when.resolve().delay(1000000);
   });
 
-  require('./src/snoocore-behavior-noauth-test');
-  require('./src/request-test');
-  require('./src/snoocore-internal-test');
-  require('./src/snoocore-listings-test');
+  require('./src/Endpoint-test');
+  require('./src/OAuth-test');
+  require('./src/RedditRequest-test.js');
+  require('./src/Request-test');
+  require('./src/Throttle-test');
+  require('./src/UserConfig-test.js');
+  require('./src/behavior-test.js');
+
 });

@@ -11,7 +11,7 @@ import form from './form';
 /*
    Form data can be a raw string, or an object containing key/value pairs
  */
-exports.https = function(options, formData) {
+export default function(options, formData) {
   // console.log('\n\n\n\n');
   // console.log('>>> request');
   // console.log(options.method + ': ' + options.hostname + options.path);
@@ -69,4 +69,4 @@ exports.https = function(options, formData) {
     return res;
   });
 
-};
+}

@@ -51,6 +51,10 @@
     "client"
   ],
   "scripts": {
-    "test": "./node_modules/.bin/gulp mocha"
+    "test": "./node_modules/.bin/gulp mocha",
+    "karma": "./node_modules/.bin/gulp karma"
+  },
+  "browser": {
+    "./src/https/httpsNode.js": "./src/https/httpsBrowser.js"
   }
 }

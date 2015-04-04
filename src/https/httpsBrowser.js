@@ -7,9 +7,8 @@ import when from 'when';
 import form from './form';
 
 // https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest#getAllResponseHeaders()
-throw new Error('@TODO normalize the request headers to match node.js');
 
-exports.https = function(options, formData) {
+export default function(options, formData) {
 
   options = options || {};
   options.headers = options.headers || {};
@@ -41,6 +40,8 @@ exports.https = function(options, formData) {
         if (x.readyState > 3) {
           // Normalize the result to match how requestNode.js works
 
+          console.log(x.getAllResponseHeaders());
+
           return resolve({
             _body: x.responseText,
             _status: x.status,
@@ -56,5 +57,4 @@ exports.https = function(options, formData) {
     }
 
   });
-
-};
+}

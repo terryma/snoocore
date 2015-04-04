@@ -377,7 +377,7 @@ describe(__filename, function () {
 
   describe('path()', function() {
 
-    it('should allow a "path" syntax', function() {
+    it.only('should allow a "path" syntax', function() {
 
       var redditRequest = util.getScriptRedditRequest([ 'read' ]);
 

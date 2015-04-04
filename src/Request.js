@@ -1,9 +1,12 @@
 
 import utils from './utils';
 
-var httpsRequest = module.exports = utils.isNode() ?
-                                  require('./https/httpsNode') :
-                                  require('./https/httpsBrowser');
+// Browserify switches it to httpsBrowser for us when building
+// for browsers.
+//
+// This is defined in `package.json`
+import https from './https/httpsNode';
+
 module.exports = Request;
 function Request(throttle) {
   var self = this;
@@ -12,7 +15,7 @@ function Request(throttle) {
 
   self.https = function(options, formData) {
     return self._throttle.wait().then(function() {
-      return httpsRequest.https(options, formData);
+      return https(options, formData);
     });
   };
   

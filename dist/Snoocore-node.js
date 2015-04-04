@@ -1033,7 +1033,15 @@ var _utils = require('./utils');
 
 var _utils2 = _interopRequireWildcard(_utils);
 
-var httpsRequest = module.exports = _utils2['default'].isNode() ? require('./https/httpsNode') : require('./https/httpsBrowser');
+// Browserify switches it to httpsBrowser for us when building
+// for browsers.
+//
+// This is defined in `package.json`
+
+var _https = require('./https/httpsNode');
+
+var _https2 = _interopRequireWildcard(_https);
+
 module.exports = Request;
 function Request(throttle) {
   var self = this;
@@ -1453,6 +1461,9 @@ exports.getData = function (formData) {
 
 var _interopRequireWildcard = function (obj) { return obj && obj.__esModule ? obj : { 'default': obj }; };
 
+Object.defineProperty(exports, '__esModule', {
+  value: true
+});
 //
 // Browser requests, mirrors the syntax of the node requests
 //
@@ -1466,9 +1477,8 @@ var _form = require('./form');
 var _form2 = _interopRequireWildcard(_form);
 
 // https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest#getAllResponseHeaders()
-throw new Error('@TODO normalize the request headers to match node.js');
 
-exports.https = function (options, formData) {
+exports['default'] = function (options, formData) {
 
   options = options || {};
   options.headers = options.headers || {};
@@ -1500,6 +1510,8 @@ exports.https = function (options, formData) {
         if (x.readyState > 3) {
           // Normalize the result to match how requestNode.js works
 
+          console.log(x.getAllResponseHeaders());
+
           return resolve({
             _body: x.responseText,
             _status: x.status,
@@ -1514,10 +1526,15 @@ exports.https = function (options, formData) {
     }
   });
 };
+
+module.exports = exports['default'];
 'use strict';
 
 var _interopRequireWildcard = function (obj) { return obj && obj.__esModule ? obj : { 'default': obj }; };
 
+Object.defineProperty(exports, '__esModule', {
+  value: true
+});
 //
 // Node requests
 //
@@ -1537,7 +1554,8 @@ var _form2 = _interopRequireWildcard(_form);
 /*
    Form data can be a raw string, or an object containing key/value pairs
  */
-exports.https = function (options, formData) {
+
+exports['default'] = function (options, formData) {
   // console.log('\n\n\n\n');
   // console.log('>>> request');
   // console.log(options.method + ': ' + options.hostname + options.path);
@@ -1598,4 +1616,6 @@ exports.https = function (options, formData) {
     return res;
   });
 };
+
+module.exports = exports['default'];
 //# sourceMappingURL=Snoocore-node.js.map
