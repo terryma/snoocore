@@ -1,10 +1,10 @@
-var querystring = require('querystring');
-var util = require('util');
-var urlLib = require('url');
+import querystring from 'querystring';
+import util from 'util';
+import urlLib from 'url';
 
-var when = require('when');
+import when from 'when';
 
-var utils = require('./utils');
+import utils from './utils';
 
 module.exports = OAuth;
 

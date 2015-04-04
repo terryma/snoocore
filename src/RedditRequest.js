@@ -1,17 +1,17 @@
 
 // node modules
-var util = require('util');
-var events = require('events');
-var urlLib = require('url');
+import util from 'util';
+import events from 'events';
+import urlLib from 'url';
 
 // npm modules
-var when = require('when');
-var delay = require('when/delay');
-var he = require('he');
+import when from 'when';
+import delay from 'when/delay';
+import he from 'he';
 
 // our modules
-var Request = require('./Request');
-var Endpoint = require('./Endpoint');
+import Request from './Request';
+import Endpoint from './Endpoint';
 
 /*
    A collection of functions that deal with requesting data from the

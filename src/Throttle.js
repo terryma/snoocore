@@ -11,8 +11,8 @@
 
  */
 
-var when = require('when');
-var delay = require('when/delay');
+import when from 'when';
+import delay from 'when/delay';
 
 module.exports = Throttle;
 function Throttle(throttleMs) {

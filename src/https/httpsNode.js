@@ -2,11 +2,11 @@
 // Node requests
 //
 
-var https = require('https');
+import https from 'https';
 
-var when = require('when');
+import when from 'when';
 
-var form = require('./form');
+import form from './form';
 
 /*
    Form data can be a raw string, or an object containing key/value pairs

@@ -90,7 +90,7 @@ gulp.task('bundleBrowser', function() {
 
 
 gulp.task('bundleNode', function(done) {
-  return gulp.src('./src/Snoocore.js')
+  return gulp.src('./src/**/*.js')
              .pipe(sourcemaps.init())
              .pipe(babel())
              .pipe(concat('Snoocore-node.js'))

@@ -1,4 +1,4 @@
-{
+module.exports = {
   "post/api/new_captcha": "a",
   "post/api/clearflairtemplates": "a",
   "post/r/$/api/clearflairtemplates": "a",
@@ -55,4 +55,4 @@
   "post/r/$/api/friend": "a",
   "post/api/setpermissions": "a",
   "post/r/$/api/setpermissions": "a"
-}
+};

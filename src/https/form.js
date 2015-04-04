@@ -1,8 +1,7 @@
 
+import querystring from 'querystring';
 
-var querystring = require('querystring');
-
-var when = require('when');
+import when from 'when';
 
 exports.getSectionBoundary = function(boundary) {
   return '--' + boundary;

@@ -1,4 +1,4 @@
-var utils = require('./utils');
+import utils from './utils';
 
 /*
    A class made up of the user configuration.
@@ -7,7 +7,7 @@ var utils = require('./utils');
 
    Provides some helper functons for getting user set values.
  */
-module.exports = UserConfig
+module.exports = UserConfig;
 function UserConfig(userConfiguration) {
 
   var self = this;

@@ -2,9 +2,9 @@
 // Browser requests, mirrors the syntax of the node requests
 //
 
-var when = require('when');
+import when from 'when';
 
-var form = require('./form');
+import form from './form';
 
 // https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest#getAllResponseHeaders()
 throw new Error('@TODO normalize the request headers to match node.js');

@@ -1,9 +1,9 @@
-var path = require('path');
+import path from 'path';
 
-var utils = require('./utils');
+import utils from './utils';
 
 // Precompiled list of properties for specific endpoints
-var endpointProperties = require('../build/endpointProperties');
+import endpointProperties from '../build/endpointProperties';
 
 // Build a more parseable tree for the properties. Built here vs. simply
 // requiring an already build tree to save on bytes.

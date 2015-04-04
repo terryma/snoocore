@@ -1,4 +1,5 @@
 /* global describe, it */
+require("babel/register");
 
 var when = require('when');
 var delay = require('when/delay');

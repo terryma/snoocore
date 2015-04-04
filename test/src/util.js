@@ -18,7 +18,7 @@ exports.isNode = function() {
     typeof exports === 'object' &&
     typeof module === 'object' &&
     typeof window === 'undefined');
-}
+};
 
 
 // - - -

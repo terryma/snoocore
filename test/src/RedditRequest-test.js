@@ -1,4 +1,6 @@
 /* describe, it, afterEach, beforeEach */
+require("babel/register");
+
 var when = require('when');
 
 var chai = require('chai');

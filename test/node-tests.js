@@ -32,5 +32,5 @@ describe('[Node]', function() {
   require('./src/Throttle-test');
   require('./src/UserConfig-test.js');
   require('./src/behavior-test.js');
-  
+
 });

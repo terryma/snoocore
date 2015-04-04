@@ -1,4 +1,5 @@
 /* describe, it, afterEach, beforeEach */
+require("babel/register");
 
 var chai = require('chai');
 var chaiAsPromised = require('chai-as-promised');

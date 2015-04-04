@@ -1,5 +1,5 @@
 
-var utils = require('./utils');
+import utils from './utils';
 
 var httpsRequest = module.exports = utils.isNode() ?
                                   require('./https/httpsNode') :

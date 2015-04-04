@@ -1,5 +1,6 @@
 {
-	"node": true,
-	"laxcomma": true,
-	"laxbreak": true
+"node": true,
+"laxcomma": true,
+"laxbreak": true,
+"esnext": true
 }

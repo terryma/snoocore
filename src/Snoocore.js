@@ -1,23 +1,19 @@
 "use strict";
 
 // Node.js libraries
-var events = require('events');
-var util = require('util');
+import events from 'events';
+import util from 'util';
 
 // Our modules
-var pkg = require('../package');
-var utils = require('./utils');
-
-var Request = require('./Request');
-var RedditRequest = require('./RedditRequest');
-var Throttle = require('./Throttle');
-var UserConfig = require('./UserConfig');
-var OAuth = require('./OAuth');
+import Request from './Request';
+import RedditRequest from './RedditRequest';
+import Throttle from './Throttle';
+import UserConfig from './UserConfig';
+import OAuth from './OAuth';
 
 Snoocore.file = require('./https/file');
-Snoocore.version = pkg.version;
+Snoocore.version = '3.0.0';
 
-// - - -
 module.exports = Snoocore;
 util.inherits(Snoocore, events.EventEmitter);
 function Snoocore(userConfiguration) {
