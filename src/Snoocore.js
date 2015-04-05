@@ -38,11 +38,11 @@ function Snoocore(userConfiguration) {
   self.oauthAppOnly = new OAuth(self._userConfig, self._request);
 
   // Expose OAuth functions in here
-  self.getExplicitAuthUrl = self.oauth.getExplicitAuthUrl;
-  self.getImplicitAuthUrl = self.oauth.getImplicitAuthUrl;
-  self.auth = self.oauth.auth;
-  self.refresh = self.oauth.refresh;
-  self.deauth = self.oauth.deauth;
+  self.getExplicitAuthUrl = self.oauth.getExplicitAuthUrl.bind(self.oauth);
+  self.getImplicitAuthUrl = self.oauth.getImplicitAuthUrl.bind(self.oauth);
+  self.auth = self.oauth.auth.bind(self.oauth);
+  self.refresh = self.oauth.refresh.bind(self.oauth);
+  self.deauth = self.oauth.deauth.bind(self.oauth);
 
   self._redditRequest = new RedditRequest(self._userConfig,
                                           self._request,
