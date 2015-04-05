@@ -9,23 +9,23 @@ var expect = chai.expect;
 var config = require('../config');
 var util = require('./util');
 
-var Endpoint = require('../../src/Endpoint');
+import Endpoint, {buildPropertyTree, replaceUrlParams} from '../../src/Endpoint';
 
-describe('Endpoint.', function () {
+describe.only('Endpoint.', function () {
 
   this.timeout(config.testTimeout);
 
   describe('replaceUrlParams()', function() {
     it('should not replace anything', function() {
       var reddit = util.getScriptInstance();
-      var url = Endpoint.replaceUrlParams(
+      var url = replaceUrlParams(
         'http://foo/bar/baz', { hello: 'world' });
       expect(url).to.equal('http://foo/bar/baz');
     });
 
     it('should replace parameters', function() {
       var reddit = util.getScriptInstance();
-      var url = Endpoint.replaceUrlParams(
+      var url = replaceUrlParams(
         'http://foo/$hello/baz', {
           $hello: 'world'
         });
@@ -34,7 +34,7 @@ describe('Endpoint.', function () {
 
     it('should replace more than one parameter', function() {
       var reddit = util.getScriptInstance();
-      var url = Endpoint.replaceUrlParams(
+      var url = replaceUrlParams(
         'http://foo/$hello/$foo', {
           $hello: 'world',
           $foo: 'bar'
@@ -46,7 +46,7 @@ describe('Endpoint.', function () {
   describe('buildPropertyTree()', function() {
     it('should build the tree', function() {
       var endpointProperties = require('../../endpointProperties');
-      var propertyTree = Endpoint.buildPropertyTree(endpointProperties);
+      var propertyTree = buildPropertyTree(endpointProperties);
       expect(propertyTree.api.new_captcha._endpoints.post).to.equal('a');
     });
   });
