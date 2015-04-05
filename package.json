@@ -2,7 +2,7 @@
   "name": "snoocore",
   "version": "3.0.0",
   "description": "A minimal and complete JavaScript driver for the Reddit API.",
-  "main": "dist/Snoocore-node.js",
+  "main": "build/src/Snoocore.js",
   "repository": {
     "type": "git",
     "url": "git://github.com/trevorsenior/snoocore.git"
@@ -17,14 +17,12 @@
     "when": "^3.6.3"
   },
   "devDependencies": {
-    "babel": "^5.0.7",
-    "babelify": "^6.0.1",
+    "babel": "^5.0.8",
     "browserify": "^6.3.3",
     "chai": "^1.10.0",
     "chai-as-promised": "^4.1.1",
     "gulp": "^3.8.11",
     "gulp-babel": "^5.0.0",
-    "gulp-concat": "^2.5.2",
     "gulp-sourcemaps": "^1.5.1",
     "gulp-uglify": "^1.1.0",
     "gulp-util": "^3.0.4",

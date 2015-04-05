@@ -22,7 +22,7 @@ describe(__filename, function () {
           key: 'test',
           redirectUri: 'http:foo'
         }
-      })
+      });
     }).to.throw('Missing required userConfiguration value `userAgent`');
   });
 
@@ -34,7 +34,7 @@ describe(__filename, function () {
           key: 'test',
           secret: 'testsecret'
         }
-      })
+      });
     }).to.throw('Missing required userConfiguration value `oauth.type`');
   });
 
@@ -59,7 +59,7 @@ describe(__filename, function () {
           type: 'implicit',
           redirectUri: 'http:foo'
         }
-      })
+      });
     }).to.throw('Missing required userConfiguration value `oauth.key`');
   });
 
@@ -72,7 +72,7 @@ describe(__filename, function () {
           key: 'test',
           redirectUri: 'http:foo'
         }
-      })
+      });
     }).to.throw('Missing required userConfiguration value `oauth.secret` for type explicit/script');
   });
 
@@ -86,7 +86,7 @@ describe(__filename, function () {
           secret: 'testsecret',
           password: 'foobar'
         }
-      })
+      });
     }).to.throw('Missing required userConfiguration value `oauth.username` for type script');
   });
 
@@ -100,7 +100,7 @@ describe(__filename, function () {
           secret: 'testsecret',
           username: 'user'
         }
-      })
+      });
     }).to.throw('Missing required userConfiguration value `oauth.password` for type script');
   });
 
@@ -113,7 +113,7 @@ describe(__filename, function () {
           key: 'test',
           secret: 'testsecret',
         }
-      })
+      });
     }).to.throw('Missing required userConfiguration value `oauth.redirectUri` for type implicit/explicit');
   });
 

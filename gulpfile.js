@@ -8,14 +8,12 @@ var snooform = require('snooform');
 var gulp = require('gulp');
 var gutil = require('gulp-util');
 var sourcemaps = require('gulp-sourcemaps');
-var concat = require('gulp-concat');
 var uglify = require('gulp-uglify');
 var babel = require('gulp-babel');
 
 var source = require('vinyl-source-stream');
 var buffer = require('vinyl-buffer');
 var browserify = require('browserify');
-var babelify = require('babelify');
 
 gulp.task('modules', function(done) {
   fs.exists(path.join(__dirname, 'node_modules'), function(exists) {
@@ -67,15 +65,30 @@ gulp.task('endpointProps', function(done) {
   });
 });
 
+gulp.task('babel', function() {
+  return gulp.src('./src/**/*.js')
+             .pipe(sourcemaps.init())
+             .pipe(babel())
+             .pipe(sourcemaps.write('./'))
+             .pipe(gulp.dest('./build/src/'));
+});
 
-gulp.task('bundleBrowser', function() {
+gulp.task('babelTests', function() {
+  return gulp.src('./test/**/*.js')
+             .pipe(sourcemaps.init())
+             .pipe(babel())
+             .pipe(sourcemaps.write('./'))
+             .pipe(gulp.dest('./build/test/'));
+});
+
+gulp.task('bundleBrowser', [ 'babel' ], function() {
   // set up the browserify instance on a task basis
   var b = browserify({
-    entries: './src/Snoocore.js',
-    exclude: [ './src/https/httpsNode.js' ],
-    debug: true,
+    entries: './build/Snoocore.js',
+    exclude: [ './build/https/httpsNode.js' ],
+    debug: true
     // defining transforms here will avoid crashing your stream
-    transform: [ babelify ]
+    // transform: [ babelify ]
   });
 
   return b.bundle()
@@ -91,11 +104,8 @@ gulp.task('bundleBrowser', function() {
 gulp.task('bundleBrowserTests', function() {
   // set up the browserify instance on a task basis
   var b = browserify({
-    entries: './test/browser-tests.js',
-    exclude: [ './src/https/httpsNode.js' ],
-    debug: true,
-    // defining transforms here will avoid crashing your stream
-    transform: [ babelify ]
+    entries: './build/test/browser-tests.js',
+    debug: true
   });
 
   return b.bundle()
@@ -107,32 +117,14 @@ gulp.task('bundleBrowserTests', function() {
           .pipe(gulp.dest('./test/build/'));
 });
 
-exports.buildBrowserTests = function(done) {
-  return exec(path.join(__dirname, 'node_modules', '.bin', 'browserify') +
-              ' --exclude request/requestNode.js' +
-              ' --outfile test/build/browser-tests.js' +
-              ' test/browser-tests.js',
-              { cwd: __dirname },
-              function(error, stdout, stderr) {
-                return done(error);
-              });
-};
-
-gulp.task('bundleNode', function(done) {
-  return gulp.src('./src/**/*.js')
-             .pipe(sourcemaps.init())
-             .pipe(babel())
-             .pipe(concat('Snoocore-node.js'))
-             .pipe(sourcemaps.write('./'))
-             .pipe(gulp.dest('./dist/'));
-});
-
-gulp.task('mocha', ['modules', 'bundleNode'], function(done) {
+gulp.task('mocha', [
+  'modules', 'babel', 'babelTests'
+], function(done) {
   var mocha = spawn(
     path.join(__dirname, 'node_modules', '.bin', 'mocha'),
     [
       '-R', 'spec',
-      'test/node-tests.js'
+      'build/test/node-tests.js'
     ],
     { cwd: __dirname, stdio: 'inherit' }
   );
@@ -149,7 +141,7 @@ gulp.task('karma', [
 ], function(done) {
   var karma = spawn(
     path.join(__dirname, 'node_modules', 'karma', 'bin', 'karma'),
-    [ 'start', 'test/karma.conf.js'  ],
+    [ 'start', 'build/test/karma.conf.js'  ],
     { cwd: __dirname, stdio: 'inherit' }
   );
 

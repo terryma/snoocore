@@ -1,5 +1,4 @@
 /* describe, it, afterEach, beforeEach */
-require("babel/register");
 
 var when = require('when');
 
@@ -354,7 +353,7 @@ describe(__filename, function () {
 
             // should equal the first listings children
             expect(slice.allChildren).to.eql(getResult[1].data.children);
-          })
+          });
         });
       });
 
@@ -377,10 +376,10 @@ describe(__filename, function () {
 
   describe('path()', function() {
 
-    it.only('should allow a "path" syntax', function() {
+    it('should allow a "path" syntax', function() {
 
       var redditRequest = util.getScriptRedditRequest([ 'read' ]);
-
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
       return redditRequest.path('/r/$subreddit/hot')
                           .get({ $subreddit: 'aww' })
                           .then(function(result) {

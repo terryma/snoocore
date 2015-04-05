@@ -3,7 +3,7 @@ import path from 'path';
 import utils from './utils';
 
 // Precompiled list of properties for specific endpoints
-import endpointProperties from '../build/endpointProperties';
+import endpointProperties from '../endpointProperties';
 
 // Build a more parseable tree for the properties. Built here vs. simply
 // requiring an already build tree to save on bytes.

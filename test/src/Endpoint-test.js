@@ -45,7 +45,7 @@ describe('Endpoint.', function () {
 
   describe('buildPropertyTree()', function() {
     it('should build the tree', function() {
-      var endpointProperties = require('../../build/endpointProperties');
+      var endpointProperties = require('../../endpointProperties');
       var propertyTree = Endpoint.buildPropertyTree(endpointProperties);
       expect(propertyTree.api.new_captcha._endpoints.post).to.equal('a');
     });
@@ -167,7 +167,8 @@ describe('Endpoint.', function () {
           $urlparam: 'some'
         });
 
-        expect(endpoint.url).to.equal(config.requestServer.oauth + '/some/bar');
+        expect(endpoint.url).to.equal(
+          'https://' + config.requestServer.oauth + '/some/bar');
       });
 
       it('should build an url with a custom hostname (global)', function() {

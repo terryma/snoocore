@@ -25,11 +25,11 @@ function TestServer(port, responseStatus) {
 
   self.port = port;
   self.responseStatus = responseStatus;
-  self.server;
+  self.server = void 0;
   self.connections = [];
 
   // Attempts to start the server on port 3000. If the port
-  // is in use, it will wait a moment and try again for a 
+  // is in use, it will wait a moment and try again for a
   // given number of attempts
   //
   // respond status should be set if this server should always
@@ -37,8 +37,13 @@ function TestServer(port, responseStatus) {
   self.start = function() {
 
     var serverOptions = {
-      key: fs.readFileSync(path.join(__dirname, 'ssl', 'key.pem')),
-      cert: fs.readFileSync(path.join(__dirname, 'ssl', 'cert.pem'))
+      // @TODO this is pretty nasty. Using the '..' to get up out of the
+      // build directory & into the src to reference things that did
+      // not neeed to be built
+      key: fs.readFileSync(path.join(
+        __dirname, '..', '..', '..', 'test', 'src', 'ssl', 'key.pem')),
+      cert: fs.readFileSync(path.join(
+        __dirname, '..', '..', '..', 'test', 'src', 'ssl', 'cert.pem'))
     };
 
     self.server = https.createServer(serverOptions);
@@ -46,7 +51,7 @@ function TestServer(port, responseStatus) {
     self.server.on('request', function(req, res) {
       self.connections.push(req.connection);
       if (self.responseStatus) {
-	res.writeHead(self.responseStatus);
+        res.writeHead(self.responseStatus);
       }
       res.end('');
     });
@@ -55,18 +60,18 @@ function TestServer(port, responseStatus) {
       var attempts = 10;
 
       function connect() {
-	try {
-	  self.server.listen(self.port, '127.0.0.1');
-	} catch(e) {
-	  --attempts;
-	  console.error('trying again ' + attempts + ' left - ' + e.message);
-	  if (attempts <= 0) {
-	    return reject(e);
-	  }
-	  return setTimeout(connect, 500); // try again after 500ms
-	}
+        try {
+          self.server.listen(self.port, '127.0.0.1');
+        } catch(e) {
+          --attempts;
+          console.error('trying again ' + attempts + ' left - ' + e.message);
+          if (attempts <= 0) {
+            return reject(e);
+          }
+          return setTimeout(connect, 500); // try again after 500ms
+        }
 
-	return resolve(); // we have connected!
+        return resolve(); // we have connected!
       }
 
       connect();
@@ -78,14 +83,14 @@ function TestServer(port, responseStatus) {
   self.stop = function() {
     return when.promise(function(resolve, reject) {
       self.connections.forEach(function(connection) {
-	connection.end();
-	connection.destroy();
+        connection.end();
+        connection.destroy();
       });
 
       self.server.close(function() {
-	// wait 2 seconds, then resolve
-	// console.log('stopping after 2 seconds...');
-	setTimeout(resolve, 2000);
+        // wait 2 seconds, then resolve
+        // console.log('stopping after 2 seconds...');
+        setTimeout(resolve, 2000);
       });
     }); // add a little delay to help free up the port
   };
@@ -95,103 +100,103 @@ function TestServer(port, responseStatus) {
   // is rejected!
   self.allowOrDeclineAuthUrl = function(url, shouldDecline) {
 
-    return when.promise(function(r) { 
-      phantom.create(r, { parameters: { 'ignore-ssl-errors':'yes' }}); 
+    return when.promise(function(r) {
+      phantom.create(r, { parameters: { 'ignore-ssl-errors':'yes' }});
     }).then(function(ph) {
 
       return callbacks.call(ph.createPage).then(function(page) {
 
-	var loadInProgress = false;
+        var loadInProgress = false;
 
-	page.set('onLoadStarted', function() {
-	  loadInProgress = true;
-	});
+        page.set('onLoadStarted', function() {
+          loadInProgress = true;
+        });
 
-	page.set('onLoadFinished', function() {
-	  loadInProgress = false;
-	});
+        page.set('onLoadFinished', function() {
+          loadInProgress = false;
+        });
 
-	function waitForLoadStarted() {
-	  return when.promise(function(resolve) {
-	    var interval = setInterval(function() {
-	      if (loadInProgress) {
-		clearInterval(interval);
-		return resolve();
-	      }
-	    }, 1);
-	  });
-	}
+        function waitForLoadStarted() {
+          return when.promise(function(resolve) {
+            var interval = setInterval(function() {
+              if (loadInProgress) {
+                clearInterval(interval);
+                return resolve();
+              }
+            }, 1);
+          });
+        }
 
-	function waitForLoadFinished() {
-	  return when.promise(function(resolve) {
-	    var interval = setInterval(function() {
-	      if (!loadInProgress) {
-		clearInterval(interval);
-		return resolve();
-	      }
-	    }, 1);
-	  });
-	}
+        function waitForLoadFinished() {
+          return when.promise(function(resolve) {
+            var interval = setInterval(function() {
+              if (!loadInProgress) {
+                clearInterval(interval);
+                return resolve();
+              }
+            }, 1);
+          });
+        }
 
-	// Waits for a page started event, then waits for it to
-	// finish loading before resolving
-	function pageCycle() {
-	  return waitForLoadStarted().then(waitForLoadFinished);
-	}
+        // Waits for a page started event, then waits for it to
+        // finish loading before resolving
+        function pageCycle() {
+          return waitForLoadStarted().then(waitForLoadFinished);
+        }
 
-	var steps = [
-	  function() { // open the authentication page
-	    var openPage = when.promise(function(r) { page.open(url, r); });
-	    return when.join(pageCycle(), openPage);
-	  },
-	  function() { // login
-	    var login =  when.promise(function(resolve, reject) {
-	      page.evaluate(function(config) {
-		$('#user_login').val(config.reddit.login.username);
-		$('#passwd_login').val(config.reddit.login.password);
-		$('#login-form').submit();
-	      }, resolve, config);
-	    });
+        var steps = [
+          function() { // open the authentication page
+            var openPage = when.promise(function(r) { page.open(url, r); });
+            return when.join(pageCycle(), openPage);
+          },
+          function() { // login
+            var login =  when.promise(function(resolve, reject) {
+              page.evaluate(function(config) {
+                $('#user_login').val(config.reddit.login.username);
+                $('#passwd_login').val(config.reddit.login.password);
+                $('#login-form').submit();
+              }, resolve, config);
+            });
 
-	    return when.join(pageCycle(), login);
-	  },
-	  function() { // click allow or deny button in form
-	    var authenticate = when.promise(function(resolve, reject) {
-	      var evalObj = {
-		shouldDecline: shouldDecline
-	      };
+            return when.join(pageCycle(), login);
+          },
+          function() { // click allow or deny button in form
+            var authenticate = when.promise(function(resolve, reject) {
+              var evalObj = {
+                shouldDecline: shouldDecline
+              };
 
-	      page.evaluate(function(evalObj) {
-		if (evalObj.shouldDecline) {
-		  return jQuery('form[action="/api/v1/authorize"]').submit();
-		} else {
-		  return jQuery('input[name="authorize"]').click();
-		}
-	      }, resolve, evalObj);
+              page.evaluate(function(evalObj) {
+                if (evalObj.shouldDecline) {
+                  return jQuery('form[action="/api/v1/authorize"]').submit();
+                } else {
+                  return jQuery('input[name="authorize"]').click();
+                }
+              }, resolve, evalObj);
 
-	    });
+            });
 
-	    return when.join(pageCycle(), authenticate);
-	  },
-	  function() { // get the location href we have landed on
+            return when.join(pageCycle(), authenticate);
+          },
+          function() { // get the location href we have landed on
 
-	    return delay(5000).then(function() {
-	      return callbacks.call(page.evaluate, function() {
-		return document.location.href;
-	      });
-	    });
+            return delay(5000).then(function() {
+              return callbacks.call(page.evaluate, function() {
+                return document.location.href;
+              });
+            });
 
-	  }
-	];
+          }
+        ];
 
-	return pipeline(steps);
+        return pipeline(steps);
       }).then(function(url) {
-	// console.log(url);
-	url = url.replace('/#', '/?'); // implicit auth urls use # vs. ? for query str.
-	var parsed = urlLib.parse(url, true);
-	return parsed.query;
+        // console.log(url);
+        url = url.replace('/#', '/?'); // implicit auth urls use # vs. ? for query str.
+        var parsed = urlLib.parse(url, true);
+        return parsed.query;
       }).finally(function() {
-	ph.exit(); // kill phantom process
+        ph.exit(); // kill phantom process
       });
 
     });

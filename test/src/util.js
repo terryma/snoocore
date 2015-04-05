@@ -1,11 +1,11 @@
 var path = require('path');
 
-var Snoocore = require('../../src/Snoocore');
-var UserConfig = require('../../src/UserConfig');
-var Throttle = require('../../src/Throttle');
-var Request = require('../../src/Request');
-var OAuth = require('../../src/OAuth');
-var RedditRequest = require('../../src/RedditRequest');
+import Snoocore from '../../src/Snoocore';
+import UserConfig from '../../src/UserConfig';
+import Throttle from '../../src/Throttle';
+import Request from '../../src/Request';
+import OAuth from '../../src/OAuth';
+import RedditRequest from '../../src/RedditRequest';
 
 var config = require('../config');
 
@@ -19,7 +19,6 @@ exports.isNode = function() {
     typeof module === 'object' &&
     typeof window === 'undefined');
 };
-
 
 // - - -
 // UserConfig instances
@@ -35,7 +34,9 @@ exports.getScriptUserConfig = function(scopes) {
       scope: scopes || [],
       username: config.reddit.login.username,
       password: config.reddit.login.password
-    }
+    },
+    serverWWW: config.requestServer.www,
+    serverOAuth: config.requestServer.oauth
   });
 };
 
@@ -50,7 +51,9 @@ exports.getExplicitUserConfig = function(scopes, duration, isMobile) {
       secret: config.reddit.web.secret,
       redirectUri: config.reddit.redirectUri,
       scope: scopes
-    }
+    },
+    serverWWW: config.requestServer.www,
+    serverOAuth: config.requestServer.oauth
   });
 };
 
@@ -62,7 +65,9 @@ exports.getImplicitUserConfig = function(scopes) {
       key: config.reddit.installed.key,
       redirectUri: config.reddit.redirectUri,
       scope: scopes
-    }
+    },
+    serverWWW: config.requestServer.www,
+    serverOAuth: config.requestServer.oauth
   });
 };
 
@@ -114,7 +119,9 @@ exports.getExplicitInstance = function(scopes, duration) {
       secret: config.reddit.web.secret,
       redirectUri: config.reddit.redirectUri,
       scope: scopes
-    }
+    },
+    serverWWW: config.requestServer.www,
+    serverOAuth: config.requestServer.oauth
   });
 };
 
@@ -126,7 +133,9 @@ exports.getImplicitInstance = function(scopes) {
       key: config.reddit.installed.key,
       redirectUri: config.reddit.redirectUri,
       scope: scopes
-    }
+    },
+    serverWWW: config.requestServer.www,
+    serverOAuth: config.requestServer.oauth
   });
 };
 
@@ -140,6 +149,8 @@ exports.getScriptInstance = function(scopes) {
       scope: scopes,
       username: config.reddit.login.username,
       password: config.reddit.login.password
-    }
+    },
+    serverWWW: config.requestServer.www,
+    serverOAuth: config.requestServer.oauth
   });
 };

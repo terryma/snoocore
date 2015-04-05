@@ -221,6 +221,14 @@ function replaceUrlParams(endpointUrl, givenArgs) {
 
 var _interopRequireWildcard = function (obj) { return obj && obj.__esModule ? obj : { 'default': obj }; };
 
+var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError('Cannot call a class as a function'); } };
+
+var _createClass = (function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if (descriptor.value) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
+
+Object.defineProperty(exports, '__esModule', {
+  value: true
+});
+
 var _querystring = require('querystring');
 
 var _querystring2 = _interopRequireWildcard(_querystring);
@@ -241,12 +249,10 @@ var _utils = require('./utils');
 
 var _utils2 = _interopRequireWildcard(_utils);
 
-module.exports = OAuth;
-
 /*
    Various OAuth types
  */
-var TOKEN = module.exports.TOKEN = {
+var TOKEN = {
   EXPLICIT: 'explicit',
   IMPLICIT: 'implicit',
   SCRIPT: 'script',
@@ -254,390 +260,433 @@ var TOKEN = module.exports.TOKEN = {
   REFRESH: 'refresh'
 };
 
+exports.TOKEN = TOKEN;
 /*
    Represents an unset/invalid token
  */
-var INVALID_TOKEN = module.exports.INVALID_TOKEN = 'invalid_token';
+var INVALID_TOKEN = 'invalid_token';
 
+exports.INVALID_TOKEN = INVALID_TOKEN;
 /*
    Represents a single OAuth instance. Used primarily for internal
    use within the Snoocore class to manage two OAuth instances -
    Applicaton Only and an Authenticated Session.
 
  */
-function OAuth(userConfig, request) {
-  var self = this;
 
-  self._userConfig = userConfig;
+var OAuth = (function () {
+  function OAuth(userConfig, request) {
+    _classCallCheck(this, OAuth);
 
-  self._request = request;
+    this._userConfig = userConfig;
 
-  self.accessToken = INVALID_TOKEN;
-  self.refreshToken = INVALID_TOKEN;
-  self.tokenType = 'bearer';
+    this._request = request;
 
-  self.scope = normalizeScope();
+    this.accessToken = INVALID_TOKEN;
+    this.refreshToken = INVALID_TOKEN;
+    this.tokenType = 'bearer';
 
-  /*
-     Takes a given scope, and normalizes it to a proper string.
-   */
-  function normalizeScope() {
-    var scope;
-    // Set to empty string if the scope if not set
-    if (typeof self._userConfig.oauth.scope === 'undefined') {
-      scope = '';
-    }
-    // convert an array into a string
-    else if (_util2['default'].isArray(self._userConfig.oauth.scope)) {
-      scope = self._userConfig.oauth.scope.join(',');
-    }
-    return scope;
+    this.scope = this.normalizeScope();
   }
 
-  /*
-     Do we have a refresh token defined?
-   */
-  self.hasRefreshToken = function () {
-    return self.refreshToken !== INVALID_TOKEN;
-  };
+  _createClass(OAuth, [{
+    key: 'normalizeScope',
 
-  /*
-     Are we currently authenticated?
-   */
-  self.isAuthenticated = function () {
-    return self.accessToken !== INVALID_TOKEN;
-  };
-
-  self.getAuthorizationHeader = function () {
-    return self.tokenType + ' ' + self.accessToken;
-  };
-
-  /*
-     Get the Explicit Auth Url.
-   */
-  self.getExplicitAuthUrl = function (state) {
-
-    var query = {};
-
-    query.client_id = self._userConfig.oauth.key;
-    query.state = state || Math.ceil(Math.random() * 1000);
-    query.redirect_uri = self._userConfig.oauth.redirectUri;
-    query.duration = self._userConfig.oauth.duration || 'temporary';
-    query.response_type = 'code';
-    query.scope = self.scope;
-
-    var baseUrl = 'https://' + self._userConfig.serverWWW + '/api/v1/authorize';
-
-    if (self._userConfig.mobile) {
-      baseUrl += '.compact';
+    /*
+       Takes a given scope, and normalizes it to a proper string.
+     */
+    value: function normalizeScope() {
+      var scope = undefined;
+      // Set to empty string if the scope if not set
+      if (typeof this._userConfig.oauth.scope === 'undefined') {
+        scope = '';
+      }
+      // convert an array into a string
+      else if (_util2['default'].isArray(this._userConfig.oauth.scope)) {
+        scope = this._userConfig.oauth.scope.join(',');
+      }
+      return scope;
     }
+  }, {
+    key: 'hasRefreshToken',
 
-    return baseUrl + '?' + _querystring2['default'].stringify(query);
-  };
-
-  /*
-     Get the Implicit Auth Url.
-   */
-  self.getImplicitAuthUrl = function (state) {
-
-    var query = {};
-
-    query.client_id = self._userConfig.oauth.key;
-    query.state = state || Math.ceil(Math.random() * 1000);
-    query.redirect_uri = self._userConfig.oauth.redirectUri;
-    query.response_type = 'token';
-    query.scope = self.scope;
-
-    var baseUrl = 'https://' + self._userConfig.serverWWW + '/api/v1/authorize';
-
-    if (self._userConfig.mobile) {
-      baseUrl += '.compact';
+    /*
+       Do we have a refresh token defined?
+     */
+    value: function hasRefreshToken() {
+      return this.refreshToken !== INVALID_TOKEN;
     }
+  }, {
+    key: 'isAuthenticated',
 
-    return baseUrl + '?' + _querystring2['default'].stringify(query);
-  };
-
-  self.getAuthUrl = function (state) {
-    switch (self._userConfig.oauth.type) {
-      case TOKEN.EXPLICIT:
-        return self.getExplicitAuthUrl(state);
-      case TOKEN.IMPLICIT:
-        return self.getImplicitAuthUrl(state);
-      default:
-        throw new Error('The oauth type of ' + oauthType + ' does not require an url');
+    /*
+       Are we currently authenticated?
+     */
+    value: function isAuthenticated() {
+      return this.accessToken !== INVALID_TOKEN;
     }
-  };
-
-  /*
-     Returns the data needed to request an Applicaton Only
-     OAuth access token.
-   */
-  self.getAppOnlyTokenData = function () {
-    var params = {};
-
-    params.scope = self.scope;
-
-    // From the reddit documentation:
-    //
-    // - - -
-    // "client_credentials"
-    //
-    // Confidential clients (web apps / scripts) not acting on
-    // behalf of one or more logged out users.
-    //
-    // - - -
-    // "https://oauth.reddit.com/grants/installed_client"
-    //
-    // * Installed app types (as these apps are considered
-    // "non-confidential", have no secret, and thus, are
-    // ineligible for client_credentials grant.
-    //
-    // * Other apps acting on behalf of one or more "logged out" users.
-    //
-    switch (self._userConfig.oauth.type) {
-      case TOKEN.SCRIPT:
-      case TOKEN.EXPLICIT:
-        params.grant_type = 'client_credentials';
-        break;
-      case TOKEN.IMPLICIT:
-      default:
-        params.grant_type = 'https://oauth.reddit.com/grants/installed_client';
-        params.device_id = self._userConfig.oauth.deviceId;
-        break;
+  }, {
+    key: 'getAuthorizationHeader',
+    value: function getAuthorizationHeader() {
+      return '' + this.tokenType + ' ' + this.accessToken;
     }
+  }, {
+    key: 'getExplicitAuthUrl',
 
-    return params;
-  };
+    /*
+       Get the Explicit Auth Url.
+     */
+    value: function getExplicitAuthUrl(state) {
 
-  /*
-     Returns the data needed to request an authenticated OAuth
-     access token.
-   */
-  self.getAuthenticatedTokenData = function (authorizationCode) {
-    var params = {};
+      var query = {};
 
-    params.scope = self.scope;
+      query.client_id = this._userConfig.oauth.key;
+      query.state = state || Math.ceil(Math.random() * 1000);
+      query.redirect_uri = this._userConfig.oauth.redirectUri;
+      query.duration = this._userConfig.oauth.duration || 'temporary';
+      query.response_type = 'code';
+      query.scope = this.scope;
 
-    switch (self._userConfig.oauth.type) {
-      case TOKEN.SCRIPT:
-        params.grant_type = 'password';
-        params.username = self._userConfig.oauth.username;
-        params.password = self._userConfig.oauth.password;
-        break;
-      case TOKEN.EXPLICIT:
-        params.grant_type = 'authorization_code';
-        params.client_id = self._userConfig.oauth.key;
-        params.redirect_uri = self._userConfig.oauth.redirectUri;
-        params.code = authorizationCode;
-        break;
-      default:
-        return _when2['default'].reject(new Error('Invalid OAuth type specified (Authenticated OAuth).'));
-    }
+      var baseUrl = 'https://' + this._userConfig.serverWWW + '/api/v1/authorize';
 
-    return params;
-  };
-
-  /*
-     Returns the data needed to request a refresh token.
-   */
-  self.getRefreshTokenData = function (refreshToken) {
-    var params = {};
-    params.scope = self.scope;
-    params.grant_type = 'refresh_token';
-    params.refresh_token = refreshToken;
-    return params;
-  };
-
-  /*
-     A function that sets up a call to receive an access/refresh token.
-   */
-  self.getToken = function (tokenEnum, options) {
-
-    options = options || {};
-    var params;
-
-    switch (tokenEnum) {
-      case TOKEN.REFRESH:
-        params = self.getRefreshTokenData(options.refreshToken);
-        break;
-      case TOKEN.APP_ONLY:
-        params = self.getAppOnlyTokenData();
-        break;
-      case TOKEN.SCRIPT:
-      case TOKEN.EXPLICIT:
-        params = self.getAuthenticatedTokenData(options.authorizationCode);
-        break;
-    }
-
-    var headers = {};
-    var buff = new Buffer(self._userConfig.oauth.key + ':' + self._userConfig.oauth.secret);
-    var auth = 'Basic ' + buff.toString('base64');
-
-    headers.Authorization = auth;
-
-    return self._request.https({
-      method: 'POST',
-      hostname: self._userConfig.serverWWW,
-      path: '/api/v1/access_token',
-      headers: headers
-    }, _querystring2['default'].stringify(params)).then(function (response) {
-      var data;
-
-      try {
-        data = JSON.parse(response._body);
-      } catch (e) {
-        throw new Error('Failed to get Auth Data:\n' + response._body + '\n' + e.stack);
+      if (this._userConfig.mobile) {
+        baseUrl += '.compact';
       }
 
-      if (data.error) {
-        throw new Error('Error fetching a new token.\n' + JSON.stringify(data));
+      return baseUrl + '?' + _querystring2['default'].stringify(query);
+    }
+  }, {
+    key: 'getImplicitAuthUrl',
+
+    /*
+       Get the Implicit Auth Url.
+     */
+    value: function getImplicitAuthUrl(state) {
+
+      var query = {};
+
+      query.client_id = this._userConfig.oauth.key;
+      query.state = state || Math.ceil(Math.random() * 1000);
+      query.redirect_uri = this._userConfig.oauth.redirectUri;
+      query.response_type = 'token';
+      query.scope = this.scope;
+
+      var baseUrl = 'https://' + this._userConfig.serverWWW + '/api/v1/authorize';
+
+      if (this._userConfig.mobile) {
+        baseUrl += '.compact';
       }
 
-      return data;
-    });
-  };
-
-  /*
-     Sets the auth data from the oauth module to allow OAuth calls.
-      This function can authenticate with:
-      - Script based OAuth (no parameter)
-     - Raw authentication data
-     - Authorization Code (request_type = "code")
-     - Access Token (request_type = "token") / Implicit OAuth
-     - Application Only. (void 0, true);
-   */
-  self.auth = function (authCodeOrAccessToken, isApplicationOnly) {
-    var tokenData;
-
-    if (isApplicationOnly) {
-      tokenData = self.getToken(TOKEN.APP_ONLY);
-    } else {
-
-      var token = self._userConfig.oauth.type;
-
-      switch (token) {
-        case TOKEN.SCRIPT:
-          tokenData = self.getToken(token);
-          break;
-
+      return baseUrl + '?' + _querystring2['default'].stringify(query);
+    }
+  }, {
+    key: 'getAuthUrl',
+    value: function getAuthUrl(state) {
+      switch (this._userConfig.oauth.type) {
         case TOKEN.EXPLICIT:
-          // auth code in this case
-          tokenData = self.getToken(token, {
-            authorizationCode: authCodeOrAccessToken
-          });
-          break;
-
+          return this.getExplicitAuthUrl(state);
         case TOKEN.IMPLICIT:
-          // access token in this case
-          tokenData = {
-            access_token: authCodeOrAccessToken,
-            token_type: 'bearer',
-            expires_in: 3600,
-            scope: self._userConfig.oauth.scope
-          };
-          break;
-
+          return this.getImplicitAuthUrl(state);
         default:
-          throw new Error('Setting the auth data is no longer supported.');
+          throw new Error('The oauth type of ' + oauthType + ' does not require an url');
       }
     }
+  }, {
+    key: 'getAppOnlyTokenData',
 
-    return _when2['default'](tokenData).then(function (data) {
+    /*
+       Returns the data needed to request an Applicaton Only
+       OAuth access token.
+     */
+    value: function getAppOnlyTokenData() {
+      var params = {};
 
-      if (typeof data !== 'object') {
-        return _when2['default'].reject(new Error('There was a problem authenticating: \n', data));
+      params.scope = this.scope;
+
+      // From the reddit documentation:
+      //
+      // - - -
+      // "client_credentials"
+      //
+      // Confidential clients (web apps / scripts) not acting on
+      // behalf of one or more logged out users.
+      //
+      // - - -
+      // "https://oauth.reddit.com/grants/installed_client"
+      //
+      // * Installed app types (as these apps are considered
+      // "non-confidential", have no secret, and thus, are
+      // ineligible for client_credentials grant.
+      //
+      // * Other apps acting on behalf of one or more "logged out" users.
+      //
+      switch (this._userConfig.oauth.type) {
+        case TOKEN.SCRIPT:
+        case TOKEN.EXPLICIT:
+          params.grant_type = 'client_credentials';
+          break;
+        // Also covers case TOKEN.IMPLICIT:
+        default:
+          params.grant_type = 'https://oauth.reddit.com/grants/installed_client';
+          params.device_id = this._userConfig.oauth.deviceId;
       }
 
-      self.accessToken = data.access_token;
-      self.tokenType = data.token_type;
-
-      // If the explicit app used a perminant duration, send
-      // back the refresh token that will be used to re-authenticate
-      // later without user interaction.
-      if (data.refresh_token) {
-        // set the internal refresh token for automatic expiring
-        // access_token management
-        self.refreshToken = data.refresh_token;
-        return self.refreshToken;
-      }
-    });
-  };
-
-  /*
-     Only authenticates with Application Only OAuth
-   */
-  self.applicationOnlyAuth = function () {
-    return self.auth(void 0, true);
-  };
-
-  /*
-     Authenticate with a refresh token.
-   */
-  self.refresh = function (refreshToken) {
-
-    // use the provided refresh token, or the current
-    // one that we have for this class
-    refreshToken = refreshToken || self.refreshToken;
-
-    return self.getToken(TOKEN.REFRESH, {
-      refreshToken: refreshToken
-    }).then(function (data) {
-      // only set the internal refresh token if reddit
-      // agrees that it was OK and sends back authData
-      self.refreshToken = refreshToken;
-
-      self.accessToken = data.access_token;
-      self.tokenType = data.token_type;
-    });
-  };
-
-  /*
-     Clears any authentication data & removes OAuth authentication
-      By default it will only remove the "access_token". Specify
-     the users refresh token to revoke that token instead.
-   */
-  self.deauth = function (refreshToken) {
-
-    // no need to deauth if not authenticated
-    if (!self.isAuthenticated()) {
-      return _when2['default'].resolve();
+      return params;
     }
+  }, {
+    key: 'getAuthenticatedTokenData',
 
-    var isRefreshToken = typeof refreshToken === 'string';
+    /*
+       Returns the data needed to request an authenticated OAuth
+       access token.
+     */
+    value: function getAuthenticatedTokenData(authorizationCode) {
+      var params = {};
 
-    var token = isRefreshToken ? refreshToken : self.accessToken;
+      params.scope = this.scope;
 
-    var tokenTypeHint = isRefreshToken ? 'refresh_token' : 'access_token';
-
-    var params = {
-      token: token,
-      token_type_hint: tokenTypeHint
-    };
-
-    var auth = 'Basic ' + new Buffer(self._userConfig.oauth.key + ':' + self._userConfig.oauth.secret).toString('base64');
-
-    return self._request.https({
-      method: 'POST',
-      hostname: self._userConfig.serverWWW,
-      path: '/api/v1/revoke_token',
-      headers: { Authorization: auth }
-    }, _querystring2['default'].stringify(params)).then(function (response) {
-      if (response._status !== 204) {
-        throw new Error('Unable to revoke the given token');
+      switch (this._userConfig.oauth.type) {
+        case TOKEN.SCRIPT:
+          params.grant_type = 'password';
+          params.username = this._userConfig.oauth.username;
+          params.password = this._userConfig.oauth.password;
+          break;
+        case TOKEN.EXPLICIT:
+          params.grant_type = 'authorization_code';
+          params.client_id = this._userConfig.oauth.key;
+          params.redirect_uri = this._userConfig.oauth.redirectUri;
+          params.code = authorizationCode;
+          break;
+        default:
+          return _when2['default'].reject(new Error('Invalid OAuth type specified (Authenticated OAuth).'));
       }
-    }).then(function () {
-      // clear the data for this OAuth object
-      self.accessToken = INVALID_TOKEN;
-      self.tokenType = INVALID_TOKEN;
 
-      if (isRefreshToken) {
-        self.refreshToken = INVALID_TOKEN;
+      return params;
+    }
+  }, {
+    key: 'getRefreshTokenData',
+
+    /*
+       Returns the data needed to request a refresh token.
+     */
+    value: function getRefreshTokenData(refreshToken) {
+      var params = {};
+      params.scope = this.scope;
+      params.grant_type = 'refresh_token';
+      params.refresh_token = refreshToken;
+      return params;
+    }
+  }, {
+    key: 'getToken',
+
+    /*
+       A method that sets up a call to receive an access/refresh token.
+     */
+    value: function getToken(tokenEnum, options) {
+
+      options = options || {};
+      var params = undefined;
+
+      switch (tokenEnum) {
+        case TOKEN.REFRESH:
+          params = this.getRefreshTokenData(options.refreshToken);
+          break;
+        case TOKEN.APP_ONLY:
+          params = this.getAppOnlyTokenData();
+          break;
+        case TOKEN.SCRIPT:
+        case TOKEN.EXPLICIT:
+          params = this.getAuthenticatedTokenData(options.authorizationCode);
+          break;
       }
-    });
-  };
 
-  return self;
-}
+      var headers = {};
+      var buff = new Buffer(this._userConfig.oauth.key + ':' + this._userConfig.oauth.secret);
+      var base64 = buff.toString('base64');
+      var auth = 'Basic ' + base64;
+
+      headers.Authorization = auth;
+
+      return this._request.https({
+        method: 'POST',
+        hostname: this._userConfig.serverWWW,
+        path: '/api/v1/access_token',
+        headers: headers
+      }, _querystring2['default'].stringify(params)).then(function (response) {
+        var data = undefined;
+
+        try {
+          data = JSON.parse(response._body);
+        } catch (e) {
+          throw new Error('Failed to get Auth Data:\n' + response._body + '\n' + e.stack);
+        }
+
+        if (data.error) {
+          var str = JSON.stringify(data);
+          throw new Error('Error fetching a new token:\n' + str);
+        }
+
+        return data;
+      });
+    }
+  }, {
+    key: 'auth',
+
+    /*
+       Sets the auth data from the oauth module to allow OAuth calls.
+        This method can authenticate with:
+        - Script based OAuth (no parameter)
+       - Raw authentication data
+       - Authorization Code (request_type = "code")
+       - Access Token (request_type = "token") / Implicit OAuth
+       - Application Only. (void 0, true);
+     */
+    value: function auth(authCodeOrAccessToken, isApplicationOnly) {
+      var _this = this;
+
+      var tokenData = undefined;
+
+      if (isApplicationOnly) {
+        tokenData = this.getToken(TOKEN.APP_ONLY);
+      } else {
+
+        var token = this._userConfig.oauth.type;
+
+        switch (token) {
+          case TOKEN.SCRIPT:
+            tokenData = this.getToken(token);
+            break;
+
+          case TOKEN.EXPLICIT:
+            // auth code in this case
+            tokenData = this.getToken(token, {
+              authorizationCode: authCodeOrAccessToken
+            });
+            break;
+
+          case TOKEN.IMPLICIT:
+            // access token in this case
+            tokenData = {
+              access_token: authCodeOrAccessToken,
+              token_type: 'bearer',
+              expires_in: 3600,
+              scope: this._userConfig.oauth.scope
+            };
+            break;
+
+          default:
+            throw new Error('Setting the auth data is no longer supported.');
+        }
+      }
+
+      return _when2['default'](tokenData).then(function (data) {
+
+        if (typeof data !== 'object') {
+          var str = String(data);
+          return _when2['default'].reject(new Error('There was a problem authenticating: \n ' + str));
+        }
+
+        _this.accessToken = data.access_token;
+        _this.tokenType = data.token_type;
+
+        // If the explicit app used a perminant duration, send
+        // back the refresh token that will be used to re-authenticate
+        // later without user interaction.
+        if (data.refresh_token) {
+          // set the internal refresh token for automatic expiring
+          // access_token management
+          _this.refreshToken = data.refresh_token;
+          return _this.refreshToken;
+        }
+      });
+    }
+  }, {
+    key: 'applicationOnlyAuth',
+
+    /*
+       Only authenticates with Application Only OAuth
+     */
+    value: function applicationOnlyAuth() {
+      return this.auth(void 0, true);
+    }
+  }, {
+    key: 'refresh',
+
+    /*
+       Authenticate with a refresh token.
+     */
+    value: function refresh(refreshToken) {
+      var _this2 = this;
+
+      // use the provided refresh token, or the current
+      // one that we have for this class
+      refreshToken = refreshToken || this.refreshToken;
+
+      return this.getToken(TOKEN.REFRESH, {
+        refreshToken: refreshToken
+      }).then(function (data) {
+        // only set the internal refresh token if reddit
+        // agrees that it was OK and sends back authData
+        _this2.refreshToken = refreshToken;
+
+        _this2.accessToken = data.access_token;
+        _this2.tokenType = data.token_type;
+      });
+    }
+  }, {
+    key: 'deauth',
+
+    /*
+       Clears any authentication data & removes OAuth authentication
+        By default it will only remove the "access_token". Specify
+       the users refresh token to revoke that token instead.
+     */
+    value: function deauth(refreshToken) {
+      var _this3 = this;
+
+      // no need to deauth if not authenticated
+      if (!this.isAuthenticated()) {
+        return _when2['default'].resolve();
+      }
+
+      var isRefreshToken = typeof refreshToken === 'string';
+
+      var token = isRefreshToken ? refreshToken : this.accessToken;
+
+      var tokenTypeHint = isRefreshToken ? 'refresh_token' : 'access_token';
+
+      var params = {
+        token: token,
+        token_type_hint: tokenTypeHint
+      };
+
+      var auth = 'Basic ' + new Buffer(this._userConfig.oauth.key + ':' + this._userConfig.oauth.secret).toString('base64');
+
+      return this._request.https({
+        method: 'POST',
+        hostname: this._userConfig.serverWWW,
+        path: '/api/v1/revoke_token',
+        headers: { Authorization: auth }
+      }, _querystring2['default'].stringify(params)).then(function (response) {
+        if (response._status !== 204) {
+          throw new Error('Unable to revoke the given token');
+        }
+      }).then(function () {
+        // clear the data for this OAuth object
+        _this3.accessToken = INVALID_TOKEN;
+        _this3.tokenType = INVALID_TOKEN;
+
+        if (isRefreshToken) {
+          _this3.refreshToken = INVALID_TOKEN;
+        }
+      });
+    }
+  }]);
+
+  return OAuth;
+})();
+
+exports['default'] = OAuth;
 'use strict';
 
 var _interopRequireWildcard = function (obj) { return obj && obj.__esModule ? obj : { 'default': obj }; };
@@ -1050,7 +1099,7 @@ function Request(throttle) {
 
   self.https = function (options, formData) {
     return self._throttle.wait().then(function () {
-      return httpsRequest.https(options, formData);
+      return _https2['default'](options, formData);
     });
   };
 
@@ -1556,9 +1605,9 @@ var _form2 = _interopRequireWildcard(_form);
  */
 
 exports['default'] = function (options, formData) {
-  // console.log('\n\n\n\n');
-  // console.log('>>> request');
-  // console.log(options.method + ': ' + options.hostname + options.path);
+  console.log('\n\n\n\n');
+  console.log('>>> request');
+  console.log(options.method + ': ' + options.hostname + options.path);
 
   options = options || {};
   options.headers = options.headers || {};
@@ -1573,7 +1622,7 @@ exports['default'] = function (options, formData) {
     options.headers['Content-Length'] = data.contentLength;
   }
 
-  // console.log('\n>>> headers\n', options.headers);
+  console.log('\n>>> headers\n', options.headers);
 
   // stick the data at the end of the url for GET requests
   if (options.method === 'GET' && data.buffer.toString() !== '') {
@@ -1599,8 +1648,8 @@ exports['default'] = function (options, formData) {
         res._status = res.statusCode;
         res._headers = res.headers;
 
-        // console.log('\n>>> body\n', body);
-        // console.log('\n>>> status\n', res.statusCode);
+        console.log('\n>>> body\n', body);
+        console.log('\n>>> status\n', res.statusCode);
         return resolve(res);
       });
     });

@@ -18,10 +18,9 @@ describe('[Browser]', function() {
 
   require('./src/Endpoint-test');
   require('./src/OAuth-test');
-  require('./src/RedditRequest-test.js');
+  require('./src/RedditRequest-test');
   require('./src/Request-test');
   require('./src/Throttle-test');
-  require('./src/UserConfig-test.js');
-  require('./src/behavior-test.js');
-
+  require('./src/UserConfig-test');
+  require('./src/behavior-test');
 });

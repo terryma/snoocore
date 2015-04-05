@@ -1,6 +1,4 @@
 /* global describe, it */
-require("babel/register");
-
 var when = require('when');
 var delay = require('when/delay');
 var chai = require('chai');
@@ -12,7 +10,7 @@ var tsi = require('./testServerInstance');
 var util = require('./util');
 var config = require('../config');
 
-var OAuth = require('../../src/OAuth');
+import OAuth, {TOKEN} from '../../src/OAuth';
 var Throttle = require('../../src/Throttle');
 var Request = require('../../src/Request');
 
@@ -58,7 +56,7 @@ describe(__filename, function (require) {
       var userConfig = util.getExplicitUserConfig([ 'flair', 'foobar' ]);
       var oauth = new OAuth(userConfig, request);
       expect(oauth.getAuthorizationHeader()).to.equal(
-        'bearer ' + OAuth.INVALID_TOKEN);
+        'bearer ' + TOKEN.INVALID);
     });
   });
 
@@ -243,7 +241,7 @@ describe(__filename, function (require) {
 
         var authorizationCode = params.code;
 
-        return oauth.getToken(OAuth.TOKEN.EXPLICIT, {
+        return oauth.getToken(TOKEN.EXPLICIT, {
           authorizationCode: authorizationCode,
         });
       }).then(function(authData) {
@@ -262,7 +260,7 @@ describe(__filename, function (require) {
       var userConfig = util.getScriptUserConfig();
       var oauth = new OAuth(userConfig, request);
 
-      return oauth.getToken(OAuth.TOKEN.SCRIPT).then(function(authData) {
+      return oauth.getToken(TOKEN.SCRIPT).then(function(authData) {
         expect(authData).to.be.an('object');
 
         if (authData.error) { throw new Error(authData.error); }
@@ -279,7 +277,7 @@ describe(__filename, function (require) {
       var userConfig = util.getScriptUserConfig([ 'flair' ]);
       var oauth = new OAuth(userConfig, request);
 
-      return oauth.getToken(OAuth.TOKEN.SCRIPT).then(function(authData) {
+      return oauth.getToken(TOKEN.SCRIPT).then(function(authData) {
         expect(authData).to.be.an('object');
 
         if (authData.error) { throw new Error(authData.error); }
@@ -295,7 +293,7 @@ describe(__filename, function (require) {
       var userConfig = util.getScriptUserConfig([ 'flair', 'identity' ]);
       var oauth = new OAuth(userConfig, request);
 
-      return oauth.getToken(OAuth.TOKEN.SCRIPT).then(function(authData) {
+      return oauth.getToken(TOKEN.SCRIPT).then(function(authData) {
         expect(authData).to.be.an('object');
 
         if (authData.error) { throw new Error(authData.error); }
@@ -311,7 +309,7 @@ describe(__filename, function (require) {
       var userConfig = util.getImplicitUserConfig();
       var oauth = new OAuth(userConfig, request);
 
-      return oauth.getToken(OAuth.TOKEN.APP_ONLY).then(function(authData) {
+      return oauth.getToken(TOKEN.APP_ONLY).then(function(authData) {
         expect(authData).to.be.an('object');
 
         if (authData.error) { throw new Error(authData.error); }
@@ -328,7 +326,7 @@ describe(__filename, function (require) {
       var userConfig = util.getScriptUserConfig();
       var oauth = new OAuth(userConfig, request);
 
-      return oauth.getToken(OAuth.TOKEN.APP_ONLY).then(function(authData) {
+      return oauth.getToken(TOKEN.APP_ONLY).then(function(authData) {
         expect(authData).to.be.an('object');
 
         if (authData.error) { throw new Error(authData.error); }

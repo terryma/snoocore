@@ -33,8 +33,8 @@ module.exports = {
 
   // What servers to make requests with to the API
   requestServer: {
-    oauth: 'https://oauth.reddit.com',
-    www: 'https://www.reddit.com'
+    oauth: 'oauth.reddit.com',
+    www: 'www.reddit.com'
   },
 
   reddit: {

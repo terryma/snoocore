@@ -54,7 +54,7 @@ function RedditRequest(userConfig, request, oauth, oauthAppOnly) {
     }
 
     return headers;
-  }
+  };
 
   /*
      Call the reddit api.
