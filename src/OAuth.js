@@ -4,7 +4,7 @@ import urlLib from 'url';
 
 import when from 'when';
 
-import utils from './utils';
+import * as u from './utils';
 
 /*
    Various OAuth types
@@ -80,7 +80,7 @@ export default class OAuth {
     let query = {};
 
     query.client_id = this._userConfig.oauth.key;
-    query.state = utils.thisOrThat(state, Math.ceil(Math.random() * 1000));
+    query.state = u.thisOrThat(state, Math.ceil(Math.random() * 1000));
     query.redirect_uri = this._userConfig.oauth.redirectUri;
     query.duration = this._userConfig.oauth.duration;
     query.response_type = 'code';
@@ -103,7 +103,7 @@ export default class OAuth {
     let query = {};
 
     query.client_id = this._userConfig.oauth.key;
-    query.state = utils.thisOrThat(state, Math.ceil(Math.random() * 1000));
+    query.state = u.thisOrThat(state, Math.ceil(Math.random() * 1000));
     query.redirect_uri = this._userConfig.oauth.redirectUri;
     query.response_type = 'token';
     query.scope = this.scope;
@@ -345,7 +345,7 @@ export default class OAuth {
 
     // use the provided refresh token, or the current
     // one that we have for this class
-    refreshToken = utils.thisOrThat(refreshToken, this.refreshToken);
+    refreshToken = u.thisOrThat(refreshToken, this.refreshToken);
 
     return this.getToken(TOKEN.REFRESH, {
       refreshToken: refreshToken

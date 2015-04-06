@@ -1,6 +1,6 @@
 import path from 'path';
 
-import utils from './utils';
+import * as u from './utils';
 
 // Precompiled list of properties for specific endpoints
 import endpointProperties from '../endpointProperties';
@@ -71,30 +71,30 @@ export default class Endpoint {
     let cOptions = givenContextOptions || {};
 
     // by default we do not bypass authentication
-    cOptions.bypassAuth = utils.thisOrThat(cOptions.bypassAuth, false);
+    cOptions.bypassAuth = u.thisOrThat(cOptions.bypassAuth, false);
 
     // decode html enntities for this call?
-    cOptions.decodeHtmlEntities = utils.thisOrThat(cOptions.decodeHtmlEntities,
+    cOptions.decodeHtmlEntities = u.thisOrThat(cOptions.decodeHtmlEntities,
                                                    this._userConfig.decodeHtmlEntities);
 
     // how many attempts left do we have to retry an endpoint?
 
     // use the given retryAttemptsLeft, or the retryAttempts passed in the
     // context options if not specified
-    cOptions.retryAttemptsLeft = utils.thisOrThat(cOptions.retryAttemptsLeft,
+    cOptions.retryAttemptsLeft = u.thisOrThat(cOptions.retryAttemptsLeft,
                                                   cOptions.retryAttempts);
 
     // use the given retryAttemptsLeft, or the retryAttempts passed in the
     // user configuration
-    cOptions.retryAttemptsLeft = utils.thisOrThat(cOptions.retryAttemptsLeft,
+    cOptions.retryAttemptsLeft = u.thisOrThat(cOptions.retryAttemptsLeft,
                                                   this._userConfig.retryAttempts);
 
     // delay between retrying an endpoint
-    cOptions.retryDelay = utils.thisOrThat(cOptions.retryDelay,
+    cOptions.retryDelay = u.thisOrThat(cOptions.retryDelay,
                                            this._userConfig.retryDelay);
 
     // how many reauthentication attempts do we have left?
-    cOptions.reauthAttemptsLeft = utils.thisOrThat(cOptions.reauthAttemptsLeft,
+    cOptions.reauthAttemptsLeft = u.thisOrThat(cOptions.reauthAttemptsLeft,
                                                    cOptions.retryAttemptsLeft);
 
     return cOptions;
@@ -114,7 +114,7 @@ export default class Endpoint {
       }
     }
 
-    let apiType = utils.thisOrThat(this.contextOptions.api_type,
+    let apiType = u.thisOrThat(this.contextOptions.api_type,
                                    this._userConfig.apiType);
 
     if (apiType && this.needsApiTypeJson) {
@@ -128,7 +128,7 @@ export default class Endpoint {
      Builds the URL that we will query reddit with.
    */
   buildUrl() {
-    let serverOAuth = utils.thisOrThat(this.contextOptions.serverOAuth,
+    let serverOAuth = u.thisOrThat(this.contextOptions.serverOAuth,
                                        this._userConfig.serverOAuth);
 
     let url = 'https://' + path.join(serverOAuth, this.path);

@@ -1,5 +1,5 @@
 
-import utils from './utils';
+import * as u from './utils';
 
 /*
    Browserify switches it to httpsBrowser for us when building

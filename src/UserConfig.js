@@ -1,4 +1,4 @@
-import utils from './utils';
+import * as u from './utils';
 
 /*
    A class made up of the user configuration.
@@ -18,47 +18,47 @@ export default class UserConfig {
     var missingMsg = 'Missing required userConfiguration value ';
 
     // ** SERVERS
-    this.serverOAuth = utils.thisOrThat(userConfiguration.serverOAuth,
+    this.serverOAuth = u.thisOrThat(userConfiguration.serverOAuth,
                                         'oauth.reddit.com');
 
-    this.serverWWW = utils.thisOrThat(userConfiguration.serverWWW,
+    this.serverWWW = u.thisOrThat(userConfiguration.serverWWW,
                                       'www.reddit.com');
 
     // ** IDENFIFICATION
-    this.userAgent = utils.thisOrThrow(
+    this.userAgent = u.thisOrThrow(
       userConfiguration.userAgent,
       'Missing required userConfiguration value `userAgent`');
 
-    this.isNode = utils.thisOrThat(userConfiguration.browser, utils.isNode());
+    this.isNode = u.thisOrThat(userConfiguration.browser, u.isNode());
 
-    this.mobile = utils.thisOrThat(userConfiguration.mobile, false);
+    this.mobile = u.thisOrThat(userConfiguration.mobile, false);
 
     // ** CALL MODIFICATIONS
-    this.decodeHtmlEntities = utils.thisOrThat(
+    this.decodeHtmlEntities = u.thisOrThat(
       userConfiguration.decodeHtmlEntities,
       false);
 
-    this.apiType = utils.thisOrThat(userConfiguration.apiType, 'json');
+    this.apiType = u.thisOrThat(userConfiguration.apiType, 'json');
 
 
     // ** RETRY ATTEMPTS
-    this.retryAttempts = utils.thisOrThat(userConfiguration.retryAttempts, 60);
+    this.retryAttempts = u.thisOrThat(userConfiguration.retryAttempts, 60);
 
-    this.retryDelay = utils.thisOrThat(userConfiguration.retryDelay, 5000);
+    this.retryDelay = u.thisOrThat(userConfiguration.retryDelay, 5000);
 
 
     // ** OAUTH
-    this.oauth = utils.thisOrThat(userConfiguration.oauth, {});
+    this.oauth = u.thisOrThat(userConfiguration.oauth, {});
 
-    this.oauth.scope = utils.thisOrThat(this.oauth.scope, []);
+    this.oauth.scope = u.thisOrThat(this.oauth.scope, []);
 
-    this.oauth.deviceId = utils.thisOrThat(this.oauth.deviceId,
+    this.oauth.deviceId = u.thisOrThat(this.oauth.deviceId,
                                            'DO_NOT_TRACK_THIS_DEVICE');
-    this.oauth.type = utils.thisOrThrow(this.oauth.type,
+    this.oauth.type = u.thisOrThrow(this.oauth.type,
                                         missingMsg + '`oauth.type`');
-    this.oauth.key = utils.thisOrThrow(this.oauth.key,
+    this.oauth.key = u.thisOrThrow(this.oauth.key,
                                        missingMsg + '`oauth.key`');
-    this.oauth.duration = utils.thisOrThat(this.oauth.duration, 'temporary');
+    this.oauth.duration = u.thisOrThat(this.oauth.duration, 'temporary');
 
 
     //
@@ -81,23 +81,23 @@ export default class UserConfig {
     }
 
     if (this.isOAuthType('explicit') || this.isOAuthType('script')) {
-      this.oauth.secret = utils.thisOrThrow(
+      this.oauth.secret = u.thisOrThrow(
         this.oauth.secret,
         missingMsg + '`oauth.secret` for type explicit/script');
     }
 
 
     if (this.isOAuthType('script')) {
-      this.oauth.username = utils.thisOrThrow(
+      this.oauth.username = u.thisOrThrow(
         this.oauth.username,
         missingMsg + '`oauth.username` for type script');
-      this.oauth.password = utils.thisOrThrow(
+      this.oauth.password = u.thisOrThrow(
         this.oauth.password,
         missingMsg + '`oauth.password` for type script');
     }
 
     if (this.isOAuthType('implicit') || this.isOAuthType('explicit')) {
-      this.oauth.redirectUri = utils.thisOrThrow(
+      this.oauth.redirectUri = u.thisOrThrow(
         this.oauth.redirectUri,
         missingMsg + '`oauth.redirectUri` for type implicit/explicit');
     }
