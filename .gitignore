@@ -13,6 +13,10 @@ pids
 logs
 results
 
+# Ignore build dir. This will only be submitted to npm / used when
+# building the browser version in the `dist` folder
+build
+
 npm-debug.log
 node_modules
 
