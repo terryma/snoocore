@@ -4,7 +4,7 @@
 
 import when from 'when';
 
-import form from './form';
+import * as form from './form';
 
 // https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest#getAllResponseHeaders()
 

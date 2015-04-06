@@ -3,29 +3,29 @@ import querystring from 'querystring';
 
 import when from 'when';
 
-exports.getSectionBoundary = function(boundary) {
+export function getSectionBoundary(boundary) {
   return '--' + boundary;
-};
+}
 
-exports.getEndBoundary = function(boundary) {
+export function getEndBoundary(boundary) {
   return '--' + boundary + '--';
-};
+}
 
-exports.encodeFieldPart = function(boundary, key, value) {
+export function encodeFieldPart(boundary, key, value) {
   return new Buffer([
-    exports.getSectionBoundary(boundary),
+    getSectionBoundary(boundary),
     '\r\n',
     'Content-Disposition: form-data; name="' + key + '"',
     '\r\n\r\n',
     value,
     '\r\n'
   ].join(''));
-};
+}
 
-exports.encodeFilePart = function(boundary, key, name, mimeType, data) {
+export function encodeFilePart(boundary, key, name, mimeType, data) {
   return Buffer.concat([
     new Buffer([
-      exports.getSectionBoundary(boundary),
+      getSectionBoundary(boundary),
       '\r\n',
       ('Content-Disposition: form-data; ' +
        'name="' + key + '"; ' +
@@ -37,7 +37,7 @@ exports.encodeFilePart = function(boundary, key, name, mimeType, data) {
     data, // already a buffer
     new Buffer('\r\n')
   ]);
-};
+}
 
 /*
    Converts a list of parameters to form data
@@ -49,7 +49,7 @@ exports.encodeFilePart = function(boundary, key, name, mimeType, data) {
    --> `valuename` - the name of the value corresponding to the file
    --> `dataBuffer` - A buffer containing the files data
  */
-exports.getMultipartFormData = function(boundary, fields, files) {
+export function getMultipartFormData(boundary, fields, files) {
 
   var dataBuffer = new Buffer(0);
   var key;
@@ -62,7 +62,7 @@ exports.getMultipartFormData = function(boundary, fields, files) {
       var value = fields[key];
 
       dataBuffer = Buffer.concat([
-	dataBuffer, exports.encodeFieldPart(boundary, key, value)
+        dataBuffer, encodeFieldPart(boundary, key, value)
       ]);
     }
   }
@@ -72,12 +72,12 @@ exports.getMultipartFormData = function(boundary, fields, files) {
       var file = files[key];
 
       dataBuffer = Buffer.concat([
-	dataBuffer,
-	exports.encodeFilePart(boundary,
-			       file.key,
-			       file.name,
-			       file.mimeType,
-			       file.data)
+        dataBuffer,
+        encodeFilePart(boundary,
+                       file.key,
+                       file.name,
+                       file.mimeType,
+                       file.data)
       ]);
     }
   }
@@ -85,11 +85,11 @@ exports.getMultipartFormData = function(boundary, fields, files) {
   // close with a final boundary closed with '--' at the end
   dataBuffer = Buffer.concat([
     dataBuffer,
-    new Buffer(exports.getEndBoundary(boundary))
+    new Buffer(getEndBoundary(boundary))
   ]);
 
   return dataBuffer;
-};
+}
 
 /*
    Takes an existing string or key-value pair that represents form data
@@ -100,7 +100,7 @@ exports.getMultipartFormData = function(boundary, fields, files) {
    will also assume that the file is actually a file path on the system
    that we wish to use in the multipart data.
  */
-exports.getData = function(formData) {
+export function getData(formData) {
 
   var data = {
     contentType: 'application/x-www-form-urlencoded',
@@ -128,10 +128,10 @@ exports.getData = function(formData) {
 
       var boundary = '---------Snoocore' + Math.floor(Math.random() * 10000);
       data.contentType = 'multipart/form-data; boundary=' + boundary;
-      data.buffer = exports.getMultipartFormData(boundary, formData, files);
+      data.buffer = getMultipartFormData(boundary, formData, files);
     }
   }
 
   data.contentLength = data.buffer.length;
   return data;
-};
+}

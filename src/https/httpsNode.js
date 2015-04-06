@@ -6,7 +6,7 @@ import https from 'https';
 
 import when from 'when';
 
-import form from './form';
+import * as form from './form';
 
 /*
    Form data can be a raw string, or an object containing key/value pairs

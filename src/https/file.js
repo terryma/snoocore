@@ -7,7 +7,7 @@ data can be a `utf8` string, or a buffer containing the
 content of the file.
 */
 
-module.exports = function(name, mimeType, data) {
+export default function(name, mimeType, data) {
   var self = {};
 
   self.name = name;
@@ -15,4 +15,4 @@ module.exports = function(name, mimeType, data) {
   self.data = (typeof data === 'string') ? new Buffer(data) : data;
 
   return self;
-};
+}
