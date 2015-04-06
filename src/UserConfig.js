@@ -58,11 +58,19 @@ export default class UserConfig {
                                         missingMsg + '`oauth.type`');
     this.oauth.key = utils.thisOrThrow(this.oauth.key,
                                        missingMsg + '`oauth.key`');
+    this.oauth.duration = utils.thisOrThat(this.oauth.duration, 'temporary');
 
 
     //
     // - - - VALIDATION
     //
+
+    if (this.oauth.duration !== 'temporary' &&
+      this.oauth.duration !== 'permanent')
+    {
+      throw new Error(
+        'Invalid `oauth.duration`. Must be one of: permanent, temporary');
+    }
 
     if (!this.isOAuthType('explicit') &&
       !this.isOAuthType('implicit') &&

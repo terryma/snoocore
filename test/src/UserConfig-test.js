@@ -26,6 +26,20 @@ describe(__filename, function () {
     }).to.throw('Missing required userConfiguration value `userAgent`');
   });
 
+  it.only('should complain about an improper oauth duration', function() {
+    expect(function() {
+      new UserConfig({
+        userAgent: 'foo bar',
+        oauth: {
+          type: 'explicit',
+          duration: 'invalid_duration',
+          key: 'test',
+          redirectUri: 'http:foo'
+        }
+      });
+    }).to.throw('Invalid `oauth.duration`. Must be one of: permanent, temporary');
+  });
+
   it('should complain about missing oauth.type', function() {
     expect(function() {
       new UserConfig({
