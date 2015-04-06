@@ -1,5 +1,3 @@
-"use strict";
-
 // Node.js libraries
 import events from 'events';
 import util from 'util';
@@ -10,63 +8,69 @@ import RedditRequest from './RedditRequest';
 import Throttle from './Throttle';
 import UserConfig from './UserConfig';
 import OAuth from './OAuth';
+import file from './https/file';
 
-Snoocore.file = require('./https/file');
-Snoocore.version = '3.0.0';
+export default class Snoocore extends events.EventEmitter {
 
-module.exports = Snoocore;
-util.inherits(Snoocore, events.EventEmitter);
-function Snoocore(userConfiguration) {
-
-  var self = this;
-
-  events.EventEmitter.call(self);
-
-  // @TODO - this is a "god object" of sorts.
-  self._userConfig = new UserConfig(userConfiguration);
-
-  self._throttle = new Throttle(self._userConfig.throttle);
-
-  self._request = new Request(self._throttle);
-
-  // Two OAuth instances. One for authenticated users, and another for
-  // Application only OAuth. Two are needed in the instance where
-  // a user wants to bypass authentication for a call - we don't want
-  // to waste time by creating a new app only instance, authenticating,
-  // etc.
-  self.oauth = new OAuth(self._userConfig, self._request);
-  self.oauthAppOnly = new OAuth(self._userConfig, self._request);
-
-  // Expose OAuth functions in here
-  self.getExplicitAuthUrl = self.oauth.getExplicitAuthUrl.bind(self.oauth);
-  self.getImplicitAuthUrl = self.oauth.getImplicitAuthUrl.bind(self.oauth);
-  self.auth = self.oauth.auth.bind(self.oauth);
-  self.refresh = self.oauth.refresh.bind(self.oauth);
-  self.deauth = self.oauth.deauth.bind(self.oauth);
-
-  self._redditRequest = new RedditRequest(self._userConfig,
-                                          self._request,
-                                          self.oauth,
-                                          self.oauthAppOnly);
-
-  // bubble up the events
-  self._redditRequest.on('server_error', function(responseError) {
-    self.emit('server_error', responseError);
-  });
-
-  self._redditRequest.on('access_token_expired', function(responseError) {
-    self.emit('access_token_expired', responseError);
-  });
-
-  /*
-     Make self._redditRequest.path the primary function that we return, but
-     still allow access to the objects defined on self
-   */
-  var key;
-  for (key in self) {
-    self._redditRequest.path[key] = self[key];
+  static get version() {
+    return '3.0.0';
   }
 
-  self = self._redditRequest.path;
-  return self;
+  static file(...args) {
+    return file.apply(args);
+  }
+
+  constructor(userConfiguration) {
+    super();
+
+    // @TODO - this is a "god object" of sorts.
+    this._userConfig = new UserConfig(userConfiguration);
+
+    this._throttle = new Throttle(this._userConfig.throttle);
+
+    this._request = new Request(this._throttle);
+
+    // Two OAuth instances. One for authenticated users, and another for
+    // Application only OAuth. Two are needed in the instance where
+    // a user wants to bypass authentication for a call - we don't want
+    // to waste time by creating a new app only instance, authenticating,
+    // etc.
+    this.oauth = new OAuth(this._userConfig, this._request);
+    this.oauthAppOnly = new OAuth(this._userConfig, this._request);
+
+    // Expose OAuth functions in here
+    this.getExplicitAuthUrl = this.oauth.getExplicitAuthUrl.bind(this.oauth);
+    this.getImplicitAuthUrl = this.oauth.getImplicitAuthUrl.bind(this.oauth);
+    this.auth = this.oauth.auth.bind(this.oauth);
+    this.refresh = this.oauth.refresh.bind(this.oauth);
+    this.deauth = this.oauth.deauth.bind(this.oauth);
+
+    this._redditRequest = new RedditRequest(this._userConfig,
+                                            this._request,
+                                            this.oauth,
+                                            this.oauthAppOnly);
+
+    // bubble up the events
+    this._redditRequest.on('server_error', (responseError) => {
+      this.emit('server_error', responseError);
+    });
+
+    this._redditRequest.on('access_token_expired', (responseError) => {
+      this.emit('access_token_expired', responseError);
+    });
+
+    /*
+       Make this._redditRequest.path the primary function that we return, but
+       stick the rest of the available functions on the prototype so we
+       can use them as well.
+     */
+    let path = this._redditRequest.path.bind(this._redditRequest);
+
+    let key;
+    for (key in this) {
+      path[key] = this[key];
+    }
+
+    return path;
+  }
 }

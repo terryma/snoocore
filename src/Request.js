@@ -1,23 +1,23 @@
 
 import utils from './utils';
 
-// Browserify switches it to httpsBrowser for us when building
-// for browsers.
-//
-// This is defined in `package.json`
+/*
+   Browserify switches it to httpsBrowser for us when building
+   for browsers.
+
+   This is defined in `package.json`
+ */
 import https from './https/httpsNode';
 
-module.exports = Request;
-function Request(throttle) {
-  var self = this;
+export default class Request {
 
-  self._throttle = throttle;
+  constructor (throttle) {
+    this._throttle = throttle;
+  }
 
-  self.https = function(options, formData) {
-    return self._throttle.wait().then(function() {
+  https(options, formData) {
+    return this._throttle.wait().then(()=> {
       return https(options, formData);
     });
-  };
-  
-  return self;
+  }
 }

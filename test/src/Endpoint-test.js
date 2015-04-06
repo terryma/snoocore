@@ -1,17 +1,17 @@
 /* describe, it, afterEach, beforeEach */
 require("babel/register");
 
-var chai = require('chai');
-var chaiAsPromised = require('chai-as-promised');
+import chai from 'chai';
+import chaiAsPromised from 'chai-as-promised';
 chai.use(chaiAsPromised);
-var expect = chai.expect;
+let expect = chai.expect;
 
-var config = require('../config');
-var util = require('./util');
+import config from '../config';
+import util from './util';
 
 import Endpoint, {buildPropertyTree, replaceUrlParams} from '../../src/Endpoint';
 
-describe.only('Endpoint.', function () {
+describe('Endpoint.', function () {
 
   this.timeout(config.testTimeout);
 

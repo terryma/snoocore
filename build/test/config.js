@@ -1,3 +1,8 @@
+'use strict';
+
+Object.defineProperty(exports, '__esModule', {
+  value: true
+});
 
 // By default it will read from the environment
 // variables. If they do not exist, it will then
@@ -19,9 +24,7 @@ export REDDIT_SCRIPT_KEY=''
 export REDDIT_SCRIPT_SECRET=''
 
 */
-'use strict';
-
-module.exports = {
+exports['default'] = {
 
   testTimeout: 60000, // 1 minute per test before they time out
 
@@ -72,4 +75,5 @@ module.exports = {
 
   }
 };
+module.exports = exports['default'];
 //# sourceMappingURL=config.js.map

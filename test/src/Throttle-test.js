@@ -1,17 +1,18 @@
 /* describe, it, afterEach, beforeEach */
 require("babel/register");
 
-var chai = require('chai');
-var chaiAsPromised = require('chai-as-promised');
+import chai from 'chai';
+import chaiAsPromised from 'chai-as-promised';
 chai.use(chaiAsPromised);
-var expect = chai.expect;
 
-var when = require('when');
-var delay = require('when/delay');
+let expect = chai.expect;
 
-var config = require('../config');
+import when from 'when';
+import delay from 'when/delay';
 
-var Throttle = require('../../src/Throttle');
+import config from '../config';
+
+import Throttle from '../../src/Throttle';
 
 describe('Throttle.', function () {
 

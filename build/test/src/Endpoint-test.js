@@ -1,40 +1,55 @@
-/* describe, it, afterEach, beforeEach */
 'use strict';
 
+var _interopRequireWildcard = function (obj) { return obj && obj.__esModule ? obj : { 'default': obj }; };
+
+var _chai = require('chai');
+
+var _chai2 = _interopRequireWildcard(_chai);
+
+var _chaiAsPromised = require('chai-as-promised');
+
+var _chaiAsPromised2 = _interopRequireWildcard(_chaiAsPromised);
+
+var _config = require('../config');
+
+var _config2 = _interopRequireWildcard(_config);
+
+var _util = require('./util');
+
+var _util2 = _interopRequireWildcard(_util);
+
+var _Endpoint$buildPropertyTree$replaceUrlParams = require('../../src/Endpoint');
+
+var _Endpoint$buildPropertyTree$replaceUrlParams2 = _interopRequireWildcard(_Endpoint$buildPropertyTree$replaceUrlParams);
+
+/* describe, it, afterEach, beforeEach */
 require('babel/register');
 
-var chai = require('chai');
-var chaiAsPromised = require('chai-as-promised');
-chai.use(chaiAsPromised);
-var expect = chai.expect;
-
-var config = require('../config');
-var util = require('./util');
-
-var Endpoint = require('../../src/Endpoint');
+_chai2['default'].use(_chaiAsPromised2['default']);
+var expect = _chai2['default'].expect;
 
 describe('Endpoint.', function () {
 
-  this.timeout(config.testTimeout);
+  this.timeout(_config2['default'].testTimeout);
 
   describe('replaceUrlParams()', function () {
     it('should not replace anything', function () {
-      var reddit = util.getScriptInstance();
-      var url = Endpoint.replaceUrlParams('http://foo/bar/baz', { hello: 'world' });
+      var reddit = _util2['default'].getScriptInstance();
+      var url = _Endpoint$buildPropertyTree$replaceUrlParams.replaceUrlParams('http://foo/bar/baz', { hello: 'world' });
       expect(url).to.equal('http://foo/bar/baz');
     });
 
     it('should replace parameters', function () {
-      var reddit = util.getScriptInstance();
-      var url = Endpoint.replaceUrlParams('http://foo/$hello/baz', {
+      var reddit = _util2['default'].getScriptInstance();
+      var url = _Endpoint$buildPropertyTree$replaceUrlParams.replaceUrlParams('http://foo/$hello/baz', {
         $hello: 'world'
       });
       expect(url).to.equal('http://foo/world/baz');
     });
 
     it('should replace more than one parameter', function () {
-      var reddit = util.getScriptInstance();
-      var url = Endpoint.replaceUrlParams('http://foo/$hello/$foo', {
+      var reddit = _util2['default'].getScriptInstance();
+      var url = _Endpoint$buildPropertyTree$replaceUrlParams.replaceUrlParams('http://foo/$hello/$foo', {
         $hello: 'world',
         $foo: 'bar'
       });
@@ -45,7 +60,7 @@ describe('Endpoint.', function () {
   describe('buildPropertyTree()', function () {
     it('should build the tree', function () {
       var endpointProperties = require('../../endpointProperties');
-      var propertyTree = Endpoint.buildPropertyTree(endpointProperties);
+      var propertyTree = _Endpoint$buildPropertyTree$replaceUrlParams.buildPropertyTree(endpointProperties);
       expect(propertyTree.api.new_captcha._endpoints.post).to.equal('a');
     });
   });
@@ -55,26 +70,26 @@ describe('Endpoint.', function () {
     describe('buildArgs()', function () {
 
       it('should remove `$` arguments', function () {
-        var userConfig = util.getScriptUserConfig();
-        var endpoint = new Endpoint(userConfig, 'get', '/foo/bar', { $foo: 'bar' });
+        var userConfig = _util2['default'].getScriptUserConfig();
+        var endpoint = new _Endpoint$buildPropertyTree$replaceUrlParams2['default'](userConfig, 'get', '/foo/bar', { $foo: 'bar' });
 
         expect(endpoint.args).to.eql({});
       });
 
       it('should add in the default api type', function () {
-        var userConfig = util.getScriptUserConfig();
-        var endpoint = new Endpoint(userConfig, 'post', '/api/new_captcha', { $foo: 'bar' });
+        var userConfig = _util2['default'].getScriptUserConfig();
+        var endpoint = new _Endpoint$buildPropertyTree$replaceUrlParams2['default'](userConfig, 'post', '/api/new_captcha', { $foo: 'bar' });
 
         expect(endpoint.args).to.eql({ api_type: 'json' });
       });
 
       it('Should NOT add in the default api type', function () {
 
-        var userConfig = util.getScriptUserConfig();
+        var userConfig = _util2['default'].getScriptUserConfig();
 
         userConfig.apiType = false; // no not set api_type to "json"
 
-        var endpoint = new Endpoint(userConfig, 'post', '/api/new_captcha', { $foo: 'bar' });
+        var endpoint = new _Endpoint$buildPropertyTree$replaceUrlParams2['default'](userConfig, 'post', '/api/new_captcha', { $foo: 'bar' });
 
         expect(endpoint.args).to.eql({});
       });
@@ -82,8 +97,8 @@ describe('Endpoint.', function () {
 
     describe('normalizeContextOptions()', function () {
       it('should initialize the correct default context options', function () {
-        var userConfig = util.getScriptUserConfig();
-        var endpoint = new Endpoint(userConfig, 'post', '/api/new_captcha');
+        var userConfig = _util2['default'].getScriptUserConfig();
+        var endpoint = new _Endpoint$buildPropertyTree$replaceUrlParams2['default'](userConfig, 'post', '/api/new_captcha');
         expect(endpoint.contextOptions).to.eql({
           bypassAuth: false,
           decodeHtmlEntities: false,
@@ -94,13 +109,13 @@ describe('Endpoint.', function () {
       });
 
       it('should change context options based on user config', function () {
-        var userConfig = util.getScriptUserConfig();
+        var userConfig = _util2['default'].getScriptUserConfig();
 
         userConfig.decodeHtmlEntities = true;
         userConfig.retryAttempts = 9999;
         userConfig.retryDelay = 8888;
 
-        var endpoint = new Endpoint(userConfig, 'post', '/api/new_captcha');
+        var endpoint = new _Endpoint$buildPropertyTree$replaceUrlParams2['default'](userConfig, 'post', '/api/new_captcha');
         expect(endpoint.contextOptions).to.eql({
           bypassAuth: false,
           decodeHtmlEntities: true,
@@ -111,9 +126,9 @@ describe('Endpoint.', function () {
       });
 
       it('should change context options based on endpoint optons', function () {
-        var userConfig = util.getScriptUserConfig();
+        var userConfig = _util2['default'].getScriptUserConfig();
 
-        var endpoint = new Endpoint(userConfig, 'post', '/api/new', {}, {
+        var endpoint = new _Endpoint$buildPropertyTree$replaceUrlParams2['default'](userConfig, 'post', '/api/new', {}, {
           bypassAuth: true,
           decodeHtmlEntities: true,
           retryAttempts: 9999,
@@ -133,14 +148,14 @@ describe('Endpoint.', function () {
 
     describe('getProperties()', function () {
       it('should have properties', function () {
-        var userConfig = util.getScriptUserConfig();
-        var endpoint = new Endpoint(userConfig, 'post', '/api/new_captcha');
+        var userConfig = _util2['default'].getScriptUserConfig();
+        var endpoint = new _Endpoint$buildPropertyTree$replaceUrlParams2['default'](userConfig, 'post', '/api/new_captcha');
         expect(endpoint.properties).to.equal('a');
       });
 
       it('should not have properties', function () {
-        var userConfig = util.getScriptUserConfig();
-        var endpoint = new Endpoint(userConfig, 'get', '/foo/bar');
+        var userConfig = _util2['default'].getScriptUserConfig();
+        var endpoint = new _Endpoint$buildPropertyTree$replaceUrlParams2['default'](userConfig, 'get', '/foo/bar');
         expect(endpoint.properties).to.equal('');
       });
     });
@@ -148,22 +163,22 @@ describe('Endpoint.', function () {
     describe('buildUrl()', function () {
 
       it('should build an url for an endpoint', function () {
-        var userConfig = util.getScriptUserConfig();
-        var endpoint = new Endpoint(userConfig, 'get', '/$urlparam/bar', {
+        var userConfig = _util2['default'].getScriptUserConfig();
+        var endpoint = new _Endpoint$buildPropertyTree$replaceUrlParams2['default'](userConfig, 'get', '/$urlparam/bar', {
           extensions: [],
           user: 'foo',
           passwd: 'foo',
           $urlparam: 'some'
         });
 
-        expect(endpoint.url).to.equal('https://' + config.requestServer.oauth + '/some/bar');
+        expect(endpoint.url).to.equal('https://' + _config2['default'].requestServer.oauth + '/some/bar');
       });
 
       it('should build an url with a custom hostname (global)', function () {
-        var userConfig = util.getScriptUserConfig();
+        var userConfig = _util2['default'].getScriptUserConfig();
         userConfig.serverOAuth = 'foo.bar.com';
 
-        var endpoint = new Endpoint(userConfig, 'get', '/$urlparam/bar', {
+        var endpoint = new _Endpoint$buildPropertyTree$replaceUrlParams2['default'](userConfig, 'get', '/$urlparam/bar', {
           extensions: [],
           user: 'foo',
           passwd: 'foo',
@@ -175,9 +190,9 @@ describe('Endpoint.', function () {
 
       it('should build an url with a custom hostname (local)', function () {
 
-        var userConfig = util.getScriptUserConfig();
+        var userConfig = _util2['default'].getScriptUserConfig();
 
-        var endpoint = new Endpoint(userConfig, 'get', '/$urlparam/bar', {
+        var endpoint = new _Endpoint$buildPropertyTree$replaceUrlParams2['default'](userConfig, 'get', '/$urlparam/bar', {
           extensions: [],
           user: 'foo',
           passwd: 'foo',

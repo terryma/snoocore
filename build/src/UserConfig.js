@@ -2,6 +2,14 @@
 
 var _interopRequireWildcard = function (obj) { return obj && obj.__esModule ? obj : { 'default': obj }; };
 
+var _classCallCheck = function (instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError('Cannot call a class as a function'); } };
+
+var _createClass = (function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ('value' in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
+
+Object.defineProperty(exports, '__esModule', {
+  value: true
+});
+
 var _utils = require('./utils');
 
 var _utils2 = _interopRequireWildcard(_utils);
@@ -13,81 +21,85 @@ var _utils2 = _interopRequireWildcard(_utils);
 
    Provides some helper functons for getting user set values.
  */
-module.exports = UserConfig;
-function UserConfig(userConfiguration) {
 
-  var self = this;
+var UserConfig = (function () {
+  function UserConfig(userConfiguration) {
+    _classCallCheck(this, UserConfig);
 
-  //
-  // - - - CONFIGURATION VALUES - - -
-  //
+    //
+    // - - - CONFIGURATION VALUES - - -
+    //
 
-  var missingMsg = 'Missing required userConfiguration value ';
+    var missingMsg = 'Missing required userConfiguration value ';
 
-  // ** SERVERS
-  self.serverOAuth = _utils2['default'].thisOrThat(userConfiguration.serverOAuth, 'oauth.reddit.com');
+    // ** SERVERS
+    this.serverOAuth = _utils2['default'].thisOrThat(userConfiguration.serverOAuth, 'oauth.reddit.com');
 
-  self.serverWWW = _utils2['default'].thisOrThat(userConfiguration.serverWWW, 'www.reddit.com');
+    this.serverWWW = _utils2['default'].thisOrThat(userConfiguration.serverWWW, 'www.reddit.com');
 
-  // ** IDENFIFICATION
-  self.userAgent = _utils2['default'].thisOrThrow(userConfiguration.userAgent, 'Missing required userConfiguration value `userAgent`');
+    // ** IDENFIFICATION
+    this.userAgent = _utils2['default'].thisOrThrow(userConfiguration.userAgent, 'Missing required userConfiguration value `userAgent`');
 
-  self.isNode = _utils2['default'].thisOrThat(userConfiguration.browser, _utils2['default'].isNode());
+    this.isNode = _utils2['default'].thisOrThat(userConfiguration.browser, _utils2['default'].isNode());
 
-  self.mobile = _utils2['default'].thisOrThat(userConfiguration.mobile, false);
+    this.mobile = _utils2['default'].thisOrThat(userConfiguration.mobile, false);
 
-  // ** CALL MODIFICATIONS
-  self.decodeHtmlEntities = _utils2['default'].thisOrThat(userConfiguration.decodeHtmlEntities, false);
+    // ** CALL MODIFICATIONS
+    this.decodeHtmlEntities = _utils2['default'].thisOrThat(userConfiguration.decodeHtmlEntities, false);
 
-  self.apiType = _utils2['default'].thisOrThat(userConfiguration.apiType, 'json');
+    this.apiType = _utils2['default'].thisOrThat(userConfiguration.apiType, 'json');
 
-  // ** RETRY ATTEMPTS
-  self.retryAttempts = _utils2['default'].thisOrThat(userConfiguration.retryAttempts, 60);
+    // ** RETRY ATTEMPTS
+    this.retryAttempts = _utils2['default'].thisOrThat(userConfiguration.retryAttempts, 60);
 
-  self.retryDelay = _utils2['default'].thisOrThat(userConfiguration.retryDelay, 5000);
+    this.retryDelay = _utils2['default'].thisOrThat(userConfiguration.retryDelay, 5000);
 
-  // ** OAUTH
-  self.oauth = _utils2['default'].thisOrThat(userConfiguration.oauth, {});
+    // ** OAUTH
+    this.oauth = _utils2['default'].thisOrThat(userConfiguration.oauth, {});
 
-  self.oauth.scope = _utils2['default'].thisOrThat(self.oauth.scope, []);
+    this.oauth.scope = _utils2['default'].thisOrThat(this.oauth.scope, []);
 
-  self.oauth.deviceId = _utils2['default'].thisOrThat(self.oauth.deviceId, 'DO_NOT_TRACK_THIS_DEVICE');
-  self.oauth.type = _utils2['default'].thisOrThrow(self.oauth.type, missingMsg + '`oauth.type`');
-  self.oauth.key = _utils2['default'].thisOrThrow(self.oauth.key, missingMsg + '`oauth.key`');
+    this.oauth.deviceId = _utils2['default'].thisOrThat(this.oauth.deviceId, 'DO_NOT_TRACK_THIS_DEVICE');
+    this.oauth.type = _utils2['default'].thisOrThrow(this.oauth.type, missingMsg + '`oauth.type`');
+    this.oauth.key = _utils2['default'].thisOrThrow(this.oauth.key, missingMsg + '`oauth.key`');
 
-  //
-  // - - - FUNCTIONS - - -
-  //
+    //
+    // - - - VALIDATION
+    //
 
-  /*
-     Checks if the oauth is of a specific type, e.g.
-      isOAuthType('script')
-   */
-  self.isOAuthType = function (type) {
-    return self.oauth.type === type;
-  };
+    if (!this.isOAuthType('explicit') && !this.isOAuthType('implicit') && !this.isOAuthType('script')) {
+      throw new Error('Invalid `oauth.type`. Must be one of: explicit, implicit, or script');
+    }
 
-  //
-  // - - - VALIDATION
-  //
+    if (this.isOAuthType('explicit') || this.isOAuthType('script')) {
+      this.oauth.secret = _utils2['default'].thisOrThrow(this.oauth.secret, missingMsg + '`oauth.secret` for type explicit/script');
+    }
 
-  if (!self.isOAuthType('explicit') && !self.isOAuthType('implicit') && !self.isOAuthType('script')) {
-    throw new Error('Invalid `oauth.type`. Must be one of: explicit, implicit, or script');
+    if (this.isOAuthType('script')) {
+      this.oauth.username = _utils2['default'].thisOrThrow(this.oauth.username, missingMsg + '`oauth.username` for type script');
+      this.oauth.password = _utils2['default'].thisOrThrow(this.oauth.password, missingMsg + '`oauth.password` for type script');
+    }
+
+    if (this.isOAuthType('implicit') || this.isOAuthType('explicit')) {
+      this.oauth.redirectUri = _utils2['default'].thisOrThrow(this.oauth.redirectUri, missingMsg + '`oauth.redirectUri` for type implicit/explicit');
+    }
   }
 
-  if (self.isOAuthType('explicit') || self.isOAuthType('script')) {
-    self.oauth.secret = _utils2['default'].thisOrThrow(self.oauth.secret, missingMsg + '`oauth.secret` for type explicit/script');
-  }
+  _createClass(UserConfig, [{
+    key: 'isOAuthType',
 
-  if (self.isOAuthType('script')) {
-    self.oauth.username = _utils2['default'].thisOrThrow(self.oauth.username, missingMsg + '`oauth.username` for type script');
-    self.oauth.password = _utils2['default'].thisOrThrow(self.oauth.password, missingMsg + '`oauth.password` for type script');
-  }
+    /*
+       Checks if the oauth is of a specific type, e.g.
+        isOAuthType('script')
+     */
+    value: function isOAuthType(type) {
+      return this.oauth.type === type;
+    }
+  }]);
 
-  if (self.isOAuthType('implicit') || self.isOAuthType('explicit')) {
-    self.oauth.redirectUri = _utils2['default'].thisOrThrow(self.oauth.redirectUri, missingMsg + '`oauth.redirectUri` for type implicit/explicit');
-  }
+  return UserConfig;
+})();
 
-  return self;
-}
+exports['default'] = UserConfig;
+module.exports = exports['default'];
 //# sourceMappingURL=UserConfig.js.map

@@ -1,36 +1,65 @@
-/* global describe, it, before, beforeEach */
-
 'use strict';
 
-var fs = require('fs');
-var path = require('path');
-var when = require('when');
-var delay = require('when/delay');
+var _interopRequireWildcard = function (obj) { return obj && obj.__esModule ? obj : { 'default': obj }; };
 
-var chai = require('chai');
-var chaiAsPromised = require('chai-as-promised');
-chai.use(chaiAsPromised);
-var expect = chai.expect;
+/* global describe, it, before, beforeEach */
 
-var tsi = require('./testServerInstance');
-var config = require('../config');
-var util = require('./util');
+var _fs = require('fs');
 
-var Snoocore = require('../../src/Snoocore');
+var _fs2 = _interopRequireWildcard(_fs);
+
+var _path = require('path');
+
+var _path2 = _interopRequireWildcard(_path);
+
+var _when = require('when');
+
+var _when2 = _interopRequireWildcard(_when);
+
+var _delay = require('when/delay');
+
+var _delay2 = _interopRequireWildcard(_delay);
+
+var _chai = require('chai');
+
+var _chai2 = _interopRequireWildcard(_chai);
+
+var _chaiAsPromised = require('chai-as-promised');
+
+var _chaiAsPromised2 = _interopRequireWildcard(_chaiAsPromised);
+
+var _tsi = require('./testServerInstance');
+
+var _tsi2 = _interopRequireWildcard(_tsi);
+
+var _config = require('../config');
+
+var _config2 = _interopRequireWildcard(_config);
+
+var _util = require('./util');
+
+var _util2 = _interopRequireWildcard(_util);
+
+var _Snoocore = require('../../src/Snoocore');
+
+var _Snoocore2 = _interopRequireWildcard(_Snoocore);
+
+_chai2['default'].use(_chaiAsPromised2['default']);
+var expect = _chai2['default'].expect;
 
 describe(__filename, function () {
 
-  this.timeout(config.testTimeout);
+  this.timeout(_config2['default'].testTimeout);
 
   it('should get resources when logged in', function () {
-    var reddit = util.getScriptInstance(['identity']);
+    var reddit = _util2['default'].getScriptInstance(['identity']);
     return reddit.auth().then(reddit('/api/v1/me').get).then(function (result) {
-      expect(result.name).to.equal(config.reddit.login.username);
+      expect(result.name).to.equal(_config2['default'].reddit.login.username);
     });
   });
 
   it('should GET resources when logged in (respect parameters)', function () {
-    var reddit = util.getScriptInstance(['mysubreddits']);
+    var reddit = _util2['default'].getScriptInstance(['mysubreddits']);
 
     return reddit.auth().then(function () {
       return reddit('/subreddits/mine/$where').get({
@@ -43,17 +72,20 @@ describe(__filename, function () {
   });
 
   it('should be able to upload files in Node', function () {
-    var reddit = util.getScriptInstance(['modconfig']);
-    var appIcon = path.join(__dirname, 'img', 'appicon.png');
+    var reddit = _util2['default'].getScriptInstance(['modconfig']);
+
+    // @TODO maybe just move the images into the build/test/src
+    // folder!
+    var appIcon = _path2['default'].join(__dirname, '..', '..', '..', 'test', 'src', 'img', 'appicon.png');
 
     return reddit.auth().then(function () {
       return reddit('/r/$subreddit/api/delete_sr_header').post({
-        $subreddit: config.reddit.testSubreddit
+        $subreddit: _config2['default'].reddit.testSubreddit
       });
     }).then(function () {
       return reddit('/r/$subreddit/api/upload_sr_img').post({
-        $subreddit: config.reddit.testSubreddit,
-        file: Snoocore.file('appicon.png', 'image/png', fs.readFileSync(appIcon)),
+        $subreddit: _config2['default'].reddit.testSubreddit,
+        file: _Snoocore2['default'].file('appicon.png', 'image/png', _fs2['default'].readFileSync(appIcon)),
         header: 1,
         img_type: 'png',
         name: 'test-foo-bar'
@@ -63,11 +95,11 @@ describe(__filename, function () {
 
   it('should sub/unsub from a subreddit (POST)', function () {
 
-    var reddit = util.getScriptInstance(['read', 'subscribe']);
+    var reddit = _util2['default'].getScriptInstance(['read', 'subscribe']);
 
     return reddit.auth().then(function () {
       return reddit('/r/$subreddit/about').get({
-        $subreddit: config.reddit.testSubreddit
+        $subreddit: _config2['default'].reddit.testSubreddit
       });
     }).then(function (response) {
 
@@ -79,7 +111,7 @@ describe(__filename, function () {
         sr: subName
       }).then(function () {
         return reddit('/r/$subreddit/about').get({
-          $subreddit: config.reddit.testSubreddit
+          $subreddit: _config2['default'].reddit.testSubreddit
         });
       }).then(function (secondResp) {
         // should have subbed / unsubbed from the subreddit
@@ -90,11 +122,11 @@ describe(__filename, function () {
 
   it('should auto-fill api_type to be "json"', function () {
 
-    var reddit = util.getScriptInstance(['read', 'modconfig']);
+    var reddit = _util2['default'].getScriptInstance(['read', 'modconfig']);
 
     return reddit.auth().then(function () {
       return reddit('/r/$subreddit/about/edit.json').get({
-        $subreddit: config.reddit.testSubreddit
+        $subreddit: _config2['default'].reddit.testSubreddit
       });
     }).then(function (result) {
       var data = result.data;
@@ -112,30 +144,30 @@ describe(__filename, function () {
   // and then bypass will work.
   it('should bypass authentication for calls when set', function () {
 
-    var reddit = util.getScriptInstance(['read', 'subscribe']);
+    var reddit = _util2['default'].getScriptInstance(['read', 'subscribe']);
 
     return reddit.auth().then(function () {
       return reddit('/r/$subreddit/about').get({
-        $subreddit: config.reddit.testSubreddit
+        $subreddit: _config2['default'].reddit.testSubreddit
       });
     }).then(function (response) {
       var subName = response.data.name;
       var isSubbed = response.data.user_is_subscriber;
 
       // make sure the user is subscribed
-      return isSubbed ? when.resolve() : reddit('/api/subscribe').post({
+      return isSubbed ? _when2['default'].resolve() : reddit('/api/subscribe').post({
         action: 'sub',
         sr: subName
       });
     }).then(function () {
       return reddit('/r/$subreddit/about').get({
-        $subreddit: config.reddit.testSubreddit
+        $subreddit: _config2['default'].reddit.testSubreddit
       });
     }).then(function (result) {
       // check that they are subscribed!
       expect(result.data.user_is_subscriber).to.equal(true);
       // run another request, but make it unauthenticated (bypass)
-      return reddit('/r/$subreddit/about').get({ $subreddit: config.reddit.testSubreddit }, { bypassAuth: true });
+      return reddit('/r/$subreddit/about').get({ $subreddit: _config2['default'].reddit.testSubreddit }, { bypassAuth: true });
     }).then(function (result) {
       expect(result.data.user_is_subscriber).to.not.equal(true);
     });
@@ -143,7 +175,7 @@ describe(__filename, function () {
 
   it('should GET resources while not logged in', function () {
 
-    var reddit = util.getImplicitInstance(['read']);
+    var reddit = _util2['default'].getImplicitInstance(['read']);
 
     return reddit('/r/$subreddit/new').get({
       $subreddit: 'pcmasterrace'
@@ -154,14 +186,14 @@ describe(__filename, function () {
   });
 
   it('should not decode html', function () {
-    var reddit = util.getScriptInstance(['read']);
+    var reddit = _util2['default'].getScriptInstance(['read']);
     return reddit('/r/snoocoreTest/about.json').get().then(function (result) {
       expect(result.data.description_html.indexOf('&lt;/p&gt;')).to.not.equal(-1);
     });
   });
 
   it('should decode html on a per call basis', function () {
-    var reddit = util.getScriptInstance(['read']);
+    var reddit = _util2['default'].getScriptInstance(['read']);
     return reddit('/r/snoocoreTest/about.json').get(null, {
       decodeHtmlEntities: true
     }).then(function (result) {
@@ -171,14 +203,14 @@ describe(__filename, function () {
 
   it('should decode html globally & respect per call override', function () {
 
-    var reddit = util.getScriptInstance(['read']);
+    var reddit = _util2['default'].getScriptInstance(['read']);
 
-    var secondReddit = new Snoocore({
+    var secondReddit = new _Snoocore2['default']({
       userAgent: 'foobar',
       decodeHtmlEntities: true,
       oauth: {
         type: 'implicit',
-        key: config.reddit.installed.key,
+        key: _config2['default'].reddit.installed.key,
         redirectUri: '_',
         scope: ['read']
       }
@@ -195,7 +227,7 @@ describe(__filename, function () {
   });
 
   it('application only oauth calling a user specific endpoint should fail', function () {
-    var reddit = util.getScriptInstance();
+    var reddit = _util2['default'].getScriptInstance();
     return reddit('/api/v1/me').get().then(function (data) {
       throw new Error('should not pass, expect to fail with error');
     })['catch'](function (error) {
@@ -207,11 +239,11 @@ describe(__filename, function () {
 
     it('should auth, get refresh token, deauth, use refresh token to reauth, deauth(true) -> refresh', function () {
 
-      var reddit = util.getExplicitInstance(['identity'], 'permanent');
+      var reddit = _util2['default'].getExplicitInstance(['identity'], 'permanent');
 
       var url = reddit.getExplicitAuthUrl();
 
-      return tsi.standardServer.allowAuthUrl(url).then(function (params) {
+      return _tsi2['default'].standardServer.allowAuthUrl(url).then(function (params) {
         var authorizationCode = params.code;
         return reddit.auth(authorizationCode).then(function (refreshToken) {
 
@@ -244,11 +276,11 @@ describe(__filename, function () {
 
     it('should auth, deauth (simulate expired access token), call endpoint which will request a new access token', function () {
 
-      var reddit = util.getExplicitInstance(['identity'], 'permanent');
+      var reddit = _util2['default'].getExplicitInstance(['identity'], 'permanent');
 
       var url = reddit.getExplicitAuthUrl();
 
-      return tsi.standardServer.allowAuthUrl(url).then(function (params) {
+      return _tsi2['default'].standardServer.allowAuthUrl(url).then(function (params) {
         var authorizationCode = params.code;
         return reddit.auth(authorizationCode).then(function (refreshToken) {
 
@@ -278,7 +310,7 @@ describe(__filename, function () {
     });
 
     it('auth (script), expire access token (simulated), then reauth', function () {
-      var reddit = util.getScriptInstance(['identity']);
+      var reddit = _util2['default'].getScriptInstance(['identity']);
       var authTokenA;
       var authTokenB;
 
@@ -299,7 +331,7 @@ describe(__filename, function () {
     });
 
     it('should auth (script), deauth, and not reauth', function () {
-      var reddit = util.getScriptInstance(['identity']);
+      var reddit = _util2['default'].getScriptInstance(['identity']);
 
       return reddit.auth().then(function () {
         return reddit('/api/v1/me').get();
@@ -318,11 +350,11 @@ describe(__filename, function () {
 
     it('should auth, and call an oauth endpoint', function () {
 
-      var reddit = util.getExplicitInstance(['identity']);
+      var reddit = _util2['default'].getExplicitInstance(['identity']);
 
       var url = reddit.getExplicitAuthUrl();
 
-      return tsi.standardServer.allowAuthUrl(url).then(function (params) {
+      return _tsi2['default'].standardServer.allowAuthUrl(url).then(function (params) {
         var authorizationCode = params.code;
         return reddit.auth(authorizationCode).then(function () {
           return reddit('/api/v1/me').get();
@@ -335,11 +367,11 @@ describe(__filename, function () {
 
     it('should auth, and call an oauth endpoint (check state)', function () {
 
-      var reddit = util.getExplicitInstance(['identity']);
+      var reddit = _util2['default'].getExplicitInstance(['identity']);
       var state = 'foobar';
       var url = reddit.getExplicitAuthUrl(state);
 
-      return tsi.standardServer.allowAuthUrl(url).then(function (params) {
+      return _tsi2['default'].standardServer.allowAuthUrl(url).then(function (params) {
 
         expect(params.state).to.equal(state);
 
@@ -358,12 +390,12 @@ describe(__filename, function () {
 
     it('should auth, and call an oauth endpoint', function () {
 
-      var reddit = util.getImplicitInstance(['identity']);
+      var reddit = _util2['default'].getImplicitInstance(['identity']);
 
       var state = 'foobar';
       var url = reddit.getImplicitAuthUrl(state);
 
-      return tsi.standardServer.allowAuthUrl(url).then(function (params) {
+      return _tsi2['default'].standardServer.allowAuthUrl(url).then(function (params) {
 
         expect(params.state).to.equal(state);
 
@@ -378,7 +410,7 @@ describe(__filename, function () {
 
           reddit.oauth.accessToken = 'some_invalid_token_1234';
 
-          return when.promise(function (resolve, reject) {
+          return _when2['default'].promise(function (resolve, reject) {
 
             var tokenExpired = false;
 
@@ -409,7 +441,7 @@ describe(__filename, function () {
 
     it('should authenticate with OAuth, and call an oauth endpoint', function () {
 
-      var reddit = util.getScriptInstance();
+      var reddit = _util2['default'].getScriptInstance();
 
       return reddit.auth().then(reddit('/api/v1/me').get).then(function (data) {
         expect(data.error).to.be.undefined;
@@ -421,7 +453,7 @@ describe(__filename, function () {
   describe('Application only OAuth', function () {
 
     it('(implicit client) Application only OAuth', function () {
-      var reddit = util.getImplicitInstance(['read']);
+      var reddit = _util2['default'].getImplicitInstance(['read']);
 
       // OAuth only endpoint.
       return reddit('/api/v1/user/$username/trophies').get({
@@ -432,7 +464,7 @@ describe(__filename, function () {
     });
 
     it('(explicit/script client) Application only OAuth', function () {
-      var reddit = util.getScriptInstance(['read']);
+      var reddit = _util2['default'].getScriptInstance(['read']);
 
       // OAuth only endpoint.
       return reddit('/api/v1/user/$username/trophies').get({
@@ -447,16 +479,16 @@ describe(__filename, function () {
 
     it('should get resources when logged in', function () {
 
-      var reddit = util.getScriptInstance(['identity', 'mysubreddits']);
+      var reddit = _util2['default'].getScriptInstance(['identity', 'mysubreddits']);
 
       return reddit.auth().then(reddit('/api/v1/me').get).then(function (data) {
-        expect(data.name).to.equal(config.reddit.login.username);
+        expect(data.name).to.equal(_config2['default'].reddit.login.username);
       });
     });
 
     it('should GET resources when logged in (respect parameters)', function () {
 
-      var reddit = util.getScriptInstance(['identity', 'mysubreddits']);
+      var reddit = _util2['default'].getScriptInstance(['identity', 'mysubreddits']);
 
       return reddit.auth().then(function () {
         return reddit('/subreddits/mine/$where').get({

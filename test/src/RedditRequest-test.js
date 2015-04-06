@@ -1,16 +1,16 @@
 /* describe, it, afterEach, beforeEach */
 
-var when = require('when');
+import when from 'when';
 
-var chai = require('chai');
-var chaiAsPromised = require('chai-as-promised');
+import chai from 'chai';
+import chaiAsPromised from 'chai-as-promised';
 chai.use(chaiAsPromised);
-var expect = chai.expect;
+let expect = chai.expect;
 
-var config = require('../config');
-var util = require('./util');
+import config from '../config';
+import util from './util';
 
-var Endpoint = require('../../src/Endpoint');
+import Endpoint from '../../src/Endpoint';
 
 describe(__filename, function () {
 

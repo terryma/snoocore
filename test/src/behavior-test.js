@@ -1,20 +1,20 @@
 /* global describe, it, before, beforeEach */
 
-var fs = require('fs');
-var path = require('path');
-var when = require('when');
-var delay = require('when/delay');
+import fs from 'fs';
+import path from 'path';
+import when from 'when';
+import delay from 'when/delay';
 
-var chai = require('chai');
-var chaiAsPromised = require('chai-as-promised');
+import chai from 'chai';
+import chaiAsPromised from 'chai-as-promised';
 chai.use(chaiAsPromised);
-var expect = chai.expect;
+let expect = chai.expect;
 
-var tsi = require('./testServerInstance');
-var config = require('../config');
-var util = require('./util');
+import tsi from './testServerInstance';
+import config from '../config';
+import util from './util';
 
-var Snoocore = require('../../src/Snoocore');
+import Snoocore from '../../src/Snoocore';
 
 describe(__filename, function () {
 
@@ -42,7 +42,11 @@ describe(__filename, function () {
 
   it('should be able to upload files in Node', function() {
     var reddit = util.getScriptInstance([ 'modconfig' ]);
-    var appIcon = path.join(__dirname, 'img', 'appicon.png');
+
+    // @TODO maybe just move the images into the build/test/src
+    // folder!
+    var appIcon = path.join(__dirname, '..', '..', '..',
+                            'test', 'src', 'img', 'appicon.png');
 
     return reddit.auth().then(function() {
       return reddit('/r/$subreddit/api/delete_sr_header').post({

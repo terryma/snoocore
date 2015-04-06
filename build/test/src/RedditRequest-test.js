@@ -1,22 +1,39 @@
-/* describe, it, afterEach, beforeEach */
-
 'use strict';
 
-var when = require('when');
+var _interopRequireWildcard = function (obj) { return obj && obj.__esModule ? obj : { 'default': obj }; };
 
-var chai = require('chai');
-var chaiAsPromised = require('chai-as-promised');
-chai.use(chaiAsPromised);
-var expect = chai.expect;
+/* describe, it, afterEach, beforeEach */
 
-var config = require('../config');
-var util = require('./util');
+var _when = require('when');
 
-var Endpoint = require('../../src/Endpoint');
+var _when2 = _interopRequireWildcard(_when);
+
+var _chai = require('chai');
+
+var _chai2 = _interopRequireWildcard(_chai);
+
+var _chaiAsPromised = require('chai-as-promised');
+
+var _chaiAsPromised2 = _interopRequireWildcard(_chaiAsPromised);
+
+var _config = require('../config');
+
+var _config2 = _interopRequireWildcard(_config);
+
+var _util = require('./util');
+
+var _util2 = _interopRequireWildcard(_util);
+
+var _Endpoint = require('../../src/Endpoint');
+
+var _Endpoint2 = _interopRequireWildcard(_Endpoint);
+
+_chai2['default'].use(_chaiAsPromised2['default']);
+var expect = _chai2['default'].expect;
 
 describe(__filename, function () {
 
-  this.timeout(config.testTimeout);
+  this.timeout(_config2['default'].testTimeout);
 
   describe('buildHeaders()', function () {
     it.skip('...');
@@ -28,13 +45,13 @@ describe(__filename, function () {
 
   describe('getResponseError()', function () {
     it('should get a proper response error', function () {
-      var redditRequest = util.getScriptRedditRequest(['identity', 'modconfig']);
+      var redditRequest = _util2['default'].getScriptRedditRequest(['identity', 'modconfig']);
 
       var message = 'oh hello there';
       var response = { _status: 200, _body: 300 };
 
-      var userConfig = util.getScriptUserConfig();
-      var endpoint = new Endpoint(userConfig, 'get', '/some/path', { some: 'args' });
+      var userConfig = _util2['default'].getScriptUserConfig();
+      var endpoint = new _Endpoint2['default'](userConfig, 'get', '/some/path', { some: 'args' });
 
       var responseError = redditRequest.getResponseError(message, response, endpoint);
 
@@ -58,17 +75,17 @@ describe(__filename, function () {
       // allow self signed certs for our test server
       process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
 
-      var reddit = util.getScriptInstance(['identity', 'read']);
+      var reddit = _util2['default'].getScriptInstance(['identity', 'read']);
 
       return reddit.auth().then(function () {
 
         // Switch servers to use error test server (returns 500 errors every time)
-        reddit._userConfig.serverOAuth = 'localhost:' + config.testServer.serverErrorPort;
-        reddit._userConfig.serverWWW = 'localhost:' + config.testServer.serverErrorPort;
+        reddit._userConfig.serverOAuth = 'localhost:' + _config2['default'].testServer.serverErrorPort;
+        reddit._userConfig.serverWWW = 'localhost:' + _config2['default'].testServer.serverErrorPort;
 
         var retryAttempts = 3; // let's only retry 3 times to keep it short
 
-        return when.promise(function (resolve, reject) {
+        return _when2['default'].promise(function (resolve, reject) {
           var hotPromise;
 
           // resolve once we get the server error instance
@@ -104,7 +121,7 @@ describe(__filename, function () {
       // allow self signed certs for our test server
       process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
 
-      var reddit = util.getScriptInstance(['identity', 'read']);
+      var reddit = _util2['default'].getScriptInstance(['identity', 'read']);
 
       // create a reference to the actual reddit servers
       var redditWWW = 'www.reddit.com';
@@ -113,10 +130,10 @@ describe(__filename, function () {
       return reddit.auth().then(function () {
 
         // Switch servers to use error test server (returns 500 errors every time)
-        reddit._userConfig.serverOAuth = 'localhost:' + config.testServer.serverErrorPort;
-        reddit._userConfig.serverWWW = 'localhost:' + config.testServer.serverErrorPort;
+        reddit._userConfig.serverOAuth = 'localhost:' + _config2['default'].testServer.serverErrorPort;
+        reddit._userConfig.serverWWW = 'localhost:' + _config2['default'].testServer.serverErrorPort;
 
-        return when.promise(function (resolve, reject) {
+        return _when2['default'].promise(function (resolve, reject) {
           var hotPromise;
 
           // resolve once we get the server error instance
@@ -139,7 +156,7 @@ describe(__filename, function () {
             reddit._userConfig.serverOAuth = redditOAuth;
             expect(reddit._userConfig.serverWWW).to.eql(redditWWW);
             expect(reddit._userConfig.serverOAuth).to.eql(redditOAuth);
-            var modifiedEndpoint = new Endpoint(reddit._userConfig, 'get', 'hot');
+            var modifiedEndpoint = new _Endpoint2['default'](reddit._userConfig, 'get', 'hot');
             error.endpoint.url = modifiedEndpoint.url;
             // -- end filth
 
@@ -158,11 +175,11 @@ describe(__filename, function () {
 
     it('should handle data.json.errors field', function () {
 
-      var reddit = util.getScriptInstance(['identity', 'modconfig']);
+      var reddit = _util2['default'].getScriptInstance(['identity', 'modconfig']);
 
       return reddit.auth().then(function () {
         return reddit('/r/$subreddit/about/edit.json').get({
-          $subreddit: config.reddit.testSubreddit
+          $subreddit: _config2['default'].reddit.testSubreddit
         });
       }).then(function (result) {
 
@@ -180,11 +197,11 @@ describe(__filename, function () {
     // no longer works properly. We need to find another instance
     // of the data.errors or remove this test completly
     it.skip('should handle data.errors field', function () {
-      var reddit = util.getScriptInstance(['modconfig']);
+      var reddit = _util2['default'].getScriptInstance(['modconfig']);
 
       return reddit.auth().then(function () {
         return reddit('/r/$subreddit/api/upload_sr_img').post({
-          $subreddit: config.reddit.testSubreddit,
+          $subreddit: _config2['default'].reddit.testSubreddit,
           file: Snoocore.file('fakename', 'image/png', 'fake image data'),
           header: 0,
           img_type: 'png',
@@ -196,7 +213,7 @@ describe(__filename, function () {
     });
 
     it('should explain that a scope is missing', function () {
-      var reddit = util.getScriptInstance(['read']);
+      var reddit = _util2['default'].getScriptInstance(['read']);
 
       return reddit.auth().then(function () {
         return reddit('/api/v1/me').get();
@@ -209,7 +226,7 @@ describe(__filename, function () {
 
     it('should give an assortment of reasons why call errored', function () {
 
-      var reddit = util.getScriptInstance();
+      var reddit = _util2['default'].getScriptInstance();
 
       return reddit.auth().then(function () {
         return reddit('/api/saved_categories').get();
@@ -221,7 +238,7 @@ describe(__filename, function () {
     });
 
     it('should spit out more information when we come to an error (url & args used)', function () {
-      var reddit = util.getScriptInstance(['identity', 'read']);
+      var reddit = _util2['default'].getScriptInstance(['identity', 'read']);
 
       return reddit.auth().then(function () {
         return reddit('/comments/$article').get({
@@ -252,7 +269,7 @@ describe(__filename, function () {
 
     it('should get the front page listing and nav through it (basic)', function () {
 
-      var reddit = util.getScriptInstance(['read']);
+      var reddit = _util2['default'].getScriptInstance(['read']);
 
       // or reddit('/hot').listing
       return reddit('/hot').listing().then(function (slice) {
@@ -281,7 +298,7 @@ describe(__filename, function () {
 
     it('should handle empty listings', function () {
 
-      var reddit = util.getScriptInstance(['read', 'history']);
+      var reddit = _util2['default'].getScriptInstance(['read', 'history']);
 
       return reddit('/user/$username/$where').listing({
         $username: 'emptyListing', // an account with no comments
@@ -293,7 +310,7 @@ describe(__filename, function () {
 
     it('should requery a listing after changes have been made', function () {
 
-      var reddit = util.getScriptInstance(['read', 'history']);
+      var reddit = _util2['default'].getScriptInstance(['read', 'history']);
 
       // @TODO we need a better way to test this (without using captcha's)
       // as of now it is requerying empty comments of a user which runs the
@@ -313,7 +330,7 @@ describe(__filename, function () {
 
     it('should handle listings with multiple listings', function () {
 
-      var reddit = util.getScriptInstance(['read']);
+      var reddit = _util2['default'].getScriptInstance(['read']);
 
       // just get the data back to compare it with the listing
       return reddit('duplicates/$article').get({
@@ -347,7 +364,7 @@ describe(__filename, function () {
     });
 
     it('throw error - listing has multiple listings w/o specifying index', function () {
-      var reddit = util.getScriptInstance(['read']);
+      var reddit = _util2['default'].getScriptInstance(['read']);
 
       return reddit('duplicates/$article').listing({
         limit: 2,
@@ -364,7 +381,7 @@ describe(__filename, function () {
 
     it('should allow a "path" syntax', function () {
 
-      var redditRequest = util.getScriptRedditRequest(['read']);
+      var redditRequest = _util2['default'].getScriptRedditRequest(['read']);
       process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
       return redditRequest.path('/r/$subreddit/hot').get({ $subreddit: 'aww' }).then(function (result) {
         expect(result).to.haveOwnProperty('kind', 'Listing');
@@ -372,35 +389,35 @@ describe(__filename, function () {
     });
 
     it('should tolerate a missing beginning slash', function () {
-      var redditRequest = util.getScriptRedditRequest(['read']);
+      var redditRequest = _util2['default'].getScriptRedditRequest(['read']);
       return redditRequest.path('r/$subreddit/hot').get({ $subreddit: 'aww' }).then(function (result) {
         expect(result).to.haveOwnProperty('kind', 'Listing');
       });
     });
 
     it('should allow a "path" syntax (where reddit === path fn)', function () {
-      var reddit = util.getScriptInstance(['read']);
+      var reddit = _util2['default'].getScriptInstance(['read']);
       return reddit('/r/$subreddit/hot').get({ $subreddit: 'aww' }).then(function (result) {
         expect(result).to.haveOwnProperty('kind', 'Listing');
       });
     });
 
     it('should allow for alternate placeholder names', function () {
-      var reddit = util.getScriptInstance(['read']);
+      var reddit = _util2['default'].getScriptInstance(['read']);
       return reddit('/r/$sub/hot').get({ $sub: 'aww' }).then(function (result) {
         expect(result).to.haveOwnProperty('kind', 'Listing');
       });
     });
 
     it('should allow for embedding of url parameters', function () {
-      var reddit = util.getScriptInstance(['read']);
+      var reddit = _util2['default'].getScriptInstance(['read']);
       return reddit('/r/aww/hot').get().then(function (result) {
         expect(result).to.haveOwnProperty('kind', 'Listing');
       });
     });
 
     it('should allow for embedding of url parameters (listings)', function () {
-      var reddit = util.getScriptInstance(['read', 'history']);
+      var reddit = _util2['default'].getScriptInstance(['read', 'history']);
       return reddit('/user/kemitche/comments').listing({
         sort: 'new'
       }).then(function (result) {
@@ -409,7 +426,7 @@ describe(__filename, function () {
     });
 
     it('should allow a variable at the beginning of a path', function () {
-      var reddit = util.getScriptInstance(['read']);
+      var reddit = _util2['default'].getScriptInstance(['read']);
       return reddit('/$sort').get({
         $sort: 'top'
       }).then(function (result) {

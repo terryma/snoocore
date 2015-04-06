@@ -1,14 +1,14 @@
 /* describe, it, afterEach, beforeEach */
 
-var chai = require('chai');
-var chaiAsPromised = require('chai-as-promised');
+import chai from 'chai';
+import chaiAsPromised from 'chai-as-promised';
 chai.use(chaiAsPromised);
 var expect = chai.expect;
 
-var config = require('../config');
-var util = require('./util');
+import config from '../config';
+import util from './util';
 
-var UserConfig = require('../../src/UserConfig');
+import UserConfig from '../../src/UserConfig';
 
 describe(__filename, function () {
 

@@ -1,24 +1,39 @@
-/* describe, it, afterEach, beforeEach */
-
 'use strict';
 
-var chai = require('chai');
-var chaiAsPromised = require('chai-as-promised');
-chai.use(chaiAsPromised);
-var expect = chai.expect;
+var _interopRequireWildcard = function (obj) { return obj && obj.__esModule ? obj : { 'default': obj }; };
 
-var config = require('../config');
-var util = require('./util');
+/* describe, it, afterEach, beforeEach */
 
-var UserConfig = require('../../src/UserConfig');
+var _chai = require('chai');
+
+var _chai2 = _interopRequireWildcard(_chai);
+
+var _chaiAsPromised = require('chai-as-promised');
+
+var _chaiAsPromised2 = _interopRequireWildcard(_chaiAsPromised);
+
+var _config = require('../config');
+
+var _config2 = _interopRequireWildcard(_config);
+
+var _util = require('./util');
+
+var _util2 = _interopRequireWildcard(_util);
+
+var _UserConfig = require('../../src/UserConfig');
+
+var _UserConfig2 = _interopRequireWildcard(_UserConfig);
+
+_chai2['default'].use(_chaiAsPromised2['default']);
+var expect = _chai2['default'].expect;
 
 describe(__filename, function () {
 
-  this.timeout(config.testTimeout);
+  this.timeout(_config2['default'].testTimeout);
 
   it('should complain about missing userAgent', function () {
     expect(function () {
-      new UserConfig({
+      new _UserConfig2['default']({
         oauth: {
           type: 'implicit',
           key: 'test',
@@ -30,7 +45,7 @@ describe(__filename, function () {
 
   it('should complain about missing oauth.type', function () {
     expect(function () {
-      new UserConfig({
+      new _UserConfig2['default']({
         userAgent: 'foobar',
         oauth: {
           key: 'test',
@@ -42,7 +57,7 @@ describe(__filename, function () {
 
   it('should complain about wrong oauth.type', function () {
     expect(function () {
-      new UserConfig({
+      new _UserConfig2['default']({
         userAgent: 'foobar',
         oauth: {
           type: 'invalid',
@@ -55,7 +70,7 @@ describe(__filename, function () {
 
   it('should complain about missing oauth.key', function () {
     expect(function () {
-      new UserConfig({
+      new _UserConfig2['default']({
         userAgent: 'foobar',
         oauth: {
           type: 'implicit',
@@ -67,7 +82,7 @@ describe(__filename, function () {
 
   it('should complain about missing oauth.secret', function () {
     expect(function () {
-      new UserConfig({
+      new _UserConfig2['default']({
         userAgent: 'foobar',
         oauth: {
           type: 'explicit',
@@ -80,7 +95,7 @@ describe(__filename, function () {
 
   it('should complain about missing oauth.username', function () {
     expect(function () {
-      new UserConfig({
+      new _UserConfig2['default']({
         userAgent: 'foobar',
         oauth: {
           type: 'script',
@@ -94,7 +109,7 @@ describe(__filename, function () {
 
   it('should complain about missing oauth.password', function () {
     expect(function () {
-      new UserConfig({
+      new _UserConfig2['default']({
         userAgent: 'foobar',
         oauth: {
           type: 'script',
@@ -108,7 +123,7 @@ describe(__filename, function () {
 
   it('should complain about missing oauth.redirectUri', function () {
     expect(function () {
-      new UserConfig({
+      new _UserConfig2['default']({
         userAgent: 'foobar',
         oauth: {
           type: 'explicit',

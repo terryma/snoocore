@@ -17,74 +17,72 @@ import Endpoint from './Endpoint';
    A collection of functions that deal with requesting data from the
    reddit API.
  */
-module.exports = RedditRequest;
-util.inherits(RedditRequest, events.EventEmitter);
-function RedditRequest(userConfig, request, oauth, oauthAppOnly) {
-  var self = this;
+export default class RedditRequest extends events.EventEmitter {
 
-  events.EventEmitter.call(self);
-
-  self._request = request;
-  self._userConfig = userConfig;
-  self._oauth = oauth;
-  self._oauthAppOnly = oauthAppOnly;
+  constructor(userConfig, request, oauth, oauthAppOnly) {
+    super();
+    this._request = request;
+    this._userConfig = userConfig;
+    this._oauth = oauth;
+    this._oauthAppOnly = oauthAppOnly;
+  }
 
   /*
      Currently application only?
    */
-  function isApplicationOnly() {
-    return !self._oauth.isAuthenticated();
+  isApplicationOnly() {
+    return !this._oauth.isAuthenticated();
   }
 
   /*
      Builds up the headers for an endpoint.
    */
-  self.buildHeaders = function(endpoint) {
-    var headers = {};
+  buildHeaders(endpoint) {
+    let headers = {};
 
-    if (self._userConfig.isNode) {
+    if (this._userConfig.isNode) {
       // Can't set User-Agent in browser
-      headers['User-Agent'] = self._userConfig.userAgent;
+      headers['User-Agent'] = this._userConfig.userAgent;
     }
 
-    if (endpoint.contextOptions.bypassAuth || isApplicationOnly()) {
-      headers['Authorization'] = self._oauthAppOnly.getAuthorizationHeader();
+    if (endpoint.contextOptions.bypassAuth || this.isApplicationOnly()) {
+      headers['Authorization'] = this._oauthAppOnly.getAuthorizationHeader();
     } else {
-      headers['Authorization'] = self._oauth.getAuthorizationHeader();
+      headers['Authorization'] = this._oauth.getAuthorizationHeader();
     }
 
     return headers;
-  };
+  }
 
   /*
      Call the reddit api.
    */
-  self.callRedditApi = function(endpoint) {
+  callRedditApi(endpoint) {
 
-    var parsedUrl = urlLib.parse(endpoint.url);
+    let parsedUrl = urlLib.parse(endpoint.url);
 
-    var reqOptions = {
+    let reqOptions = {
       method: endpoint.method.toUpperCase(),
       hostname: parsedUrl.hostname,
       path: parsedUrl.path,
-      headers: self.buildHeaders(endpoint)
+      headers: this.buildHeaders(endpoint)
     };
 
     if (parsedUrl.port) {
       reqOptions.port = parsedUrl.port;
     }
 
-    return self._request.https(reqOptions, endpoint.args).then(function(res) {
-      return self.handleRedditResponse(res, endpoint);
+    return this._request.https(reqOptions, endpoint.args).then(res => {
+      return this.handleRedditResponse(res, endpoint);
     });
-  };
+  }
 
   /*
      Returns a uniform error for all response errors.
    */
-  self.getResponseError = function(message, response, endpoint) {
+  getResponseError(message, response, endpoint) {
 
-    var responseError = new Error([
+    let responseError = new Error([
       message,
       '>>> Response Status: ' + response._status,
       '>>> Endpoint URL: '+ endpoint.url,
@@ -100,24 +98,24 @@ function RedditRequest(userConfig, request, oauth, oauthAppOnly) {
     responseError.endpoint = endpoint;
 
     return responseError;
-  };
+  }
 
   /*
      Handle a reddit 500 / server error. This will try to call the endpoint again
      after the given retryDelay. If we do not have any retry attempts left, it
      will reject the promise with the error.
    */
-  self.handleServerErrorResponse = function(response, endpoint) {
+  handleServerErrorResponse(response, endpoint) {
 
     endpoint.contextOptions.retryAttemptsLeft--;
 
-    var responseError = self.getResponseError('Server Error Response',
+    let responseError = this.getResponseError('Server Error Response',
                                               response,
                                               endpoint);
 
     responseError.retryAttemptsLeft = endpoint.contextOptions.retryAttemptsLeft;
 
-    self.emit('server_error', responseError);
+    this.emit('server_error', responseError);
 
     if (endpoint.contextOptions.retryAttemptsLeft <= 0) {
       responseError.message = ('All retry attempts exhausted.\n\n' +
@@ -125,10 +123,10 @@ function RedditRequest(userConfig, request, oauth, oauthAppOnly) {
       return when.reject(responseError);
     }
 
-    return delay(endpoint.contextOptions.retryDelay).then(function() {
-      return self.callRedditApi(endpoint);
+    return delay(endpoint.contextOptions.retryDelay).then(() => {
+      return this.callRedditApi(endpoint);
     });
-  };
+  }
 
   /*
      Handle a reddit 4xx / client error. This is usually caused when our
@@ -141,15 +139,15 @@ function RedditRequest(userConfig, request, oauth, oauthAppOnly) {
      If we can renew our access token, we try to reauthenticate, and call the
      reddit endpoint again.
    */
-  self.handleClientErrorResponse = function(response, endpoint) {
+  handleClientErrorResponse(response, endpoint) {
 
     // - - -
     // Check headers for more specific errors.
 
-    var wwwAuth = response._headers['www-authenticate'];
+    let wwwAuth = response._headers['www-authenticate'];
 
     if (wwwAuth && wwwAuth.indexOf('insufficient_scope') !== -1) {
-      return when.reject(self.getResponseError(
+      return when.reject(this.getResponseError(
         'Insufficient scopes provided for this call',
         response,
         endpoint));
@@ -159,11 +157,11 @@ function RedditRequest(userConfig, request, oauth, oauthAppOnly) {
     // Parse the response for more specific errors.
 
     try {
-      var data = JSON.parse(response._body);
+      let data = JSON.parse(response._body);
 
       if (data.reason === 'USER_REQUIRED') {
-        var msg = 'Must be authenticated with a user to make this call';
-        return when.reject(self.getResponseError(msg, response, endpoint));
+        let msg = 'Must be authenticated with a user to make this call';
+        return when.reject(this.getResponseError(msg, response, endpoint));
       }
 
     } catch(e) {}
@@ -173,17 +171,17 @@ function RedditRequest(userConfig, request, oauth, oauthAppOnly) {
 
     if (response._status === 401) {
 
-      self.emit('access_token_expired');
+      this.emit('access_token_expired');
 
-      var canRenewAccessToken = (isApplicationOnly() ||
-                                 self._oauth.hasRefreshToken() ||
-                                 self._userConfig.isOAuthType('script'));
+      let canRenewAccessToken = (this.isApplicationOnly() ||
+                                 this._oauth.hasRefreshToken() ||
+                                 this._userConfig.isOAuthType('script'));
 
       if (!canRenewAccessToken) {
-        var errmsg = 'Access token has expired. Listen for ' +
+        let errmsg = 'Access token has expired. Listen for ' +
                      'the "access_token_expired" event to ' +
                      'handle this gracefully in your app.';
-        return when.reject(self.getResponseError(errmsg, response, endpoint));
+        return when.reject(this.getResponseError(errmsg, response, endpoint));
       } else {
 
         // Renew our access token
@@ -191,34 +189,34 @@ function RedditRequest(userConfig, request, oauth, oauthAppOnly) {
         --endpoint.contextOptions.reauthAttemptsLeft;
 
         if (endpoint.contextOptions.reauthAttemptsLeft <= 0) {
-          return when.reject(self.getResponseError(
+          return when.reject(this.getResponseError(
             'Unable to refresh the access_token.',
             response,
             endpoint));
         }
 
-        var reauth;
+        let reauth;
 
         // If we are application only, or are bypassing authentication
         // therefore we're using application only OAuth
-        if (isApplicationOnly() || endpoint.contextOptions.bypassAuth) {
-          reauth = self._oauthAppOnly.applicationOnlyAuth();
+        if (this.isApplicationOnly() || endpoint.contextOptions.bypassAuth) {
+          reauth = this._oauthAppOnly.applicationOnlyAuth();
         } else {
 
           // If we have been authenticated with a permanent refresh token use it
-          if (self._oauth.hasRefreshToken()) {
-            reauth = self._oauth.refresh();
+          if (this._oauth.hasRefreshToken()) {
+            reauth = this._oauth.refresh();
           }
 
           // If we are OAuth type script we can call `.auth` again
-          if (self._userConfig.isOAuthType('script')) {
-            reauth = self._oauth.auth();
+          if (this._userConfig.isOAuthType('script')) {
+            reauth = this._oauth.auth();
           }
 
         }
 
-        return reauth.then(function() {
-          return self.callRedditApi(endpoint);
+        return reauth.then(() => {
+          return this.callRedditApi(endpoint);
         });
 
       }
@@ -227,22 +225,22 @@ function RedditRequest(userConfig, request, oauth, oauthAppOnly) {
     // - - -
     // At the end of the day, we just throw an error stating that there
     // is nothing we can do & give general advice
-    return when.reject(self.getResponseError(
+    return when.reject(this.getResponseError(
       ('This call failed. ' +
        'Is the user missing reddit gold? ' +
        'Trying to change a subreddit that the user does not moderate? ' +
        'This is an unrecoverable error.'),
       response,
       endpoint));
-  };
+  }
 
   /*
      Handle reddit response status of 2xx.
 
      Finally return the data if there were no problems.
    */
-  self.handleSuccessResponse = function(response, endpoint) {
-    var data = response._body || '';
+  handleSuccessResponse(response, endpoint) {
+    let data = response._body || '';
 
     if (endpoint.contextOptions.decodeHtmlEntities) {
       data = he.decode(data);
@@ -254,44 +252,44 @@ function RedditRequest(userConfig, request, oauth, oauthAppOnly) {
     } catch(e) {}
 
     return when.resolve(data);
-  };
+  }
 
   /*
-     Handles various reddit response cases.
+     Handles letious reddit response cases.
    */
-  self.handleRedditResponse = function(response, endpoint) {
+  handleRedditResponse(response, endpoint) {
 
     switch(String(response._status).substring(0, 1)) {
       case '5':
-        return self.handleServerErrorResponse(response, endpoint);
+        return this.handleServerErrorResponse(response, endpoint);
       case '4':
-        return self.handleClientErrorResponse(response, endpoint);
+        return this.handleClientErrorResponse(response, endpoint);
       case '2':
-        return self.handleSuccessResponse(response, endpoint);
+        return this.handleSuccessResponse(response, endpoint);
     }
 
     return when.reject(new Error(
       'Invalid reddit response status of ' + response._status));
-  };
+  }
 
   /*
      Listing support.
    */
-  function getListing(endpoint) {
+  getListing(endpoint) {
 
     // number of results that we have loaded so far. It will
     // increase / decrease when calling next / previous.
-    var count = 0;
-    var limit = endpoint.args.limit || 25;
+    let count = 0;
+    let limit = endpoint.args.limit || 25;
     // keep a reference to the start of this listing
-    var start = endpoint.args.after || null;
+    let start = endpoint.args.after || null;
 
-    function getSlice(endpoint) {
+    let getSlice = (endpoint) => {
 
-      return self.callRedditApi(endpoint).then(function(result) {
+      return this.callRedditApi(endpoint).then(result => {
 
-        var slice = {};
-        var listing = result || {};
+        let slice = {};
+        let listing = result || {};
 
         slice.get = result || {};
 
@@ -319,62 +317,62 @@ function RedditRequest(userConfig, request, oauth, oauthAppOnly) {
           return child.data.stickied;
         });
 
-        slice.next = function() {
+        slice.next = () => {
           count += limit;
 
-          var newArgs = endpoint.args;
+          let newArgs = endpoint.args;
           newArgs.before = null;
           newArgs.after = slice.children[slice.children.length - 1].data.name;
           newArgs.count = count;
-          return getSlice(new Endpoint(self._userConfig,
+          return getSlice(new Endpoint(this._userConfig,
                                        endpoint.method,
                                        endpoint.path,
                                        newArgs,
                                        endpoint.contextOptions));
         };
 
-        slice.previous = function() {
+        slice.previous = () => {
           count -= limit;
 
-          var newArgs = endpoint.args;
+          let newArgs = endpoint.args;
           newArgs.before = slice.children[0].data.name;
           newArgs.after = null;
           newArgs.count = count;
-          return getSlice(new Endpoint(self._userConfig,
+          return getSlice(new Endpoint(this._userConfig,
                                        endpoint.method,
                                        endpoint.path,
                                        newArgs,
                                        endpoint.contextOptions));
         };
 
-        slice.start = function() {
+        slice.start = () => {
           count = 0;
 
-          var newArgs = endpoint.args;
+          let newArgs = endpoint.args;
           newArgs.before = null;
           newArgs.after = start;
           newArgs.count = count;
-          return getSlice(new Endpoint(self._userConfig,
+          return getSlice(new Endpoint(this._userConfig,
                                        endpoint.method,
                                        endpoint.path,
                                        newArgs,
                                        endpoint.contextOptions));
         };
 
-        slice.requery = function() {
+        slice.requery = () => {
           return getSlice(endpoint);
         };
 
         return slice;
       });
 
-    }
+    };
 
     return getSlice(endpoint);
   }
 
   /*
-     Enable path syntax support, e.g. self.path('/path/to/$endpoint/etc')
+     Enable path syntax support, e.g. this.path('/path/to/$endpoint/etc')
 
      Can take an url as well, but the first part of the url is chopped
      off because it is not needed. We will always use the server oauth
@@ -384,36 +382,33 @@ function RedditRequest(userConfig, request, oauth, oauthAppOnly) {
 
      will only use the path: /api/v1/me
    */
-  self.path = function(urlOrPath) {
+  path(urlOrPath) {
 
-    var parsed = urlLib.parse(urlOrPath);
-    var path = parsed.pathname;
+    let parsed = urlLib.parse(urlOrPath);
+    let path = parsed.pathname;
 
-    var calls = {};
+    let calls = {};
 
-    ['get', 'post', 'put', 'patch', 'delete', 'update'].forEach(function(verb) {
-      calls[verb] = function(userGivenArgs, userContextOptions) {
-        return self.callRedditApi(new Endpoint(self._userConfig,
-                                          verb,
-                                          path,
-                                          userGivenArgs,
-                                          userContextOptions));
+    ['get', 'post', 'put', 'patch', 'delete', 'update'].forEach(verb => {
+      calls[verb] = (userGivenArgs, userContextOptions) => {
+        return this.callRedditApi(new Endpoint(this._userConfig,
+                                               verb,
+                                               path,
+                                               userGivenArgs,
+                                               userContextOptions));
       };
     });
 
     // Add listing support
-    calls.listing = function(userGivenArgs, userContextOptions) {
-      return getListing(new Endpoint(self._userConfig,
-                                     'get',
-                                     path,
-                                     userGivenArgs,
-                                     userContextOptions));
+    calls.listing = (userGivenArgs, userContextOptions) => {
+      return this.getListing(new Endpoint(this._userConfig,
+                                          'get',
+                                          path,
+                                          userGivenArgs,
+                                          userContextOptions));
     };
 
     return calls;
-  };
+  }
 
-
-
-  return self;
 }

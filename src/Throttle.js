@@ -14,38 +14,35 @@
 import when from 'when';
 import delay from 'when/delay';
 
-module.exports = Throttle;
-function Throttle(throttleMs) {
+export default class Throttle {
 
-  var self = this;
+  constructor(throttleMs) {
+    // default to 1000ms delay
+    this._throttleMs = throttleMs || 1000;
 
-  // default to 1000ms delay
-  self._throttleMs = throttleMs || 1000;
+    /*
+       The current throttle delay before a request will go through
+       increments every time a call is made, and is reduced when a
+       call finishes.
 
-  /*
-     The current throttle delay before a request will go through
-     increments every time a call is made, and is reduced when a
-     call finishes.
+       Time is added & removed based on the throttle variable.
+     */
+    this._throttleDelay = 1;
+  }
 
-     Time is added & removed based on the throttle variable.
-   */
-  self._throttleDelay = 1;
-
-  self.wait = function() {
+  wait() {
     // resolve this promise after the current throttleDelay
-    var delayPromise = delay(self._throttleDelay);
+    let delayPromise = delay(this._throttleDelay);
 
     // add throttleMs to the total throttleDelay
-    self._throttleDelay += self._throttleMs;
+    this._throttleDelay += this._throttleMs;
 
     // after throttleMs time, subtract throttleMs from
     // the throttleDelay
-    setTimeout(function() {
-      self._throttleDelay -= self._throttleMs;
-    }, self._throttleMs);
+    setTimeout(()=> {
+      this._throttleDelay -= this._throttleMs;
+    }, this._throttleMs);
 
     return delayPromise;
-  };
-
-  return self;
+  }
 }

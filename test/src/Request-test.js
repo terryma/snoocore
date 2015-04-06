@@ -1,15 +1,15 @@
 /* global describe, it */
 require("babel/register");
 
-var chai = require('chai');
-var chaiAsPromised = require('chai-as-promised');
+import chai from 'chai';
+import chaiAsPromised from 'chai-as-promised';
 chai.use(chaiAsPromised);
-var expect = chai.expect;
+let expect = chai.expect;
 
-var config = require('../config');
+import config from '../config';
 
-var Throttle = require('../../src/throttle');
-var Request = require('../../src/Request');
+import Throttle from '../../src/throttle';
+import Request from '../../src/Request';
 
 describe(__filename, function () {
 

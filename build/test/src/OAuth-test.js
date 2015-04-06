@@ -6,6 +6,14 @@ var _OAuth$TOKEN = require('../../src/OAuth');
 
 var _OAuth$TOKEN2 = _interopRequireWildcard(_OAuth$TOKEN);
 
+var _Throttle = require('../../src/Throttle');
+
+var _Throttle2 = _interopRequireWildcard(_Throttle);
+
+var _Request = require('../../src/Request');
+
+var _Request2 = _interopRequireWildcard(_Request);
+
 /* global describe, it */
 var when = require('when');
 var delay = require('when/delay');
@@ -18,15 +26,12 @@ var tsi = require('./testServerInstance');
 var util = require('./util');
 var config = require('../config');
 
-var Throttle = require('../../src/Throttle');
-var Request = require('../../src/Request');
-
 describe(__filename, function (require) {
 
   this.timeout(config.testTimeout);
 
-  var throttle = new Throttle(1000);
-  var request = new Request(throttle);
+  var throttle = new _Throttle2['default'](1000);
+  var request = new _Request2['default'](throttle);
 
   describe('normalizeScope()', function () {
     it('should convert an array of scopes into a CSV string', function () {

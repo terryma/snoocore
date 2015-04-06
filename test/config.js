@@ -19,7 +19,7 @@ export REDDIT_SCRIPT_KEY=''
 export REDDIT_SCRIPT_SECRET=''
 
 */
-module.exports = {
+export default {
 
   testTimeout: 60000, // 1 minute per test before they time out
 

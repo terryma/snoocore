@@ -11,31 +11,27 @@ const PROPERTY_TREE = buildPropertyTree(endpointProperties);
 
 export default class Endpoint {
 
-  constructor (userConfig, method, endpointPath, givenArgs, contextOptions) {
+  constructor (userConfig, method, path, givenArgs, givenContextOptions) {
+
+    this._userConfig = userConfig;
 
     this.method = method;
-    this.endpointPath = endpointPath;
+    this.path = path;
 
     this.properties = this.getProperties();
 
     // if this endpoint requires the `api_type` string of "json"
     // in it's request
     this.needsApiTypeJson = this.properties.indexOf('a') !== -1;
-
-    this.contextOptions = this.normalizeContextOptions(
-      userConfig, contextOptions);
-
-    this.args = this.buildArgs(
-      userConfig, this.contextOptions, givenArgs, this.needsApiTypeJson);
-
-    this.url = this.buildUrl(
-      userConfig, this.contextOptions, givenArgs, this.endpointPath);
-
+    this.contextOptions = this.normalizeContextOptions(givenContextOptions);
+    this.givenArgs = givenArgs || {};
+    this.args = this.buildArgs();
+    this.url = this.buildUrl();
   }
 
   getProperties() {
     // remove leading slash if any
-    let sections = this.endpointPath.replace(/^\//, '').split('/');
+    let sections = this.path.replace(/^\//, '').split('/');
 
     // the top level of the endpoint tree that we will traverse down
     let leaf = PROPERTY_TREE;
@@ -70,16 +66,16 @@ export default class Endpoint {
   /*
      Returns a set of options that effect how each call to reddit behaves.
    */
-  normalizeContextOptions(userConfig, contextOptions) {
+  normalizeContextOptions(givenContextOptions) {
 
-    let cOptions = contextOptions || {};
+    let cOptions = givenContextOptions || {};
 
     // by default we do not bypass authentication
     cOptions.bypassAuth = utils.thisOrThat(cOptions.bypassAuth, false);
 
     // decode html enntities for this call?
     cOptions.decodeHtmlEntities = utils.thisOrThat(cOptions.decodeHtmlEntities,
-                                                   userConfig.decodeHtmlEntities);
+                                                   this._userConfig.decodeHtmlEntities);
 
     // how many attempts left do we have to retry an endpoint?
 
@@ -91,11 +87,11 @@ export default class Endpoint {
     // use the given retryAttemptsLeft, or the retryAttempts passed in the
     // user configuration
     cOptions.retryAttemptsLeft = utils.thisOrThat(cOptions.retryAttemptsLeft,
-                                                  userConfig.retryAttempts);
+                                                  this._userConfig.retryAttempts);
 
     // delay between retrying an endpoint
     cOptions.retryDelay = utils.thisOrThat(cOptions.retryDelay,
-                                           userConfig.retryDelay);
+                                           this._userConfig.retryDelay);
 
     // how many reauthentication attempts do we have left?
     cOptions.reauthAttemptsLeft = utils.thisOrThat(cOptions.reauthAttemptsLeft,
@@ -108,22 +104,20 @@ export default class Endpoint {
      Build the arguments that we will send to reddit in our
      request. These customize the request that we send to reddit
    */
-  buildArgs(userConfig, contextOptions, givenArgs, needsApiTypeJson) {
-
-    givenArgs = givenArgs || {};
+  buildArgs() {
     let args = {};
 
     // Skip any url parameters (e.g. items that begin with $)
-    for (let key in givenArgs) {
+    for (let key in this.givenArgs) {
       if (key.substring(0, 1) !== '$') {
-        args[key] = givenArgs[key];
+        args[key] = this.givenArgs[key];
       }
     }
 
-    let apiType = utils.thisOrThat(contextOptions.api_type,
-                                   userConfig.apiType);
+    let apiType = utils.thisOrThat(this.contextOptions.api_type,
+                                   this._userConfig.apiType);
 
-    if (apiType && needsApiTypeJson) {
+    if (apiType && this.needsApiTypeJson) {
       args.api_type = apiType;
     }
 
@@ -133,12 +127,12 @@ export default class Endpoint {
   /*
      Builds the URL that we will query reddit with.
    */
-  buildUrl(userConfig, contextOptions, givenArgs, endpointPath) {
-    let serverOAuth = utils.thisOrThat(contextOptions.serverOAuth,
-                                       userConfig.serverOAuth);
+  buildUrl() {
+    let serverOAuth = utils.thisOrThat(this.contextOptions.serverOAuth,
+                                       this._userConfig.serverOAuth);
 
-    let url = 'https://' + path.join(serverOAuth, endpointPath);
-    url = replaceUrlParams(url, givenArgs);
+    let url = 'https://' + path.join(serverOAuth, this.path);
+    url = replaceUrlParams(url, this.givenArgs);
     return url;
   }
 
@@ -196,7 +190,7 @@ export function buildPropertyTree(endpointProperties) {
    endpointUrl:
    'http://example.com/$foo/$bar/test.html'
 
-   givenArgs: { $foo: 'hello', $bar: 'world' }
+   this.givenArgs: { $foo: 'hello', $bar: 'world' }
 
    would output:
 

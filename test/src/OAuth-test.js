@@ -11,8 +11,8 @@ var util = require('./util');
 var config = require('../config');
 
 import OAuth, {TOKEN} from '../../src/OAuth';
-var Throttle = require('../../src/Throttle');
-var Request = require('../../src/Request');
+import Throttle from '../../src/Throttle';
+import Request from '../../src/Request';
 
 describe(__filename, function (require) {
 

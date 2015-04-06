@@ -1,28 +1,46 @@
-/* describe, it, afterEach, beforeEach */
 'use strict';
 
+var _interopRequireWildcard = function (obj) { return obj && obj.__esModule ? obj : { 'default': obj }; };
+
+var _chai = require('chai');
+
+var _chai2 = _interopRequireWildcard(_chai);
+
+var _chaiAsPromised = require('chai-as-promised');
+
+var _chaiAsPromised2 = _interopRequireWildcard(_chaiAsPromised);
+
+var _when = require('when');
+
+var _when2 = _interopRequireWildcard(_when);
+
+var _delay = require('when/delay');
+
+var _delay2 = _interopRequireWildcard(_delay);
+
+var _config = require('../config');
+
+var _config2 = _interopRequireWildcard(_config);
+
+var _Throttle = require('../../src/Throttle');
+
+var _Throttle2 = _interopRequireWildcard(_Throttle);
+
+/* describe, it, afterEach, beforeEach */
 require('babel/register');
 
-var chai = require('chai');
-var chaiAsPromised = require('chai-as-promised');
-chai.use(chaiAsPromised);
-var expect = chai.expect;
+_chai2['default'].use(_chaiAsPromised2['default']);
 
-var when = require('when');
-var delay = require('when/delay');
-
-var config = require('../config');
-
-var Throttle = require('../../src/Throttle');
+var expect = _chai2['default'].expect;
 
 describe('Throttle.', function () {
 
-  this.timeout(config.testTimeout);
+  this.timeout(_config2['default'].testTimeout);
 
   describe('wait()', function () {
 
     it('properly wait before calling anything', function () {
-      var throttle = new Throttle();
+      var throttle = new _Throttle2['default']();
       expect(throttle._throttleDelay).to.equal(1);
 
       var one = throttle.wait();
@@ -50,7 +68,7 @@ describe('Throttle.', function () {
         order.push({ id: 3, now: Date.now() });
       });
 
-      return when.all([afterOne, afterTwo, afterThree]).then(function () {
+      return _when2['default'].all([afterOne, afterTwo, afterThree]).then(function () {
 
         // check order
         expect(order[0].id).to.equal(1);
