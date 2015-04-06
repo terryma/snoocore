@@ -118,7 +118,7 @@ gulp.task('bundleBrowserTests', function() {
 });
 
 gulp.task('mocha', [
-  'modules', 'babel', 'babelTests'
+  'endpointProps', 'modules', 'babel', 'babelTests'
 ], function(done) {
   var mocha = spawn(
     path.join(__dirname, 'node_modules', '.bin', 'mocha'),
@@ -137,7 +137,7 @@ gulp.task('mocha', [
 });
 
 gulp.task('karma', [
-  'modules', 'bundleBrowser', 'bundleBrowserTests'
+  'endpointProps', 'modules', 'bundleBrowser', 'bundleBrowserTests'
 ], function(done) {
   var karma = spawn(
     path.join(__dirname, 'node_modules', 'karma', 'bin', 'karma'),
