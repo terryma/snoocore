@@ -26,7 +26,7 @@ describe(__filename, function () {
     }).to.throw('Missing required userConfiguration value `userAgent`');
   });
 
-  it.only('should complain about an improper oauth duration', function() {
+  it('should complain about an improper oauth duration', function() {
     expect(function() {
       new UserConfig({
         userAgent: 'foo bar',

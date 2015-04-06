@@ -240,6 +240,7 @@ export default class RedditRequest extends events.EventEmitter {
      Finally return the data if there were no problems.
    */
   handleSuccessResponse(response, endpoint) {
+
     let data = response._body || '';
 
     if (endpoint.contextOptions.decodeHtmlEntities) {
@@ -286,12 +287,12 @@ export default class RedditRequest extends events.EventEmitter {
 
     let getSlice = (endpoint) => {
 
-      return this.callRedditApi(endpoint).then(result => {
+      return this.callRedditApi(endpoint).then((result={}) => {
 
         let slice = {};
-        let listing = result || {};
+        let listing = result;
 
-        slice.get = result || {};
+        slice.get = result;
 
         if (result instanceof Array) {
           if (typeof endpoint.contextOptions.listingIndex === 'undefined') {

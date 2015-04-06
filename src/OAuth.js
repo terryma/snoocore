@@ -80,9 +80,9 @@ export default class OAuth {
     let query = {};
 
     query.client_id = this._userConfig.oauth.key;
-    query.state = state || Math.ceil(Math.random() * 1000);
+    query.state = utils.thisOrThat(state, Math.ceil(Math.random() * 1000));
     query.redirect_uri = this._userConfig.oauth.redirectUri;
-    query.duration = this._userConfig.oauth.duration || 'temporary';
+    query.duration = this._userConfig.oauth.duration;
     query.response_type = 'code';
     query.scope = this.scope;
 
@@ -103,7 +103,7 @@ export default class OAuth {
     let query = {};
 
     query.client_id = this._userConfig.oauth.key;
-    query.state = state || Math.ceil(Math.random() * 1000);
+    query.state = utils.thisOrThat(state, Math.ceil(Math.random() * 1000));
     query.redirect_uri = this._userConfig.oauth.redirectUri;
     query.response_type = 'token';
     query.scope = this.scope;
@@ -212,9 +212,8 @@ export default class OAuth {
   /*
      A method that sets up a call to receive an access/refresh token.
    */
-  getToken(tokenEnum, options) {
+  getToken(tokenEnum, options={}) {
 
-    options = options || {};
     let params;
 
     switch(tokenEnum) {
@@ -236,7 +235,7 @@ export default class OAuth {
     let base64 = (buff).toString('base64');
     let auth = `Basic ${base64}`;
 
-    headers.Authorization = auth;
+    headers['Authorization'] = auth;
 
     return this._request.https({
       method: 'POST',
@@ -346,7 +345,7 @@ export default class OAuth {
 
     // use the provided refresh token, or the current
     // one that we have for this class
-    refreshToken = refreshToken || this.refreshToken;
+    refreshToken = utils.thisOrThat(refreshToken, this.refreshToken);
 
     return this.getToken(TOKEN.REFRESH, {
       refreshToken: refreshToken

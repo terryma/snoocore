@@ -8,7 +8,7 @@ let expect = chai.expect;
 
 import config from '../config';
 
-import Throttle from '../../src/throttle';
+import Throttle from '../../src/Throttle';
 import Request from '../../src/Request';
 
 describe(__filename, function () {

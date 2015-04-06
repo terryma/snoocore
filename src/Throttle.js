@@ -16,9 +16,9 @@ import delay from 'when/delay';
 
 export default class Throttle {
 
-  constructor(throttleMs) {
-    // default to 1000ms delay
-    this._throttleMs = throttleMs || 1000;
+  constructor(throttleMs=1000) {
+
+    this._throttleMs = throttleMs;
 
     /*
        The current throttle delay before a request will go through
