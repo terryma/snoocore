@@ -65,6 +65,21 @@ gulp.task('endpointProps', function(done) {
   });
 });
 
+gulp.task('copyTestConfig', function(done) {
+  var configPath = path.join(__dirname, 'test', 'config.js');
+  var configTemplatePath = configPath + '.template';
+
+  fs.exists(configPath, function(exists) {
+    if (exists) {
+      return done();
+    }
+
+    fs.createReadStream(configTemplatePath)
+      .pipe(fs.createWriteStream(configPath))
+      .on('end', done);
+  });
+});
+
 gulp.task('babel', function() {
   return gulp.src('./src/**/*.js')
              .pipe(sourcemaps.init())
