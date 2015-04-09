@@ -85,13 +85,9 @@ Snoocore is now successfully authenticated with OAuth.
 
 ### De-Authenticating
 
-A function `reddit.deauth` is provided which will revoke the `access_token` for the current authenticated user.
+**Currently not supported**
 
-```javascript
-var deauthPromise = reddit.deauth();
-```
-
-Generally it is a good idea to call this everytime the application is finished using the users data.
+See https://github.com/reddit/reddit/issues/1285 for more information.
 
 ### Renewing authentication
 
