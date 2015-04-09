@@ -57,6 +57,5 @@
   "browser": {
     "./src/https/httpsNode.js": "./src/https/httpsBrowser.js"
   },
-  "config": {
-  }
+  "config": {}
 }
