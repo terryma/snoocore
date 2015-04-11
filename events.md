@@ -16,3 +16,13 @@ reddit.on('access_token_expired', function() {
   // do something, such as re-authenticating the user with reddit
 });
 ```
+
+## `access_token_refreshed` (new in `2.8.0`)
+
+When using explicit OAuth with a refresh token, the library will automatically refresh the access token. To know when this happens and get the new access token, listen to this event.
+
+```javascript
+reddit.on('access_token_refreshed', function(newAccessToken) {
+  // do something with the new access token.
+});
+```
