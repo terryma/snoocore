@@ -3,15 +3,15 @@ title: Snoocore Miscellaneous OAuth fns.
 layout: default
 ---
 
-# Miscellaneous OAuth Functions (new in `2.8.0`)
+## Misc. OAuth Functions (new in `2.8.0`)
 
 These functions are provided to allow for more flexability when using Snoocore's OAuth. 
 
-## `reddit.getAccessToken()` -> `undefined` or string
+### `reddit.getAccessToken()` -> `undefined` or string
 
 Gets the current access token for the Snoocore instance if one is set.
 
-## `reddit.setAccessToken(<access_token_string>)`
+### `reddit.setAccessToken(<access_token_string>)`
 
 Sets the access token for a Snoocore instance. 
 
@@ -26,15 +26,15 @@ reddit.setAccessToken('some_valid_access_token');
 reddit('/api/v1/me').get().then(/* */);
 ```
 
-## `reddit.hasAccessToken()` -> boolean
+### `reddit.hasAccessToken()` -> boolean
 
 Does this Snoocore instance have a refresh token?
 
-## `reddit.getRefreshToken()` -> `undefined` or string
+### `reddit.getRefreshToken()` -> `undefined` or string
 
 Gets the current refresh token for the Snoocore instance if one is set.
 
-## `reddit.setRefreshToken(<refresh_token_string>)`
+### `reddit.setRefreshToken(<refresh_token_string>)`
 
 Sets the access token for a Snoocore instance. 
 
@@ -50,6 +50,6 @@ reddit.setRefreshToken('some_valid_refresh_token');
 reddit('/api/v1/me').get().then(/* */);
 ```
 
-## `reddit.hasRefreshToken()` -> boolean
+### `reddit.hasRefreshToken()` -> boolean
 
 Does this Snoocore instance have a refresh token?
