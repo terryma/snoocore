@@ -28,7 +28,7 @@ reddit('/api/v1/me').get().then(/* */);
 
 ### `reddit.hasAccessToken()` -> boolean
 
-Does this Snoocore instance have a refresh token?
+Does this Snoocore instance have an access token?
 
 ### `reddit.getRefreshToken()` -> `undefined` or string
 
