@@ -109,11 +109,21 @@ describe('Snoocore OAuth Test', function () {
 
       var reddit = util.getExplicitInstance([ 'identity' ], 'permanent');
 
+      expect(typeof reddit.getAccessToken()).to.equal('undefined');
+      expect(typeof reddit.getRefreshToken()).to.equal('undefined');
+
       var url = reddit.getExplicitAuthUrl();
 
       return tsi.standardServer.allowAuthUrl(url).then(function(params) {
         var authorizationCode = params.code;
         return reddit.auth(authorizationCode).then(function(refreshToken) {
+
+          expect(reddit.getRefreshToken()).to.equal(refreshToken);
+
+          var ACCESS_TOKEN_A = reddit.getAccessToken();
+
+          // the access token from the 'access_token_refreshed' event
+          var EVENT_NEW_ACCESS_TOKEN;
 
           return reddit('/api/v1/me').get().then(function(data) {
 
@@ -123,13 +133,28 @@ describe('Snoocore OAuth Test', function () {
             return reddit.deauth().then(function() {
               // get a new access token / re-authenticating by refreshing
               // the given refresh token
-              return reddit.refresh(refreshToken);
+
+              var eventPromise = when.promise(function(resolve, reject) {
+                reddit.on('access_token_refreshed', function(newAccessToken) {
+                  EVENT_NEW_ACCESS_TOKEN = newAccessToken;
+                  resolve();
+                });
+              });
+              var refreshPromise = reddit.refresh(refreshToken);
+
+              return when.all([ eventPromise, refreshPromise ]);
             });
           }).then(function() {
+
+            var ACCESS_TOKEN_B = reddit.getAccessToken();
+
+            expect(ACCESS_TOKEN_A).to.not.equal(ACCESS_TOKEN_B);
+            expect(ACCESS_TOKEN_B).to.equal(EVENT_NEW_ACCESS_TOKEN);
+
             expect(reddit._authData.access_token).to.be.a('string');
             // deauthenticae by removing the refresh token
             return reddit.deauth(refreshToken).then(function() {
-              // does NOT automatically get a net access token as we have
+              // does NOT automatically get a new access token as we have
               // removed it entirely
               return expect(reddit('/api/v1/me').get()).to.eventually.be.rejected;
             });
@@ -141,6 +166,59 @@ describe('Snoocore OAuth Test', function () {
         });
       });
     });
+
+    it('should be able to set the refresh token directly', function() {
+      var reddit = util.getExplicitInstance([ 'identity' ], 'permanent');
+      var url = reddit.getExplicitAuthUrl();
+
+      return tsi.standardServer.allowAuthUrl(url).then(function(params) {
+        var authorizationCode = params.code;
+        return reddit.auth(authorizationCode).then(function(refreshToken) {
+
+          // Get the refresh token from this instance.
+          var REFRESH_TOKEN = reddit.getRefreshToken();
+
+          // Use it to set another instance's refresh token
+          var reddit_two = util.getExplicitInstance([ 'identity' ], 'permanent');
+
+          expect(reddit_two.hasRefreshToken()).to.equal(false);
+          reddit_two.setRefreshToken(REFRESH_TOKEN);
+          expect(reddit_two.hasRefreshToken()).to.equal(true);
+
+          return reddit_two('/api/v1/me').get();
+        }).then(function(data) {
+          expect(data.name).to.be.a('string');
+        });
+      });
+
+    });
+
+    it('should be able to set the access token directly', function() {
+      var reddit = util.getExplicitInstance([ 'identity' ], 'permanent');
+      var url = reddit.getExplicitAuthUrl();
+
+      return tsi.standardServer.allowAuthUrl(url).then(function(params) {
+        var authorizationCode = params.code;
+        return reddit.auth(authorizationCode).then(function(refreshToken) {
+
+          // Get the refresh token from this instance.
+          var ACCESS_TOKEN = reddit.getAccessToken();
+
+          // Use it to set another instance's refresh token
+          var reddit_two = util.getExplicitInstance([ 'identity' ], 'temporary');
+
+          expect(reddit_two.hasAccessToken()).to.equal(false);
+          reddit_two.setAccessToken(ACCESS_TOKEN);
+          expect(reddit_two.hasAccessToken()).to.equal(true);
+
+          return reddit_two('/api/v1/me').get();
+        }).then(function(data) {
+          expect(data.name).to.be.a('string');
+        });
+      });
+
+    });
+
 
     it('should auth, deauth (simulate expired access_token), call endpoint which will request a new access_token', function() {
 
@@ -274,8 +352,13 @@ describe('Snoocore OAuth Test', function () {
 	var accessToken = params['access_token'];
 
 
-	/* Set this auth tokens "expire" to 10 seconds. */
-	return reddit.auth(accessToken, 10000).then(function() {
+	return reddit.auth(accessToken).then(function() {
+
+          /* Set this auth tokens "expire" to 10 seconds. */
+          setTimeout(function() {
+            reddit.setAccessToken('invalid_token');
+          }, 10000);
+          
 	  return reddit('/api/v1/me').get();
 	}).then(function(data) {
 	  expect(data.error).to.be.undefined;
@@ -296,7 +379,7 @@ describe('Snoocore OAuth Test', function () {
 		reject(); // should have failed, reject this promise if it didn't
 	      }, function(error) {
 		--i; if (i === 0) { return resolve(); }
-		expect(error.message).to.equal('Authorization token has expired. Listen for the "access_token_expired" event to handle this gracefully in your app.');
+		expect(error.message.indexOf('Access token has expired')).to.not.equal(-1);
 		resolve();
 	      });
 
