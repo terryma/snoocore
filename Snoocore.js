@@ -13,7 +13,7 @@ var utils = require('./utils');
 
 module.exports = Snoocore;
 
-Snoocore.version = '2.7.4';
+Snoocore.version = '2.8.0';
 
 Snoocore.oauth = require('./oauth');
 Snoocore.request = require('./request');
