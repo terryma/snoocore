@@ -5,7 +5,7 @@ layout: default
 
 ## Misc. OAuth Functions (new in `2.8.0`)
 
-These functions are provided to allow for more flexability when using Snoocore's OAuth. 
+These functions are provided to allow for more flexibility when using Snoocore's OAuth. 
 
 ### `reddit.getAccessToken()` -> `undefined` or string
 
