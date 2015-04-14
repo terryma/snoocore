@@ -24,36 +24,6 @@ describe(__filename, function () {
     it.skip('...');
   });
 
-  describe('getResponseError()', function() {
-    it('should get a proper response error', function() {
-      var redditRequest = util.getScriptRedditRequest([ 'identity', 'modconfig' ]);
-
-      var message = 'oh hello there';
-      var response = { _status: 200, _body: 300 };
-
-      var userConfig = util.getScriptUserConfig();
-      var endpoint = new Endpoint(userConfig,
-                                  'get',
-                                  '/some/path',
-                                  { some: 'args' });
-
-      var responseError = redditRequest.getResponseError(message,
-                                                         response,
-                                                         endpoint);
-
-      expect(responseError instanceof Error);
-      expect(responseError.status).to.eql(200);
-      expect(responseError.url).to.eql('https://oauth.reddit.com/some/path');
-      expect(responseError.args).to.eql({ some: 'args' });
-
-      expect(responseError.message.indexOf('oh hello there')).to.not.eql(-1);
-      expect(responseError.message.indexOf('Response Status')).to.not.eql(-1);
-      expect(responseError.message.indexOf('Endpoint URL')).to.not.eql(-1);
-      expect(responseError.message.indexOf('Arguments')).to.not.eql(-1);
-      expect(responseError.message.indexOf('Response Body')).to.not.eql(-1);
-    });
-  });
-
   describe('handleServerErrorResponse()', function() {
 
     it('should retry an endpoint 3 times then fail', function() {

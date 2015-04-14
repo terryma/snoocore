@@ -12,9 +12,9 @@ import * as form from './form';
    Form data can be a raw string, or an object containing key/value pairs
  */
 export default function(options, formData) {
-  // console.log('\n\n\n\n');
-  // console.log('>>> request');
-  // console.log(options.method + ': ' + options.hostname + options.path);
+  console.log('\n\n\n\n');
+  console.log('>>> request');
+  console.log(options.method + ': ' + options.hostname + options.path);
 
   options = options || {};
   options.headers = options.headers || {};
@@ -29,10 +29,11 @@ export default function(options, formData) {
     options.headers['Content-Length'] = data.contentLength;
   }
 
-  // console.log('\n>>> headers\n', options.headers);
+  console.log('\n>>> headers\n', options.headers);
 
   // stick the data at the end of the url for GET requests
   if (options.method === 'GET' && data.buffer.toString() !== '') {
+    console.log('\n>>> query string', data.buffer.toString());
     options.path += '?' + data.buffer.toString();
   }
 
@@ -51,8 +52,8 @@ export default function(options, formData) {
         res._status = res.statusCode;
         res._headers = res.headers;
 
-        // console.log('\n>>> body\n', body);
-        // console.log('\n>>> status\n', res.statusCode);
+        console.log('\n>>> body\n', body);
+        console.log('\n>>> status\n', res.statusCode);
         return resolve(res);
       });
     });

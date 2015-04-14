@@ -1,4 +1,4 @@
-// Files that will be tested in Node.js 
+// Files that will be tested in Node.js
 
 var when = require('when');
 
@@ -25,11 +25,12 @@ describe('[Node]', function() {
     });
   });
 
-  require('./src/Endpoint-test');
-  require('./src/OAuth-test');
-  require('./src/RedditRequest-test');
-  require('./src/Request-test');
-  require('./src/Throttle-test');
   require('./src/UserConfig-test');
+  require('./src/Endpoint-test');
+  require('./src/ResponseError-test');
+  require('./src/Throttle-test');
+  require('./src/Request-test');
+  require('./src/RedditRequest-test');
+  require('./src/OAuth-test');
   require('./src/behavior-test');
 });

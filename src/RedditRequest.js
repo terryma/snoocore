@@ -12,6 +12,7 @@ import he from 'he';
 // our modules
 import Request from './Request';
 import Endpoint from './Endpoint';
+import ResponseError from './ResponseError';
 
 /*
    A collection of functions that deal with requesting data from the
@@ -29,9 +30,13 @@ export default class RedditRequest extends events.EventEmitter {
 
   /*
      Currently application only?
+
+     If we do not have an access token and there is no way
+     to get a new access token then yes! We are application
+     only oauth.
    */
   isApplicationOnly() {
-    return !this._oauth.isAuthenticated();
+    return !this._oauth.hasAccessToken() && !this._oauth.canRefreshAccessToken();
   }
 
   /*
@@ -78,29 +83,6 @@ export default class RedditRequest extends events.EventEmitter {
   }
 
   /*
-     Returns a uniform error for all response errors.
-   */
-  getResponseError(message, response, endpoint) {
-
-    let responseError = new Error([
-      message,
-      '>>> Response Status: ' + response._status,
-      '>>> Endpoint URL: '+ endpoint.url,
-      '>>> Arguments: ' + JSON.stringify(endpoint.args, null, 2),
-      '>>> Response Body:',
-      response._body
-    ].join('\n\n'));
-
-    responseError.url = endpoint.url;
-    responseError.args = endpoint.args;
-    responseError.status = response._status;
-    responseError.body = response._body;
-    responseError.endpoint = endpoint;
-
-    return responseError;
-  }
-
-  /*
      Handle a reddit 500 / server error. This will try to call the endpoint again
      after the given retryDelay. If we do not have any retry attempts left, it
      will reject the promise with the error.
@@ -109,7 +91,7 @@ export default class RedditRequest extends events.EventEmitter {
 
     endpoint.contextOptions.retryAttemptsLeft--;
 
-    let responseError = this.getResponseError('Server Error Response',
+    let responseError = new ResponseError('Server Error Response',
                                               response,
                                               endpoint);
 
@@ -147,7 +129,7 @@ export default class RedditRequest extends events.EventEmitter {
     let wwwAuth = response._headers['www-authenticate'];
 
     if (wwwAuth && wwwAuth.indexOf('insufficient_scope') !== -1) {
-      return when.reject(this.getResponseError(
+      return when.reject(new ResponseError(
         'Insufficient scopes provided for this call',
         response,
         endpoint));
@@ -161,7 +143,7 @@ export default class RedditRequest extends events.EventEmitter {
 
       if (data.reason === 'USER_REQUIRED') {
         let msg = 'Must be authenticated with a user to make this call';
-        return when.reject(this.getResponseError(msg, response, endpoint));
+        return when.reject(new ResponseError(msg, response, endpoint));
       }
 
     } catch(e) {}
@@ -173,15 +155,15 @@ export default class RedditRequest extends events.EventEmitter {
 
       this.emit('access_token_expired');
 
-      let canRenewAccessToken = (this.isApplicationOnly() ||
+/*      let canRenewAccessToken = (this.isApplicationOnly() ||
                                  this._oauth.hasRefreshToken() ||
-                                 this._userConfig.isOAuthType('script'));
+                                 this._userConfig.isOAuthType('script')); */
 
-      if (!canRenewAccessToken) {
+      if (!this._oauth.canRefreshAccessToken()) {
         let errmsg = 'Access token has expired. Listen for ' +
                      'the "access_token_expired" event to ' +
                      'handle this gracefully in your app.';
-        return when.reject(this.getResponseError(errmsg, response, endpoint));
+        return when.reject(new ResponseError(errmsg, response, endpoint));
       } else {
 
         // Renew our access token
@@ -189,7 +171,7 @@ export default class RedditRequest extends events.EventEmitter {
         --endpoint.contextOptions.reauthAttemptsLeft;
 
         if (endpoint.contextOptions.reauthAttemptsLeft <= 0) {
-          return when.reject(this.getResponseError(
+          return when.reject(new ResponseError(
             'Unable to refresh the access_token.',
             response,
             endpoint));
@@ -225,7 +207,7 @@ export default class RedditRequest extends events.EventEmitter {
     // - - -
     // At the end of the day, we just throw an error stating that there
     // is nothing we can do & give general advice
-    return when.reject(this.getResponseError(
+    return when.reject(new ResponseError(
       ('This call failed. ' +
        'Is the user missing reddit gold? ' +
        'Trying to change a subreddit that the user does not moderate? ' +
