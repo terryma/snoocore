@@ -39,11 +39,23 @@ export default class Snoocore extends events.EventEmitter {
     this.oauthAppOnly = new OAuth(this._userConfig, this._request);
 
     // Expose OAuth functions in here
-    this.getExplicitAuthUrl = this.oauth.getExplicitAuthUrl.bind(this.oauth);
-    this.getImplicitAuthUrl = this.oauth.getImplicitAuthUrl.bind(this.oauth);
-    this.auth = this.oauth.auth.bind(this.oauth);
-    this.refresh = this.oauth.refresh.bind(this.oauth);
-    this.deauth = this.oauth.deauth.bind(this.oauth);
+    [ 'getExplicitAuthUrl',
+      'getImplicitAuthUrl',
+      'auth',
+      'refresh',
+      'deauth',
+      'getRefreshToken',
+      'getAccessToken',
+      'setRefreshToken',
+      'setAccessToken',
+      'hasRefreshToken',
+      'hasAccessToken'
+    ].forEach(fn => { this[fn] = this.oauth[fn].bind(this.oauth); });
+
+    // Bubble up the  events
+    this.oauth.on('access_token_refreshed', (accessToken) => {
+      this.emit('access_token_refreshed', accessToken);
+    });
 
     this._redditRequest = new RedditRequest(this._userConfig,
                                             this._request,

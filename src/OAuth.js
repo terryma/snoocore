@@ -1,3 +1,4 @@
+import events from 'events';
 import querystring from 'querystring';
 import util from 'util';
 import urlLib from 'url';
@@ -24,9 +25,11 @@ export const TOKEN = {
    Applicaton Only and an Authenticated Session.
 
  */
-export default class OAuth {
+export default class OAuth extends events.EventEmitter {
 
   constructor(userConfig, request) {
+    super();
+
     this._userConfig = userConfig;
 
     this._request = request;
@@ -62,14 +65,58 @@ export default class OAuth {
   }
 
   /*
-     Are we currently authenticated?
+     Do we have an access token defined?
    */
-  isAuthenticated() {
+  hasAccessToken() {
     return this.accessToken !== TOKEN.INVALID;
+  }
+
+  /*
+     Get the current refresh token used for this instance.
+   */
+  getRefreshToken() {
+    if (this.refreshToken === TOKEN.INVALID) {
+      return undefined;
+    }
+    return this.refreshToken;
+  }
+
+  /*
+     Get the current access token used for this instance.
+   */
+  getAccessToken() {
+    if (this.accessToken === TOKEN.INVALID) {
+      return undefined;
+    }
+    return this.accessToken;
+  }
+
+  /*
+     Set the current refresh token used for this instance.
+   */
+  setRefreshToken(refreshToken) {
+    this.refreshToken = refreshToken;
+  }
+
+  /*
+     Set the current access token used for this instance.
+   */
+  setAccessToken(accessToken) {
+    this.accessToken = accessToken;
   }
 
   getAuthorizationHeader() {
     return `${this.tokenType} ${this.accessToken}`;
+  }
+
+  /*
+     Can we refresh our access token without user intervention?
+  */
+  canRefreshAccessToken() {
+    return (this._userConfig.oauth.type === 'script') ||
+           (this._userConfig.oauth.type === 'explicit' &&
+             this._userConfig.oauth.duration === 'permanent' &&
+             this.hasRefreshToken());
   }
 
   /*
@@ -356,6 +403,8 @@ export default class OAuth {
 
       this.accessToken = data.access_token;
       this.tokenType = data.token_type;
+
+      this.emit('access_token_refreshed', this.accessToken);
     });
   }
 
@@ -368,7 +417,7 @@ export default class OAuth {
   deauth(refreshToken) {
 
     // no need to deauth if not authenticated
-    if (!this.isAuthenticated()) {
+    if (!this.hasAccessToken()) {
       return when.resolve();
     }
 

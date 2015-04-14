@@ -44,7 +44,7 @@ describe(__filename, function (require) {
     it('should not be authenticated initially', function() {
       var userConfig = util.getExplicitUserConfig([ 'flair', 'foobar' ]);
       var oauth = new OAuth(userConfig, request);
-      expect(oauth.isAuthenticated()).to.equal(false);
+      expect(oauth.hasAccessToken()).to.equal(false);
     });
 
     // Checking that this changes / is properly updated gets tested in
@@ -57,6 +57,39 @@ describe(__filename, function (require) {
       var oauth = new OAuth(userConfig, request);
       expect(oauth.getAuthorizationHeader()).to.equal(
         'bearer ' + TOKEN.INVALID);
+    });
+  });
+
+  describe('canRefreshAccessToken()', function() {
+    it('should be able to refresh token (script)', function() {
+      var userConfig = util.getScriptUserConfig([ 'flair' ]);
+      var oauth = new OAuth(userConfig, request);
+      expect(oauth.canRefreshAccessToken()).to.equal(true);
+    });
+
+    it('should be able to refresh token (explicit permanent)', function() {
+      var userConfig = util.getExplicitUserConfig([ 'flair' ], 'permanent');
+      var oauth = new OAuth(userConfig, request);
+      oauth.setRefreshToken('foobar');
+      expect(oauth.canRefreshAccessToken()).to.equal(true);
+    });
+
+    it('should not be able to refresh token (explicit permanent NO refresh token)', function() {
+      var userConfig = util.getExplicitUserConfig([ 'flair' ], 'permanent');
+      var oauth = new OAuth(userConfig, request);
+      expect(oauth.canRefreshAccessToken()).to.equal(false);
+    });
+
+    it('should not be to refresh token (explicit temporary)', function() {
+      var userConfig = util.getExplicitUserConfig([ 'flair' ]);
+      var oauth = new OAuth(userConfig, request);
+      expect(oauth.canRefreshAccessToken()).to.equal(false);
+    });
+
+    it('should not be to refresh token (implicit)', function() {
+      var userConfig = util.getImplicitUserConfig([ 'flair' ]);
+      var oauth = new OAuth(userConfig, request);
+      expect(oauth.canRefreshAccessToken()).to.equal(false);
     });
   });
 
@@ -346,8 +379,9 @@ describe(__filename, function (require) {
       var userConfig = util.getScriptUserConfig();
       var oauth = new OAuth(userConfig, request);
 
+      expect(oauth.hasAccessToken()).to.equal(false);
       return oauth.auth(void 0, true).then(function(authData) {
-        expect(oauth.isAuthenticated()).to.equal(true);
+        expect(oauth.hasAccessToken()).to.equal(true);
       });
     });
 
@@ -355,8 +389,9 @@ describe(__filename, function (require) {
       var userConfig = util.getScriptUserConfig();
       var oauth = new OAuth(userConfig, request);
 
+      expect(oauth.hasAccessToken()).to.equal(false);
       return oauth.auth().then(function() {
-        expect(oauth.isAuthenticated()).to.equal(true);
+        expect(oauth.hasAccessToken()).to.equal(true);
       });
     });
 
@@ -374,8 +409,8 @@ describe(__filename, function (require) {
 
       }).then(function(refreshToken) {
         expect(typeof refreshToken).to.equal('undefined');
-        expect(oauth.isAuthenticated()).to.equal(true);
         expect(oauth.hasRefreshToken()).to.equal(false);
+        expect(oauth.hasAccessToken()).to.equal(true);
       });
     });
 
@@ -390,8 +425,9 @@ describe(__filename, function (require) {
         return oauth.auth(authorizationCode);
       }).then(function(refreshToken) {
         expect(typeof refreshToken).to.equal('string');
-        expect(oauth.isAuthenticated()).to.equal(true);
         expect(oauth.hasRefreshToken()).to.equal(true);
+        expect(oauth.hasAccessToken()).to.equal(true);
+        expect(oauth.getRefreshToken()).to.equal(refreshToken);
       });
     });
 
@@ -405,7 +441,7 @@ describe(__filename, function (require) {
         var accessToken = params['access_token'];
         return oauth.auth(accessToken);
       }).then(function() {
-        expect(oauth.isAuthenticated()).to.equal(true);
+        expect(oauth.hasAccessToken()).to.equal(true);
         expect(oauth.hasRefreshToken()).to.equal(false);
       });
     });
@@ -417,16 +453,30 @@ describe(__filename, function (require) {
       var userConfig = util.getScriptUserConfig();
       var oauth = new OAuth(userConfig, request);
       return oauth.applicationOnlyAuth().then(function(authData) {
-        expect(oauth.isAuthenticated()).to.equal(true);
+        expect(oauth.hasAccessToken()).to.equal(true);
       });
     });
   });
 
+  describe('setAccessToken()', function() {
+    it('should set the access token directly', function() {
+      var userConfig = util.getScriptUserConfig();
+      var oauth = new OAuth(userConfig, request);
+      expect(typeof oauth.getAccessToken()).to.equal('undefined');
+      oauth.setAccessToken('foobar');
+      expect(oauth.getAccessToken()).to.equal('foobar');
+    });
+  });
+
   describe('refresh()', function() {
+
     it('should not refresh', function(done) {
       var userConfig = util.getExplicitUserConfig([ 'identity' ], 'permanent');
       var oauth = new OAuth(userConfig, request);
       var url = oauth.getAuthUrl('foo');
+
+      expect(oauth.hasRefreshToken()).to.equal(false);
+      expect(typeof oauth.getRefreshToken()).to.equal('undefined');
 
       return oauth.refresh().then(function() {
         done(new Error('should not get here & should fail'));
@@ -443,14 +493,37 @@ describe(__filename, function (require) {
       return tsi.standardServer.allowAuthUrl(url).then(function(params) {
         if (params.error) { throw new Error(params.error); }
         var authorizationCode = params.code;
+
+        expect(oauth.hasRefreshToken()).to.equal(false);
+        expect(typeof oauth.getRefreshToken()).to.equal('undefined');
+        expect(typeof oauth.getAccessToken()).to.equal('undefined');
+
         return oauth.auth(authorizationCode);
       }).then(function(refreshToken) {
+        expect(oauth.hasRefreshToken()).to.equal(true);
+        expect(oauth.getRefreshToken()).to.equal(refreshToken);
+
         expect(typeof oauth.accessToken).to.equal('string');
+        expect(oauth.accessToken).to.equal(oauth.getAccessToken());
 
         var oldAccessToken = oauth.accessToken;
 
-        return oauth.refresh().then(function() {
-          expect(oauth.accsesToken).to.not.equal(oldAccessToken);
+        var EVENT_NEW_ACCESS_TOKEN;
+
+        var refreshPromise = oauth.refresh();
+        var eventPromise = when.promise(function(resolve, reject) {
+          oauth.on('access_token_refreshed', function(newAccessToken) {
+            EVENT_NEW_ACCESS_TOKEN = newAccessToken;
+            resolve();
+          });
+        });
+
+        return when.all([
+          refreshPromise,
+          eventPromise
+        ]).then(function() {
+          expect(oauth.accessToken).to.not.equal(oldAccessToken);
+          expect(oauth.getAccessToken()).to.equal(EVENT_NEW_ACCESS_TOKEN);
         });
       });
     });
@@ -468,18 +541,27 @@ describe(__filename, function (require) {
         // Authenticate with the first instance. Get a refresh token.
         return oauthA.auth(authorizationCode);
       }).then(function(refreshToken) {
-        expect(oauthA.isAuthenticated()).to.equal(true);
+        expect(oauthA.hasAccessToken()).to.equal(true);
         expect(oauthA.hasRefreshToken()).to.equal(true);
 
         // Use the refresh token to authenticate with the second
         // fresh OAuth instance:
         return oauthB.refresh(refreshToken);
       }).then(function() {
-        expect(oauthB.isAuthenticated()).to.equal(true);
+        expect(oauthB.hasAccessToken()).to.equal(true);
         expect(oauthB.hasRefreshToken()).to.equal(true);
       });
     });
+  });
 
+  describe('setRefreshToken()', function() {
+    it('should set the refresh token directly', function() {
+      var userConfig = util.getScriptUserConfig();
+      var oauth = new OAuth(userConfig, request);
+      expect(typeof oauth.getRefreshToken()).to.equal('undefined');
+      oauth.setRefreshToken('foobar');
+      expect(oauth.getRefreshToken()).to.equal('foobar');
+    });
   });
 
   describe('deauth()', function() {
@@ -487,10 +569,10 @@ describe(__filename, function (require) {
       var userConfig = util.getScriptUserConfig();
       var oauth = new OAuth(userConfig, request);
       return oauth.auth().then(function(authData) {
-        expect(oauth.isAuthenticated()).to.equal(true);
+        expect(oauth.hasAccessToken()).to.equal(true);
         return oauth.deauth();
       }).then(function() {
-        expect(oauth.isAuthenticated()).to.equal(false);
+        expect(oauth.hasAccessToken()).to.equal(false);
       });
     });
 
@@ -505,19 +587,19 @@ describe(__filename, function (require) {
         return oauth.auth(authorizationCode);
       }).then(function(refreshToken) {
 
-        expect(oauth.isAuthenticated()).to.equal(true);
+        expect(oauth.hasAccessToken()).to.equal(true);
         expect(oauth.hasRefreshToken()).to.equal(true);
 
         return oauth.deauth().then(function() {
-          expect(oauth.isAuthenticated()).to.equal(false);
+          expect(oauth.hasAccessToken()).to.equal(false);
           expect(oauth.hasRefreshToken()).to.equal(true);
           return oauth.refresh();
         }).then(function() {
-          expect(oauth.isAuthenticated()).to.equal(true);
+          expect(oauth.hasAccessToken()).to.equal(true);
           expect(oauth.hasRefreshToken()).to.equal(true);
           return oauth.deauth(refreshToken);
         }).then(function() {
-          expect(oauth.isAuthenticated()).to.equal(false);
+          expect(oauth.hasAccessToken()).to.equal(false);
           expect(oauth.hasRefreshToken()).to.equal(false);
           // the refresh token should be invalid / can not
           // use it any longer to renew
