@@ -30,6 +30,10 @@ export default class Snoocore extends events.EventEmitter {
 
     this._request = new Request(this._throttle);
 
+    this._request.on('response_error', (responseError) => {
+      this.emit('response_error', responseError);
+    });
+
     // Two OAuth instances. One for authenticated users, and another for
     // Application only OAuth. Two are needed in the instance where
     // a user wants to bypass authentication for a call - we don't want
@@ -57,15 +61,11 @@ export default class Snoocore extends events.EventEmitter {
       this.emit('access_token_refreshed', accessToken);
     });
 
+
     this._redditRequest = new RedditRequest(this._userConfig,
                                             this._request,
                                             this.oauth,
                                             this.oauthAppOnly);
-
-    // bubble up the events
-    this._redditRequest.on('server_error', (responseError) => {
-      this.emit('server_error', responseError);
-    });
 
     this._redditRequest.on('access_token_expired', (responseError) => {
       this.emit('access_token_expired', responseError);

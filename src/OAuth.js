@@ -7,6 +7,9 @@ import when from 'when';
 
 import * as u from './utils';
 
+import Endpoint from './Endpoint';
+import ResponseError from './ResponseError';
+
 /*
    Various OAuth types
  */
@@ -111,7 +114,7 @@ export default class OAuth extends events.EventEmitter {
 
   /*
      Can we refresh our access token without user intervention?
-  */
+   */
   canRefreshAccessToken() {
     return (this._userConfig.oauth.type === 'script') ||
            (this._userConfig.oauth.type === 'explicit' &&
@@ -284,27 +287,26 @@ export default class OAuth extends events.EventEmitter {
 
     headers['Authorization'] = auth;
 
-    return this._request.https({
-      method: 'POST',
-      hostname: this._userConfig.serverWWW,
-      path: '/api/v1/access_token',
-      headers: headers
-    }, querystring.stringify(params)).then(response => {
-      let data;
+    let endpoint = new Endpoint(this._userConfig,
+                                this._userConfig.serverWWW,
+                                'post',
+                                '/api/v1/access_token',
+                                headers,
+                                params,
+                                {},
+                                this._userConfig.serverWWWPort);
 
-      try {
-        data = JSON.parse(response._body);
-      } catch(e) {
-        throw new Error(
-          `Failed to get Auth Data:\n${response._body}\n${e.stack}`);
+    let responseErrorHandler = (response, endpoint) => {
+      if (String(response._status).indexOf('4') === 0) {
+        return when.reject(new ResponseError(
+          'Invalid getToken request', response, endpoint));
       }
-
-      if (data.error) {
-        let str = JSON.stringify(data);
-        throw new Error(`Error fetching a new token:\n${str}`);
-      }
-
-      return data;
+      // else return the endpoint to try again
+      return when.resolve(endpoint);
+    };
+    
+    return this._request.https(endpoint, responseErrorHandler).then(res => {
+      return JSON.parse(res._body);
     });
   }
 
@@ -436,20 +438,31 @@ export default class OAuth extends events.EventEmitter {
       this._userConfig.oauth.key + ':' +
       this._userConfig.oauth.secret)).toString('base64');
 
-    return this._request.https({
-      method: 'POST',
-      hostname: this._userConfig.serverWWW,
-      path: '/api/v1/revoke_token',
-      headers: { 'Authorization': auth }
-    }, querystring.stringify(params)).then(function(response) {
+    let headers = {
+      'Authorization': auth
+    };
+
+    let endpoint = new Endpoint(this._userConfig,
+                                this._userConfig.serverWWW,
+                                'post',
+                                '/api/v1/revoke_token',
+                                headers,
+                                params,
+                                {},
+                                this._userConfig.serverWWWPort);
+
+    return this._request.https(endpoint).then(response => {
+      // If we did not get back a 204 this then it did not sucessfully
+      // revoke the token
       if (response._status !== 204) {
-        throw new Error('Unable to revoke the given token');
+        return when.reject(new Error('Unable to revoke the given token'));
       }
-    }).then(()=> {
+
       // clear the data for this OAuth object
       this.accessToken = TOKEN.INVALID;
       this.tokenType = TOKEN.INVALID;
 
+      // only clear the refresh token if one was provided
       if (isRefreshToken) {
         this.refreshToken = TOKEN.INVALID;
       }

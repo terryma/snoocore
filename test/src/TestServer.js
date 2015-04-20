@@ -52,6 +52,8 @@ function TestServer(port, responseStatus) {
       self.connections.push(req.connection);
       if (self.responseStatus) {
         res.writeHead(self.responseStatus);
+        res.end('Status: ' + self.responseStatus);
+        return;
       }
       res.end('');
     });

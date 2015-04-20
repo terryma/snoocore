@@ -20,9 +20,10 @@ export default class UserConfig {
     // ** SERVERS
     this.serverOAuth = u.thisOrThat(userConfiguration.serverOAuth,
                                         'oauth.reddit.com');
-
     this.serverWWW = u.thisOrThat(userConfiguration.serverWWW,
-                                      'www.reddit.com');
+                                  'www.reddit.com');
+    this.serverOAuthPort = u.thisOrThat(userConfiguration.serverOAuthPort, 80);
+    this.serverWWWPort = u.thisOrThat(userConfiguration.serverWWWPort, 80);
 
     // ** IDENFIFICATION
     this.userAgent = u.thisOrThrow(

@@ -1,4 +1,4 @@
-import path from 'path';
+import urlLib from 'url';
 
 import * as u from './utils';
 
@@ -11,12 +11,17 @@ const PROPERTY_TREE = buildPropertyTree(endpointProperties);
 
 export default class Endpoint {
 
-  constructor (userConfig, method, path, givenArgs, givenContextOptions) {
-
+  constructor(userConfig,
+              hostname, method, path, headers={},
+              givenArgs={}, givenContextOptions={}, port=80)
+  {
     this._userConfig = userConfig;
 
+    this.hostname = hostname;
+    this.port = port;
     this.method = method;
     this.path = path;
+    this.headers = headers;
 
     this.properties = this.getProperties();
 
@@ -24,9 +29,15 @@ export default class Endpoint {
     // in it's request
     this.needsApiTypeJson = this.properties.indexOf('a') !== -1;
     this.contextOptions = this.normalizeContextOptions(givenContextOptions);
-    this.givenArgs = givenArgs || {};
+
+    this.givenArgs = givenArgs;
     this.args = this.buildArgs();
     this.url = this.buildUrl();
+    this.computedPath = urlLib.parse(this.url).path;
+  }
+
+  setHeaders(headers) {
+    this.headers = headers;
   }
 
   getProperties() {
@@ -75,27 +86,27 @@ export default class Endpoint {
 
     // decode html enntities for this call?
     cOptions.decodeHtmlEntities = u.thisOrThat(cOptions.decodeHtmlEntities,
-                                                   this._userConfig.decodeHtmlEntities);
+                                               this._userConfig.decodeHtmlEntities);
 
     // how many attempts left do we have to retry an endpoint?
 
     // use the given retryAttemptsLeft, or the retryAttempts passed in the
     // context options if not specified
     cOptions.retryAttemptsLeft = u.thisOrThat(cOptions.retryAttemptsLeft,
-                                                  cOptions.retryAttempts);
+                                              cOptions.retryAttempts);
 
     // use the given retryAttemptsLeft, or the retryAttempts passed in the
     // user configuration
     cOptions.retryAttemptsLeft = u.thisOrThat(cOptions.retryAttemptsLeft,
-                                                  this._userConfig.retryAttempts);
+                                              this._userConfig.retryAttempts);
 
     // delay between retrying an endpoint
     cOptions.retryDelay = u.thisOrThat(cOptions.retryDelay,
-                                           this._userConfig.retryDelay);
+                                       this._userConfig.retryDelay);
 
     // how many reauthentication attempts do we have left?
     cOptions.reauthAttemptsLeft = u.thisOrThat(cOptions.reauthAttemptsLeft,
-                                                   cOptions.retryAttemptsLeft);
+                                               cOptions.retryAttemptsLeft);
 
     return cOptions;
   }
@@ -115,7 +126,7 @@ export default class Endpoint {
     }
 
     let apiType = u.thisOrThat(this.contextOptions.api_type,
-                                   this._userConfig.apiType);
+                               this._userConfig.apiType);
 
     if (apiType && this.needsApiTypeJson) {
       args.api_type = apiType;
@@ -128,11 +139,22 @@ export default class Endpoint {
      Builds the URL that we will query reddit with.
    */
   buildUrl() {
-    let serverOAuth = u.thisOrThat(this.contextOptions.serverOAuth,
-                                       this._userConfig.serverOAuth);
+    let url = this.hostname;
 
-    let url = 'https://' + path.join(serverOAuth, this.path);
+    if (this.port !== 80) {
+      url += ':' + this.port;
+    }
+
+    let path = this.path;
+    if (path.substring(0, 1) !== '/') {
+      path = '/' + path;
+    }
+
+    url += path;
+
     url = replaceUrlParams(url, this.givenArgs);
+    url = url.replace('//', '/');
+    url = 'https://' + url;
     return url;
   }
 

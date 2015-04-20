@@ -8,13 +8,18 @@ import when from 'when';
 
 import * as form from './form';
 
+// Set to true to print useful http debug information on a lower level
+let DEBUG_LOG = true ? console.error : ()=>{};
+
 /*
    Form data can be a raw string, or an object containing key/value pairs
  */
 export default function(options, formData) {
-  console.log('\n\n\n\n');
-  console.log('>>> request');
-  console.log(options.method + ': ' + options.hostname + options.path);
+  DEBUG_LOG('\n\n\n\n');
+  DEBUG_LOG('>>> request:\n' +
+            options.method + ': ' +
+            options.hostname +
+            options.path);
 
   options = options || {};
   options.headers = options.headers || {};
@@ -29,11 +34,11 @@ export default function(options, formData) {
     options.headers['Content-Length'] = data.contentLength;
   }
 
-  console.log('\n>>> headers\n', options.headers);
+  DEBUG_LOG('\n>>> headers}\n', options.headers);
 
   // stick the data at the end of the url for GET requests
   if (options.method === 'GET' && data.buffer.toString() !== '') {
-    console.log('\n>>> query string', data.buffer.toString());
+    DEBUG_LOG('\n>>> query string:\n', data.buffer.toString());
     options.path += '?' + data.buffer.toString();
   }
 
@@ -50,15 +55,15 @@ export default function(options, formData) {
       res.on('end', function() {
         res._body = body; // attach the response body to the object
         res._status = res.statusCode;
-        res._headers = res.headers;
-
-        console.log('\n>>> body\n', body);
-        console.log('\n>>> status\n', res.statusCode);
+        res._headers = res.
+        DEBUG_LOG('\n>>> response body:\n', String(body).substring(0, 500));
+        DEBUG_LOG('\n>>> status:\n', res.statusCode);
         return resolve(res);
       });
     });
 
     if (options.method !== 'GET') {
+      DEBUG_LOG('\n>>> request body:\n', data.buffer.toString());
       req.write(data.buffer);
     }
 

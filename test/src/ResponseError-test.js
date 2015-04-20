@@ -21,8 +21,10 @@ describe(__filename, function () {
 
     var userConfig = util.getScriptUserConfig();
     var endpoint = new Endpoint(userConfig,
+                                userConfig.serverOAuth,
                                 'get',
                                 '/some/path',
+                                {}, // headers
                                 { some: 'args' });
 
     var responseError = new ResponseError(message,

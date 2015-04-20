@@ -7,9 +7,12 @@ chai.use(chaiAsPromised);
 let expect = chai.expect;
 
 import config from '../config';
+import util from './util';
 
 import Throttle from '../../src/Throttle';
 import Request from '../../src/Request';
+import Endpoint from '../../src/Endpoint';
+import UserConfig from '../../src/UserConfig';
 
 describe(__filename, function () {
 
@@ -17,17 +20,20 @@ describe(__filename, function () {
 
   it('should GET resources from reddit', function() {
 
+    var userConfig = util.getScriptUserConfig();
     var throttle = new Throttle(1000);
     var request = new Request(throttle);
+    var endpoint = new Endpoint(
+      userConfig,
+      userConfig.serverWWW,
+      'get',
+      '/r/askreddit/hot.json');
 
-    return request.https({
-      hostname: 'www.reddit.com',
-      path: '/r/askreddit/hot.json',
-      method: 'GET'
-    }).then(function(res) {
+    return request.https(endpoint).then(function(res) {
       var data = JSON.parse(res._body);
       expect(data.kind).to.equal('Listing');
     });
   });
+
 
 });

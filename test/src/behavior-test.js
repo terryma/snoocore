@@ -14,6 +14,8 @@ import tsi from './testServerInstance';
 import config from '../config';
 import util from './util';
 
+import ResponseError from '../../src/ResponseError';
+import Endpoint from '../../src/Endpoint';
 import Snoocore from '../../src/Snoocore';
 
 describe(__filename, function () {
@@ -203,12 +205,11 @@ describe(__filename, function () {
   });
 
   it('application only oauth calling a user specific endpoint should fail', function() {
-    var reddit = util.getScriptInstance();
+    var reddit = util.getImplicitInstance();
     return reddit('/api/v1/me').get().then(function(data) {
-      throw new Error('should not pass, expect to fail with error');
+      throw new Error('SHOULD not pass, expect to fail with error');
     }).catch(function(error) {
-      return expect(error.message.indexOf(
-        'Must be authenticated with a user to make this call')).to.not.equal(-1);
+      return expect(error.message).to.contain('This call failed');
     });
   });
 
@@ -319,8 +320,7 @@ describe(__filename, function () {
       }).then(function() {
         return reddit('/api/v1/me').get();
       }).catch(function(error) {
-        return expect(error.message.indexOf(
-          'Must be authenticated with a user to make this call')).to.not.equal(-1);
+        return expect(error.message.indexOf('This call failed')).to.not.equal(-1);
       });
     });
 
@@ -367,8 +367,6 @@ describe(__filename, function () {
           expect(reddit_two.hasRefreshToken()).to.equal(false);
           reddit_two.setRefreshToken(REFRESH_TOKEN);
           expect(reddit_two.hasRefreshToken()).to.equal(true);
-
-          console.log('boop...');
 
           return reddit_two('/api/v1/me').get();
         }).then(function(data) {
@@ -545,6 +543,163 @@ describe(__filename, function () {
         expect(result.data.children.length).to.equal(2);
       });
     });
+
+  });
+
+  it('should retry an endpoint 3 times then fail', function() {
+
+    // allow self signed certs for our test server
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
+
+    var reddit = util.getScriptInstance([ 'identity', 'read' ]);
+
+    return reddit.auth().then(function() {
+
+      // Switch servers to use error test server (returns 500 errors every time)
+      reddit._userConfig.serverOAuth = 'localhost';
+      reddit._userConfig.serverOAuthPort = config.testServer.serverErrorPort;
+
+      reddit._userConfig.serverWWW = 'localhost';
+      reddit._userConfig.serverWWWPort = config.testServer.serverErrorPort;
+
+      var retryAttempts = 3; // let's only retry 3 times to keep it short
+
+      var responseErrorPromise = when.promise(function(resolve, reject) {
+        // resolve once we get the server error instance
+        reddit.on('response_error', function(error) {
+          expect(error instanceof ResponseError);
+          expect(error.retryAttemptsLeft).to.equal(--retryAttempts);
+          expect(error.status).to.equal(500);
+          expect(error.url).to.equal('https://localhost:3001/hot');
+          expect(error.args).to.eql({});
+          expect(error.body).to.equal('Status: 500');
+
+          if (retryAttempts <= 0) {
+            return resolve(); // resolve once we are out of attempts
+          }
+        });
+      });
+
+      var hotPromise = reddit('/hot').get(void 0, {
+        retryAttempts: retryAttempts,
+        retryDelay: 450 // no need to make this take longer than necessary
+      });
+
+      return when.settle([ hotPromise, responseErrorPromise ]);
+
+    }).then(function(descriptor) {
+      // expect that the response error promise worked as expected
+      expect(descriptor[1].state).to.equal('fulfilled');
+
+      // hot promise should have failed
+      expect(descriptor[0].state).to.equal('rejected');
+      expect(descriptor[0].reason.message.indexOf(
+        'All retry attempts exhausted')).to.not.equal(-1);
+    }).finally(function() {
+      // don't allow self signed certs again
+      delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    });
+
+  });
+
+  it('should retry an endpoint on HTTP 5xx', function() {
+
+    let reddit = util.getScriptInstance([ 'identity', 'read' ]);
+
+    return reddit.auth().then(function() {
+
+      // Switch servers to use error test server (returns 500 errors every time)
+      reddit._userConfig.serverOAuth = 'localhost';
+      reddit._userConfig.serverOAuthPort = config.testServer.serverErrorPort;
+
+      reddit._userConfig.serverWWW = 'localhost';
+      reddit._userConfig.serverWWWPort = config.testServer.serverErrorPort;
+
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0; // allow self signed certs
+
+      let responseErrorPromise = when.promise(function(resolve, reject) {
+        // resolve once we get the server error instance
+        reddit.on('response_error', function(error) {
+
+          // don't allow self signed certs again
+          delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+
+          expect(error instanceof ResponseError);
+          expect(error.retryAttemptsLeft).to.equal(59);
+          expect(error.status).to.equal(500);
+          expect(error.url).to.equal('https://localhost:3001/hot');
+          expect(error.args).to.eql({});
+          expect(error.body).to.equal('Status: 500');
+
+          // --
+          // Very dirty way to hot swap the endpoint's url.
+          // Please do not use this in actual code -- this is a test case
+          error.endpoint.hostname = config.requestServer.oauth;
+          error.endpoint.port = 80;
+          // -- end filth
+
+          // Resolve the response error promise. We have sucessfully
+          // swapped out the invalid url of the endpoint for the one
+          // that should work. hotPromise should resolve now...
+          return resolve();
+        });
+      });
+
+      let hotPromise = reddit('/hot').get();
+
+      return when.all([ hotPromise, responseErrorPromise ]);
+    });
+  });
+
+  it('should retry initial authentication when HTTP 5xx error', function() {
+
+    let reddit = util.getScriptInstance([ 'identity', 'read' ]);
+
+    // Switch servers to use error test server (returns 500 errors every time)
+    reddit._userConfig.serverOAuth = 'localhost';
+    reddit._userConfig.serverOAuthPort = config.testServer.serverErrorPort;
+
+    reddit._userConfig.serverWWW = 'localhost';
+    reddit._userConfig.serverWWWPort = config.testServer.serverErrorPort;
+
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0; // allow self signed certs
+
+    // check that it fails before switching to the actual servers
+    let responseErrorPromise = when.promise(function(resolve, reject) {
+      reddit.on('response_error', function(error) {
+
+        // don't allow self signed certs again
+        delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+
+        expect(error instanceof ResponseError);
+        expect(error.retryAttemptsLeft).to.equal(59);
+        expect(error.status).to.equal(500);
+        expect(error.url).to.equal('https://localhost:3001/api/v1/access_token');
+        expect(error.args).to.eql({
+          api_type: "json",
+          grant_type: "password",
+          scope: "identity,read",
+          username: config.reddit.login.username,
+          password: config.reddit.login.password
+        });
+        expect(error.body).to.equal('Status: 500');
+
+        // Very dirty way to hot swap the endpoint's url.
+        // Please do not use this in actual code -- this is a test case
+        error.endpoint.hostname = config.requestServer.www;
+        error.endpoint.port = 80;
+        // -- end filth
+
+        // Resolve the response error promise. We have sucessfully
+        // swapped out the invalid url of the endpoint for the one
+        // that should work. hotPromise should resolve now...
+        return resolve();
+      });
+    });
+
+    let authPromise = reddit.auth();
+
+    return when.all([ authPromise, responseErrorPromise ]);
 
   });
 

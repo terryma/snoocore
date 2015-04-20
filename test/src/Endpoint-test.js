@@ -58,8 +58,10 @@ describe('Endpoint.', function () {
       it('should remove `$` arguments', function() {
         var userConfig = util.getScriptUserConfig();
         var endpoint = new Endpoint(userConfig,
+                                    'host.name',
                                     'get',
                                     '/foo/bar',
+                                    {},
                                     { $foo: 'bar' });
 
         expect(endpoint.args).to.eql({});
@@ -68,6 +70,7 @@ describe('Endpoint.', function () {
       it('should add in the default api type', function() {
         var userConfig = util.getScriptUserConfig();
         var endpoint = new Endpoint(userConfig,
+                                    'host.name',
                                     'post',
                                     '/api/new_captcha',
                                     { $foo: 'bar' });
@@ -82,8 +85,10 @@ describe('Endpoint.', function () {
         userConfig.apiType = false; // no not set api_type to "json"
 
         var endpoint = new Endpoint(userConfig,
+                                    'host.name',
                                     'post',
                                     '/api/new_captcha',
+                                    {},
                                     { $foo: 'bar' });
 
         expect(endpoint.args).to.eql({});
@@ -94,13 +99,16 @@ describe('Endpoint.', function () {
     describe('normalizeContextOptions()', function() {
       it('should initialize the correct default context options', function() {
         var userConfig = util.getScriptUserConfig();
-        var endpoint = new Endpoint(userConfig, 'post', '/api/new_captcha');
+        var endpoint = new Endpoint(userConfig,
+                                    'host.name',
+                                    'post',
+                                    '/api/new_captcha');
         expect(endpoint.contextOptions).to.eql({
           bypassAuth: false,
           decodeHtmlEntities: false,
           retryAttemptsLeft: 60,
           retryDelay: 5000,
-          reauthAttemptsLeft: 60
+          reauthAttemptsLeft: 60,
         });
       });
 
@@ -111,7 +119,10 @@ describe('Endpoint.', function () {
         userConfig.retryAttempts = 9999;
         userConfig.retryDelay = 8888;
 
-        var endpoint = new Endpoint(userConfig, 'post', '/api/new_captcha');
+        var endpoint = new Endpoint(userConfig,
+                                    'host.name',
+                                    'post',
+                                    '/api/new_captcha');
         expect(endpoint.contextOptions).to.eql({
           bypassAuth: false,
           decodeHtmlEntities: true,
@@ -124,12 +135,20 @@ describe('Endpoint.', function () {
       it('should change context options based on endpoint optons', function() {
         var userConfig = util.getScriptUserConfig();
 
-        var endpoint = new Endpoint(userConfig, 'post', '/api/new', {}, {
+        var contextOptions = {
           bypassAuth: true,
           decodeHtmlEntities: true,
           retryAttempts: 9999,
           retryDelay: 8888
-        });
+        };
+
+        var endpoint = new Endpoint(userConfig,
+                                    'host.name',
+                                    'post',
+                                    '/api/new',
+                                    {}, // headers
+                                    {}, // given args
+                                    contextOptions);
 
         expect(endpoint.contextOptions).to.eql({
           bypassAuth: true,
@@ -145,13 +164,19 @@ describe('Endpoint.', function () {
     describe('getProperties()', function() {
       it('should have properties', function() {
         var userConfig = util.getScriptUserConfig();
-        var endpoint = new Endpoint(userConfig, 'post', '/api/new_captcha');
+        var endpoint = new Endpoint(userConfig,
+                                    'host.name',
+                                    'post',
+                                    '/api/new_captcha');
         expect(endpoint.properties).to.equal('a');
       });
 
       it('should not have properties', function() {
         var userConfig = util.getScriptUserConfig();
-        var endpoint = new Endpoint(userConfig, 'get', '/foo/bar');
+        var endpoint = new Endpoint(userConfig,
+                                    'host.name',
+                                    'get',
+                                    '/foo/bar');
         expect(endpoint.properties).to.equal('');
       });
     });
@@ -160,47 +185,21 @@ describe('Endpoint.', function () {
 
       it('should build an url for an endpoint', function() {
         var userConfig = util.getScriptUserConfig();
-        var endpoint = new Endpoint(userConfig, 'get', '/$urlparam/bar', {
+        var args = {
           extensions: [],
           user: 'foo',
           passwd: 'foo',
           $urlparam: 'some'
-        });
-
-        expect(endpoint.url).to.equal(
-          'https://' + config.requestServer.oauth + '/some/bar');
+        };
+        var endpoint = new Endpoint(userConfig,
+                                    'host.name',
+                                    'get',
+                                    '/$urlparam/bar',
+                                    {},
+                                    args);
+        expect(endpoint.url).to.equal('https://host.name/some/bar');
       });
 
-      it('should build an url with a custom hostname (global)', function() {
-        var userConfig = util.getScriptUserConfig();
-        userConfig.serverOAuth = 'foo.bar.com';
-
-        var endpoint = new Endpoint(userConfig, 'get', '/$urlparam/bar', {
-          extensions: [],
-          user: 'foo',
-          passwd: 'foo',
-          $urlparam: 'something'
-        });
-
-        expect(endpoint.url).to.equal('https://foo.bar.com/something/bar');
-      });
-
-
-      it('should build an url with a custom hostname (local)', function() {
-
-        var userConfig = util.getScriptUserConfig();
-
-        var endpoint = new Endpoint(userConfig, 'get', '/$urlparam/bar', {
-          extensions: [],
-          user: 'foo',
-          passwd: 'foo',
-          $urlparam: 'something'
-        }, {
-          serverOAuth: 'foo.bar.com'
-        });
-
-        expect(endpoint.url).to.equal('https://foo.bar.com/something/bar');
-      });
     });
 
   });

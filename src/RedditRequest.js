@@ -42,7 +42,7 @@ export default class RedditRequest extends events.EventEmitter {
   /*
      Builds up the headers for an endpoint.
    */
-  buildHeaders(endpoint) {
+  buildHeaders(contextOptions={}) {
     let headers = {};
 
     if (this._userConfig.isNode) {
@@ -50,7 +50,7 @@ export default class RedditRequest extends events.EventEmitter {
       headers['User-Agent'] = this._userConfig.userAgent;
     }
 
-    if (endpoint.contextOptions.bypassAuth || this.isApplicationOnly()) {
+    if (contextOptions.bypassAuth || this.isApplicationOnly()) {
       headers['Authorization'] = this._oauthAppOnly.getAuthorizationHeader();
     } else {
       headers['Authorization'] = this._oauth.getAuthorizationHeader();
@@ -63,56 +63,17 @@ export default class RedditRequest extends events.EventEmitter {
      Call the reddit api.
    */
   callRedditApi(endpoint) {
+    let requestPromise = this._request.https(
+      endpoint, this.responseErrorHandler.bind(this));
 
-    let parsedUrl = urlLib.parse(endpoint.url);
-
-    let reqOptions = {
-      method: endpoint.method.toUpperCase(),
-      hostname: parsedUrl.hostname,
-      path: parsedUrl.path,
-      headers: this.buildHeaders(endpoint)
-    };
-
-    if (parsedUrl.port) {
-      reqOptions.port = parsedUrl.port;
-    }
-
-    return this._request.https(reqOptions, endpoint.args).then(res => {
-      return this.handleRedditResponse(res, endpoint);
+    return requestPromise.then(response => {
+      return this.handleSuccessResponse(response, endpoint);
     });
   }
 
   /*
-     Handle a reddit 500 / server error. This will try to call the endpoint again
-     after the given retryDelay. If we do not have any retry attempts left, it
-     will reject the promise with the error.
-   */
-  handleServerErrorResponse(response, endpoint) {
-
-    endpoint.contextOptions.retryAttemptsLeft--;
-
-    let responseError = new ResponseError('Server Error Response',
-                                              response,
-                                              endpoint);
-
-    responseError.retryAttemptsLeft = endpoint.contextOptions.retryAttemptsLeft;
-
-    this.emit('server_error', responseError);
-
-    if (endpoint.contextOptions.retryAttemptsLeft <= 0) {
-      responseError.message = ('All retry attempts exhausted.\n\n' +
-                               responseError.message);
-      return when.reject(responseError);
-    }
-
-    return delay(endpoint.contextOptions.retryDelay).then(() => {
-      return this.callRedditApi(endpoint);
-    });
-  }
-
-  /*
-     Handle a reddit 4xx / client error. This is usually caused when our
-     access_token has expired.
+     Handle a request errors from reddit. This is usually caused when our
+     access_token has expired, or reddit servers are under heavy load.
 
      If we can't renew our access token, we throw an error / emit the
      'access_token_expired' event that users can then handle to
@@ -121,7 +82,7 @@ export default class RedditRequest extends events.EventEmitter {
      If we can renew our access token, we try to reauthenticate, and call the
      reddit endpoint again.
    */
-  handleClientErrorResponse(response, endpoint) {
+  responseErrorHandler(response, endpoint) {
 
     // - - -
     // Check headers for more specific errors.
@@ -136,72 +97,77 @@ export default class RedditRequest extends events.EventEmitter {
     }
 
     // - - -
-    // Parse the response for more specific errors.
-
-    try {
-      let data = JSON.parse(response._body);
-
-      if (data.reason === 'USER_REQUIRED') {
-        let msg = 'Must be authenticated with a user to make this call';
-        return when.reject(new ResponseError(msg, response, endpoint));
-      }
-
-    } catch(e) {}
+    // 404 - Page not found
+    if (response._status === 404) {
+      let msg = 'Page nod found. Is this a valid endpoint?';
+      return when.reject(new ResponseError(msg, response, endpoint));
+    }
 
     // - - -
     // Access token has expired
-
     if (response._status === 401) {
 
-      this.emit('access_token_expired');
+      // Atempt to get a new access token!
+      let reauthPromise;
 
-/*      let canRenewAccessToken = (this.isApplicationOnly() ||
-                                 this._oauth.hasRefreshToken() ||
-                                 this._userConfig.isOAuthType('script')); */
+      // If we are application only, or are bypassing authentication
+      // therefore we're using application only OAuth
+      if (this.isApplicationOnly() || endpoint.contextOptions.bypassAuth) {
+        reauthPromise = this._oauthAppOnly.applicationOnlyAuth();
+      }
+      else if (this._oauth.canRefreshAccessToken()) {
+        // If we have been authenticated with a permanent refresh token use it
+        if (this._oauth.hasRefreshToken()) {
+          reauthPromise = this._oauth.refresh();
+        }
+        // If we are OAuth type script we can call `.auth` again
+        else if (this._userConfig.isOAuthType('script')) {
+          reauthPromise = this._oauth.auth();
+        }
+      }
+      // No way to refresh our access token, it has expired
+      else {
+        this.emit('access_token_expired');
 
-      if (!this._oauth.canRefreshAccessToken()) {
         let errmsg = 'Access token has expired. Listen for ' +
                      'the "access_token_expired" event to ' +
                      'handle this gracefully in your app.';
         return when.reject(new ResponseError(errmsg, response, endpoint));
-      } else {
-
-        // Renew our access token
-
-        --endpoint.contextOptions.reauthAttemptsLeft;
-
-        if (endpoint.contextOptions.reauthAttemptsLeft <= 0) {
-          return when.reject(new ResponseError(
-            'Unable to refresh the access_token.',
-            response,
-            endpoint));
-        }
-
-        let reauth;
-
-        // If we are application only, or are bypassing authentication
-        // therefore we're using application only OAuth
-        if (this.isApplicationOnly() || endpoint.contextOptions.bypassAuth) {
-          reauth = this._oauthAppOnly.applicationOnlyAuth();
-        } else {
-
-          // If we have been authenticated with a permanent refresh token use it
-          if (this._oauth.hasRefreshToken()) {
-            reauth = this._oauth.refresh();
-          }
-
-          // If we are OAuth type script we can call `.auth` again
-          if (this._userConfig.isOAuthType('script')) {
-            reauth = this._oauth.auth();
-          }
-
-        }
-
-        return reauth.then(() => {
-          return this.callRedditApi(endpoint);
-        });
-
       }
+
+      return reauthPromise.then(() => {
+        // refresh the authentication headers for this endpoint
+        endpoint.setHeaders(this.buildHeaders(endpoint.contextOptions));
+
+        let modifiedEndpoint = new Endpoint(this._userConfig,
+                                            endpoint.hostname,
+                                            endpoint.method,
+                                            endpoint.path,
+                                            this.buildHeaders(
+                                              endpoint.contextOptions),
+                                            endpoint.givenArgs,
+                                            endpoint.contextOptions,
+                                            endpoint.port);
+
+        return when.resolve(modifiedEndpoint);
+      });
+    }
+
+    // - - -
+    // Reddit servers are busy. Can't do much here.
+
+    if (String(response._status).substring(0, 1) === '5') {
+      let modifiedEndpoint = new Endpoint(this._userConfig,
+                                          endpoint.hostname,
+                                          endpoint.method,
+                                          endpoint.path,
+                                          this.buildHeaders(
+                                            endpoint.contextOptions),
+                                          endpoint.givenArgs,
+                                          endpoint.contextOptions,
+                                          endpoint.port);
+
+      return when.resolve(modifiedEndpoint);
     }
 
     // - - -
@@ -209,9 +175,11 @@ export default class RedditRequest extends events.EventEmitter {
     // is nothing we can do & give general advice
     return when.reject(new ResponseError(
       ('This call failed. ' +
+       'Does this call require a user? ' +
        'Is the user missing reddit gold? ' +
        'Trying to change a subreddit that the user does not moderate? ' +
-       'This is an unrecoverable error.'),
+       'This is an unrecoverable error. Check the rest of the ' +
+       'error message for more information.'),
       response,
       endpoint));
   }
@@ -235,24 +203,6 @@ export default class RedditRequest extends events.EventEmitter {
     } catch(e) {}
 
     return when.resolve(data);
-  }
-
-  /*
-     Handles letious reddit response cases.
-   */
-  handleRedditResponse(response, endpoint) {
-
-    switch(String(response._status).substring(0, 1)) {
-      case '5':
-        return this.handleServerErrorResponse(response, endpoint);
-      case '4':
-        return this.handleClientErrorResponse(response, endpoint);
-      case '2':
-        return this.handleSuccessResponse(response, endpoint);
-    }
-
-    return when.reject(new Error(
-      'Invalid reddit response status of ' + response._status));
   }
 
   /*
@@ -308,10 +258,13 @@ export default class RedditRequest extends events.EventEmitter {
           newArgs.after = slice.children[slice.children.length - 1].data.name;
           newArgs.count = count;
           return getSlice(new Endpoint(this._userConfig,
+                                       endpoint.hostname,
                                        endpoint.method,
                                        endpoint.path,
+                                       this.buildHeaders(endpoint.contextOptions),
                                        newArgs,
-                                       endpoint.contextOptions));
+                                       endpoint.contextOptions,
+                                       endpoint.port));
         };
 
         slice.previous = () => {
@@ -322,10 +275,13 @@ export default class RedditRequest extends events.EventEmitter {
           newArgs.after = null;
           newArgs.count = count;
           return getSlice(new Endpoint(this._userConfig,
+                                       endpoint.hostname,
                                        endpoint.method,
                                        endpoint.path,
+                                       this.buildHeaders(endpoint.contextOptions),
                                        newArgs,
-                                       endpoint.contextOptions));
+                                       endpoint.contextOptions,
+                                       endpoint.port));
         };
 
         slice.start = () => {
@@ -336,10 +292,13 @@ export default class RedditRequest extends events.EventEmitter {
           newArgs.after = start;
           newArgs.count = count;
           return getSlice(new Endpoint(this._userConfig,
+                                       endpoint.hostname,
                                        endpoint.method,
                                        endpoint.path,
+                                       this.buildHeaders(endpoint.contextOptions),
                                        newArgs,
-                                       endpoint.contextOptions));
+                                       endpoint.contextOptions,
+                                       endpoint.port));
         };
 
         slice.requery = () => {
@@ -375,20 +334,26 @@ export default class RedditRequest extends events.EventEmitter {
     ['get', 'post', 'put', 'patch', 'delete', 'update'].forEach(verb => {
       calls[verb] = (userGivenArgs, userContextOptions) => {
         return this.callRedditApi(new Endpoint(this._userConfig,
+                                               this._userConfig.serverOAuth,
                                                verb,
                                                path,
+                                               this.buildHeaders(userContextOptions),
                                                userGivenArgs,
-                                               userContextOptions));
+                                               userContextOptions,
+                                               this._userConfig.serverOAuthPort));
       };
     });
 
     // Add listing support
     calls.listing = (userGivenArgs, userContextOptions) => {
       return this.getListing(new Endpoint(this._userConfig,
+                                          this._userConfig.serverOAuth,
                                           'get',
                                           path,
+                                          this.buildHeaders(userContextOptions),
                                           userGivenArgs,
-                                          userContextOptions));
+                                          userContextOptions,
+                                          this._userConfig.serverOAuthPort));
     };
 
     return calls;

@@ -10,127 +10,50 @@ let expect = chai.expect;
 import config from '../config';
 import util from './util';
 
+import Throttle from '../../src/Throttle';
+import Request from '../../src/Request';
 import Endpoint from '../../src/Endpoint';
+import OAuth from '../../src/OAuth';
+import RedditRequest from '../../src/RedditRequest';
 
 describe(__filename, function () {
 
   this.timeout(config.testTimeout);
 
+  let globalUserConfig = util.getScriptInstance([ 'identity' ]);
+  let globalThrottle = new Throttle(globalUserConfig.throttle);
+  let globalRequest = new Request(globalThrottle);
+
   describe('buildHeaders()', function() {
-    it.skip('...');
+    it('should build the proper headers for an endpoint', function() {
+      var userConfig = util.getScriptUserConfig();
+      var oauth = new OAuth(userConfig, globalRequest);
+      var appOnlyOAuth = new OAuth(userConfig, globalRequest);
+      var endpoint = new Endpoint(userConfig,
+                                  'host.name',
+                                  'get',
+                                  '/foo/bar',
+                                  { 'X-test': 'header_value' },
+                                  { $foo: 'bar' });
+
+      var redditRequest = new RedditRequest(userConfig,
+                                            globalRequest,
+                                            oauth,
+                                            appOnlyOAuth);
+
+
+      expect(redditRequest.buildHeaders(endpoint)).to.eql({
+        'User-Agent': util.USER_AGENT,
+        'Authorization': 'bearer invalid_token'
+      });
+    });
   });
 
   describe('callRedditApi()', function() {
     it.skip('...');
   });
 
-  describe('handleServerErrorResponse()', function() {
-
-    it('should retry an endpoint 3 times then fail', function() {
-
-      // allow self signed certs for our test server
-      process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
-
-      var reddit = util.getScriptInstance([ 'identity', 'read' ]);
-
-      return reddit.auth().then(function() {
-
-        // Switch servers to use error test server (returns 500 errors every time)
-        reddit._userConfig.serverOAuth = 'localhost:' + config.testServer.serverErrorPort;
-        reddit._userConfig.serverWWW = 'localhost:' + config.testServer.serverErrorPort;
-
-        var retryAttempts = 3; // let's only retry 3 times to keep it short
-
-        return when.promise(function(resolve, reject) {
-          var hotPromise;
-
-          // resolve once we get the server error instance
-          reddit.on('server_error', function(error) {
-
-            expect(error instanceof Error);
-            expect(error.retryAttemptsLeft).to.equal(--retryAttempts);
-            expect(error.status).to.equal(500);
-            expect(error.url).to.equal('https://localhost:3001/hot');
-            expect(error.args).to.eql({});
-            expect(error.body).to.equal('');
-
-            // resolve once we have reached our retry attempt and get an error
-            // we should not resolve this promise! We expect it to fail!!
-            hotPromise.done(reject, resolve);
-          });
-
-          hotPromise = reddit('/hot').get(void 0, {
-            retryAttempts: retryAttempts,
-            retryDelay: 500 // no need to make this take longer than necessary
-          });
-        });
-
-      }).then(function(error) {
-        expect(error.message.indexOf('All retry attempts exhausted')).to.not.eql(-1);
-      }).finally(function() {
-        // don't allow self signed certs again
-        delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-      });
-
-    });
-
-    it('should retry an endpoint on HTTP 5xx', function() {
-
-      // allow self signed certs for our test server
-      process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
-
-      var reddit = util.getScriptInstance([ 'identity', 'read' ]);
-
-      // create a reference to the actual reddit servers
-      var redditWWW = 'www.reddit.com';
-      var redditOAuth = 'oauth.reddit.com';
-
-      return reddit.auth().then(function() {
-
-        // Switch servers to use error test server (returns 500 errors every time)
-        reddit._userConfig.serverOAuth = 'localhost:' + config.testServer.serverErrorPort;
-        reddit._userConfig.serverWWW = 'localhost:' + config.testServer.serverErrorPort;
-
-        return when.promise(function(resolve, reject) {
-          var hotPromise;
-
-          // resolve once we get the server error instance
-          reddit.on('server_error', function(error) {
-
-            expect(error instanceof Error);
-            expect(error.retryAttemptsLeft).to.equal(59);
-            expect(error.status).to.equal(500);
-            expect(error.url).to.equal('https://localhost:3001/hot');
-            expect(error.args).to.eql({});
-            expect(error.body).to.equal('');
-
-            // don't allow self signed certs again
-            delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-
-            // --
-            // Very dirty way to hot swap the endpoint's url.
-            // Please do not use this in actual code -- this is a test case
-            reddit._userConfig.serverWWW = redditWWW;
-            reddit._userConfig.serverOAuth = redditOAuth;
-            expect(reddit._userConfig.serverWWW).to.eql(redditWWW);
-            expect(reddit._userConfig.serverOAuth).to.eql(redditOAuth);
-            var modifiedEndpoint = new Endpoint(reddit._userConfig, 'get', 'hot');
-            error.endpoint.url = modifiedEndpoint.url;
-            // -- end filth
-
-            // this should resolve now that the servers are correct
-            hotPromise.done(resolve);
-          });
-
-          process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0; // allow self signed certs
-          hotPromise = reddit('/hot').get();
-        });
-
-      });
-    });
-  });
-
-  describe('handleClientErrorResponse()', function() {
+  describe('responseErrorHandler()', function() {
 
     it('should handle data.json.errors field', function() {
 
@@ -307,22 +230,18 @@ describe(__filename, function () {
           limit: 2,
           $article: '13wml3'
         }, { listingIndex: 0 }).then(function(slice) {
-          // slice.get should equal the getResult
-          expect(slice.get).to.eql(getResult);
-
           // should equal the first listings children
-          expect(slice.allChildren).to.eql(getResult[0].data.children);
+          expect(slice.allChildren[0].permalink).to.eql(
+            getResult[0].data.children[0].permalink);
 
           // check the second index
           return reddit('duplicates/$article').listing({
             limit: 2,
             $article: '13wml3'
           }, { listingIndex: 1 }).then(function(slice) {
-            // slice.get should equal the getResult
-            expect(slice.get).to.eql(getResult);
-
             // should equal the first listings children
-            expect(slice.allChildren).to.eql(getResult[1].data.children);
+            expect(slice.allChildren[0].permalink).to.eql(
+              getResult[1].data.children[0].permalink);
           });
         });
       });

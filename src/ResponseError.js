@@ -18,6 +18,7 @@ export default class ResponseError extends Error {
     this.args = endpoint.args;
     this.status = response._status;
     this.body = response._body;
+    this.retryAttemptsLeft = endpoint.contextOptions.retryAttemptsLeft;
     this.endpoint = endpoint;
   }
 }
