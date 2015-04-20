@@ -169,6 +169,6 @@ gulp.task('karma', [
 
 // The default task (called when you run `gulp` from cli)
 gulp.task('default', function(done) {
-  console.log('no default task!');
+  console.error('no default task!');
   done();
 });
