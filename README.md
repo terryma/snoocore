@@ -1,53 +1,32 @@
 # Snoocore
 
-[![Build Status](https://travis-ci.org/trevorsenior/snoocore.svg?branch=master)](https://travis-ci.org/trevorsenior/snoocore)
-[![npm version](https://badge.fury.io/js/snoocore.svg)](http://badge.fury.io/js/snoocore)
-
 A minimal and complete JavaScript driver for the Reddit API.
+
+[![Coverage Status (wip-3.0.0)](https://coveralls.io/repos/trevorsenior/snoocore/badge.svg?branch=wip-3.0.0)](https://coveralls.io/r/trevorsenior/snoocore?branch=wip-3.0.0)
+[![Build Status](https://travis-ci.org/trevorsenior/snoocore.svg?branch=master)](https://travis-ci.org/trevorsenior/snoocore)
+[![Gitter chat](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/trevorsenior/snoocore)
+
 
 ### [View the documentation](http://trevorsenior.github.io/snoocore)
 
-## Features
+### Features
 
-**All endpoints are supported**
+- All endpoints are supported (even the undocumented ones).
+- Node.js and Browser support (same syntax).
+- Full OAuth support (all forms).
+- Throttling & Rate Limiting.
+- [...and more!](http://snoocore.readme.io/v3.0.0/docs/features)
 
-Calls are [generated](https://github.com/trevorsenior/snooform) from the [Reddit API documentation](http://www.reddit.com/dev/api). Undocumented endpoints are supported as well.
+### Questions?
 
-**No special syntax or fluff**
+**Gitter chat**
 
-All calls follow the reddit API directly. To use the endpoint [`GET /api/v1/me`](http://www.reddit.com/dev/api#GET_api_v1_me), call:
+Feel free to ask questions on [Gitter chat](https://gitter.im/trevorsenior/snoocore). Even if the room is empty still ask there for help and someone will get back with you.
 
-```javascript
-var promise = reddit('/api/v1/me').get();
-```
+**Example Code**
 
-See the [basic usage](http://trevorsenior.github.io/snoocore/basicUsage.html) section of the documentation for more information on how to call endpoints with parameters and url parameters.
+There is an [example code repository](https://github.com/trevorsenior/snoocore-examples) that has various examples for different situations. If any scenario is missing mention it in Gitter chat or make a pull request.
 
-<sub>Snoocore [uses promises](http://tsenior.com/snoocore/promises.html)!</sub>
+### Questions about reddit development?
 
-**Node.js and Browser support**
-
-`npm install snoocore` || `bower install snoocore`
-
-The same syntax can be used in node and in browser based JavaScript. There are a few [limitations & restrictions](http://trevorsenior.github.io/snoocore/node-vs-browser.html) for browser based environments covered in the documentation.
-
-**Login Helpers**
-
-Both [OAuth and Cookie based logins](http://trevorsenior.github.io/snoocore/login.html) are supported.
-
-**Throttling**
-
-Rate limiting is built into snoocore but can be adjusted or removed all together in [the configuration settings](http://trevorsenior.github.io/snoocore/config.html).
-
-## Have questions?
-
- - [View example code snippets](https://github.com/trevorsenior/snoocore-examples/tree/master)
- - Open a new issue with the `question` label on GitHub.
-
-## Contributing
-
-Documentation fixes and additions are always helpful should there be a mistake or something is unclear. Switch to the [`gh-pages`](https://github.com/trevorsenior/snoocore/tree/gh-pages) branch and make any changes needed there.
-
-Found out a nifty way to do something that everyone should know? Feel free to add it to the [examples](https://github.com/trevorsenior/snoocore-examples/tree/master) repository.
-
-Changes or new features? That's great too! If it's a major change or a new feature open an issue that we can discuss else feel free to just make a pull request for minor changes. Keep in mind that the goal is to keep the interface as close to the Reddit API as possible.
+Head over to [/r/redditdev](https://www.reddit.com/r/redditdev).
