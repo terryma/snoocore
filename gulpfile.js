@@ -15,18 +15,6 @@ var source = require('vinyl-source-stream');
 var buffer = require('vinyl-buffer');
 var browserify = require('browserify');
 
-gulp.task('modules', function(done) {
-  fs.exists(path.join(__dirname, 'node_modules'), function(exists) {
-    if (!exists) {
-      return exec('npm install', { cwd: __dirname }, function(error, stdout, stderr) {
-        return done(error);
-      });
-    } else {
-      return done();
-    }
-  });
-});
-
 gulp.task('endpointProps', function(done) {
   return snooform.jsonApi({
     skipDescription: true,
@@ -102,8 +90,6 @@ gulp.task('bundleBrowser', [ 'babel' ], function() {
     entries: './build/Snoocore.js',
     exclude: [ './build/https/httpsNode.js' ],
     debug: true
-    // defining transforms here will avoid crashing your stream
-    // transform: [ babelify ]
   });
 
   return b.bundle()
@@ -132,7 +118,7 @@ gulp.task('bundleBrowserTests', function() {
           .pipe(gulp.dest('./test/build/'));
 });
 
-gulp.task('buildNode', [ 'endpointProps', 'modules', 'babel', 'babelTests' ]);
+gulp.task('buildNode', [ 'endpointProps', 'babel', /* 'babelTests' */ ]);
 
 gulp.task('mocha', [ 'buildNode' ], function(done) {
   var mocha = spawn(
@@ -152,8 +138,7 @@ gulp.task('mocha', [ 'buildNode' ], function(done) {
 });
 
 gulp.task('buildBrowser', [
-  'endpointProps', 'modules', 'bundleBrowser', 'bundleBrowserTests'
-]);
+  'endpointProps', 'bundleBrowser', 'bundleBrowserTests']);
 
 gulp.task('karma', [ 'buildBrowser' ], function(done) {
   var karma = spawn(
