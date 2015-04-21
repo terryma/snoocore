@@ -34,7 +34,7 @@ describe(__filename, function () {
     expect(responseError instanceof ResponseError);
     expect(responseError.status).to.eql(200);
     expect(responseError.url).to.eql('https://oauth.reddit.com/some/path');
-    expect(responseError.args).to.eql({ some: 'args' });
+    expect(responseError.args).to.eql({ some: 'args', api_type: 'json' });
 
     expect(responseError.message.indexOf('oh hello there')).to.not.eql(-1);
     expect(responseError.message.indexOf('Response Status')).to.not.eql(-1);

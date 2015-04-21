@@ -36,7 +36,6 @@
     "karma-safari-launcher": "^0.1.1",
     "mocha": "^2.1.0",
     "phantom": "^0.7.2",
-    "snooform": "0.1.0",
     "vinyl-buffer": "^1.0.0",
     "vinyl-source-stream": "^1.1.0"
   },

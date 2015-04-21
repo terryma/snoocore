@@ -9,7 +9,7 @@ let expect = chai.expect;
 import config from '../config';
 import util from './util';
 
-import Endpoint, {buildPropertyTree, replaceUrlParams} from '../../src/Endpoint';
+import Endpoint, {replaceUrlParams} from '../../src/Endpoint';
 
 describe(__filename, function () {
 
@@ -43,14 +43,6 @@ describe(__filename, function () {
     });
   });
 
-  describe('buildPropertyTree()', function() {
-    it('should build the tree', function() {
-      var endpointProperties = require('../../endpointProperties');
-      var propertyTree = buildPropertyTree(endpointProperties);
-      expect(propertyTree.api.new_captcha._endpoints.post).to.equal('a');
-    });
-  });
-
   describe('Instance methods.', function() {
 
     describe('buildArgs()', function() {
@@ -64,7 +56,9 @@ describe(__filename, function () {
                                     {},
                                     { $foo: 'bar' });
 
-        expect(endpoint.args).to.eql({});
+        expect(endpoint.args).to.eql({
+          api_type: 'json'
+        });
       });
 
       it('should add in the default api type', function() {
@@ -158,26 +152,6 @@ describe(__filename, function () {
           reauthAttemptsLeft: 9999,
           retryAttempts: 9999
         });
-      });
-    });
-
-    describe('getProperties()', function() {
-      it('should have properties', function() {
-        var userConfig = util.getScriptUserConfig();
-        var endpoint = new Endpoint(userConfig,
-                                    'host.name',
-                                    'post',
-                                    '/api/new_captcha');
-        expect(endpoint.properties).to.equal('a');
-      });
-
-      it('should not have properties', function() {
-        var userConfig = util.getScriptUserConfig();
-        var endpoint = new Endpoint(userConfig,
-                                    'host.name',
-                                    'get',
-                                    '/foo/bar');
-        expect(endpoint.properties).to.equal('');
       });
     });
 

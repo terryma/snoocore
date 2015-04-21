@@ -2,13 +2,6 @@ import urlLib from 'url';
 
 import * as u from './utils';
 
-// Precompiled list of properties for specific endpoints
-import endpointProperties from '../endpointProperties';
-
-// Build a more parseable tree for the properties. Built here vs. simply
-// requiring an already build tree to save on bytes.
-const PROPERTY_TREE = buildPropertyTree(endpointProperties);
-
 export default class Endpoint {
 
   constructor(userConfig,
@@ -23,11 +16,6 @@ export default class Endpoint {
     this.path = path;
     this.headers = headers;
 
-    this.properties = this.getProperties();
-
-    // if this endpoint requires the `api_type` string of "json"
-    // in it's request
-    this.needsApiTypeJson = this.properties.indexOf('a') !== -1;
     this.contextOptions = this.normalizeContextOptions(givenContextOptions);
 
     this.givenArgs = givenArgs;
@@ -38,40 +26,6 @@ export default class Endpoint {
 
   setHeaders(headers) {
     this.headers = headers;
-  }
-
-  getProperties() {
-    // remove leading slash if any
-    let sections = this.path.replace(/^\//, '').split('/');
-
-    // the top level of the endpoint tree that we will traverse down
-    let leaf = PROPERTY_TREE;
-
-    let section;
-
-    for (let i = 0, len = sections.length; i < len; ++i) {
-      section = sections[i];
-
-      // We can go down further in the tree
-      if (typeof leaf[section] !== 'undefined') {
-        leaf = leaf[section];
-        continue;
-      }
-
-      // Check if there is a placeholder we can go down
-      if (typeof leaf['$'] !== 'undefined') {
-        leaf = leaf['$'];
-        continue;
-      }
-
-      break; // else, dead end
-    }
-
-    if (leaf._endpoints && leaf._endpoints[this.method]) {
-      return leaf._endpoints[this.method];
-    }
-
-    return '';
   }
 
   /*
@@ -128,7 +82,7 @@ export default class Endpoint {
     let apiType = u.thisOrThat(this.contextOptions.api_type,
                                this._userConfig.apiType);
 
-    if (apiType && this.needsApiTypeJson) {
+    if (apiType) {
       args.api_type = apiType;
     }
 
@@ -158,50 +112,6 @@ export default class Endpoint {
     return url;
   }
 
-}
-
-
-/*
-   Converts a list of endpoint properties into a tree for
-   faster traversal during runtime.
- */
-export function buildPropertyTree(endpointProperties) {
-  let propertyTree = {};
-
-  Object.keys(endpointProperties).forEach(endpointPath => {
-
-    // get the properties for this endpoint
-    let properties = endpointProperties[endpointPath];
-
-    // get the sections to traverse down for this endpoint
-    let pathSections = endpointPath.split('/');
-
-    // the first element in this list is the endpoint method
-    let method = pathSections.shift().toLowerCase();
-
-    let leaf = propertyTree; // start at the root
-
-    // move down to where we need to be in the chain for this endpoint
-    let i = 0;
-    let len = pathSections.length;
-
-    for (; i < len - 1; ++i) {
-      if (typeof leaf[pathSections[i]] === 'undefined') {
-        leaf[pathSections[i]] = {};
-      }
-      leaf = leaf[pathSections[i]];
-    }
-
-    // push the endpoint to this section of the tree
-    if (typeof leaf[pathSections[i]] === 'undefined') {
-      leaf[pathSections[i]] = { _endpoints: {} };
-    }
-
-
-    leaf[pathSections[i]]._endpoints[method] = properties;
-  });
-
-  return propertyTree;
 }
 
 

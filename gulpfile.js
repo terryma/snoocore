@@ -15,44 +15,6 @@ var source = require('vinyl-source-stream');
 var buffer = require('vinyl-buffer');
 var browserify = require('browserify');
 
-gulp.task('endpointProps', function(done) {
-  return snooform.jsonApi({
-    skipDescription: true,
-    skipArgsDescription: true,
-    skipUrls: true
-  }).done(function(json) {
-
-    var endpoints = JSON.parse(json);
-    var endpointProperties = {};
-
-    endpoints.forEach(function(endpoint) {
-
-      var properties = '';
-
-      // requires parameter api_type: 'json'
-      if (typeof endpoint.args.api_type !== 'undefined') {
-        properties += 'a';
-      }
-
-      // if this endpoint has any special properties make note of it:
-      if (properties !== '') {
-        // go ahead and replace placeholders just with "$"
-        var path = endpoint.path.replace(/\$\w+/g, '$');
-        endpointProperties[endpoint.method.toLowerCase() + path] = properties;
-      }
-    });
-
-    var endpointPropertiesPath = path.join(__dirname,
-                                           'build',
-                                           'endpointProperties.js');
-    fs.writeFile(endpointPropertiesPath,
-                 'module.exports = ' +
-                 JSON.stringify(endpointProperties, null, 2) +
-                 ';',
-                 done);
-  });
-});
-
 gulp.task('copyTestConfig', function(done) {
   var configPath = path.join(__dirname, 'test', 'config.js');
   var configTemplatePath = configPath + '.template';
@@ -118,7 +80,7 @@ gulp.task('bundleBrowserTests', [ 'babelTests' ], function() {
           .pipe(gulp.dest('./build/test/'));
 });
 
-gulp.task('buildNode', [ 'endpointProps', 'babel', 'babelTests' ]);
+gulp.task('buildNode', [ 'babel', 'babelTests' ]);
 
 gulp.task('mocha', [ 'buildNode' ], function(done) {
   var mocha = spawn(
@@ -137,9 +99,7 @@ gulp.task('mocha', [ 'buildNode' ], function(done) {
   });
 });
 
-gulp.task('buildBrowser', [
-  'endpointProps', 'bundleBrowser', 'bundleBrowserTests'
-]);
+gulp.task('buildBrowser', [ 'bundleBrowser', 'bundleBrowserTests' ]);
 
 gulp.task('karma', [ 'buildBrowser' ], function(done) {
   var karma = spawn(

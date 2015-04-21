@@ -8,7 +8,7 @@ import RedditRequest from './RedditRequest';
 import Throttle from './Throttle';
 import UserConfig from './UserConfig';
 import OAuth from './OAuth';
-import file from './https/file';
+import fileHelper from './https/file';
 
 export default class Snoocore extends events.EventEmitter {
 
@@ -17,7 +17,7 @@ export default class Snoocore extends events.EventEmitter {
   }
 
   static file(...args) {
-    return file.apply(args);
+    return fileHelper(...args);
   }
 
   constructor(userConfiguration) {

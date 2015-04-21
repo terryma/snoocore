@@ -571,7 +571,9 @@ describe(__filename, function () {
           expect(error.retryAttemptsLeft).to.equal(--retryAttempts);
           expect(error.status).to.equal(500);
           expect(error.url).to.equal('https://localhost:3001/hot');
-          expect(error.args).to.eql({});
+          expect(error.args).to.eql({
+            api_type: 'json'
+          });
           expect(error.body).to.equal('Status: 500');
 
           if (retryAttempts <= 0) {
@@ -628,7 +630,9 @@ describe(__filename, function () {
           expect(error.retryAttemptsLeft).to.equal(59);
           expect(error.status).to.equal(500);
           expect(error.url).to.equal('https://localhost:3001/hot');
-          expect(error.args).to.eql({});
+          expect(error.args).to.eql({
+            api_type: 'json'
+          });
           expect(error.body).to.equal('Status: 500');
 
           // --
