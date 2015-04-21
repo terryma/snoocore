@@ -77,7 +77,7 @@ export default class Request extends events.EventEmitter {
 
         // Use the given response error handler, or use a thin wrapper that
         // will return the endpoint without any modifications
-        responseErrorHandler = responseErrorHandler || (response, endpoint) => {
+        responseErrorHandler = responseErrorHandler || function(response, endpoint) {
           return when.resolve(endpoint);
         };
 
