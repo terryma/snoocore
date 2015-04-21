@@ -118,7 +118,7 @@ gulp.task('bundleBrowserTests', function() {
           .pipe(gulp.dest('./test/build/'));
 });
 
-gulp.task('buildNode', [ 'endpointProps', 'babel', /* 'babelTests' */ ]);
+gulp.task('buildNode', [ 'endpointProps', 'babel', 'babelTests' ]);
 
 gulp.task('mocha', [ 'buildNode' ], function(done) {
   var mocha = spawn(
