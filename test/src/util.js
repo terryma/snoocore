@@ -139,7 +139,8 @@ exports.getImplicitInstance = function(scopes) {
   });
 };
 
-exports.getScriptInstance = function(scopes) {
+exports.getScriptInstance = function(scopes, options) {
+  options = options || {};
   return new Snoocore({
     userAgent: USER_AGENT,
     oauth: {
@@ -150,6 +151,8 @@ exports.getScriptInstance = function(scopes) {
       username: config.reddit.login.username,
       password: config.reddit.login.password
     },
+    __test: options.__test || {},
+    throttle: options.throttle || 1000,
     serverWWW: config.requestServer.www,
     serverOAuth: config.requestServer.oauth
   });

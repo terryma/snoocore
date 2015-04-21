@@ -107,7 +107,7 @@ describe(__filename, function () {
       var data = result.data;
       return reddit('/api/site_admin').post(data);
     }).catch(function(error) {
-      expect(error.message.indexOf('BAD_SR_NAME')).to.not.equal(-1);
+      expect(error.message).to.contain('"errors"');
     });
   });
 

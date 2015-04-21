@@ -9,7 +9,7 @@ import when from 'when';
 import * as form from './form';
 
 // Set to true to print useful http debug information on a lower level
-let DEBUG_LOG = true ? console.error : ()=>{};
+let DEBUG_LOG = false ? console.error : ()=>{};
 
 /*
    Form data can be a raw string, or an object containing key/value pairs
@@ -34,7 +34,7 @@ export default function(options, formData) {
     options.headers['Content-Length'] = data.contentLength;
   }
 
-  DEBUG_LOG('\n>>> headers}\n', options.headers);
+  DEBUG_LOG('\n>>> request headers}\n', options.headers);
 
   // stick the data at the end of the url for GET requests
   if (options.method === 'GET' && data.buffer.toString() !== '') {
@@ -55,8 +55,9 @@ export default function(options, formData) {
       res.on('end', function() {
         res._body = body; // attach the response body to the object
         res._status = res.statusCode;
-        res._headers = res.
-        DEBUG_LOG('\n>>> response body:\n', String(body).substring(0, 500));
+        res._headers = res.headers;
+        DEBUG_LOG('\n>>> response headers:\n', res._headers);
+        DEBUG_LOG('\n>>> response body:\n', String(body).substring(0, 1000));
         DEBUG_LOG('\n>>> status:\n', res.statusCode);
         return resolve(res);
       });

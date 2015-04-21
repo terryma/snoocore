@@ -11,7 +11,7 @@ import util from './util';
 
 import Endpoint, {buildPropertyTree, replaceUrlParams} from '../../src/Endpoint';
 
-describe('Endpoint.', function () {
+describe(__filename, function () {
 
   this.timeout(config.testTimeout);
 

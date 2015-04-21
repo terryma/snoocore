@@ -45,4 +45,11 @@ export default class Throttle {
 
     return delayPromise;
   }
+
+  /*
+     Time in milliseconds to add to the throttle delay
+  */
+  addTime(timeMs) {
+    this._throttleDelay += timeMs;
+  }
 }

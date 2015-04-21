@@ -576,7 +576,7 @@ describe(__filename, function (require) {
       });
     });
 
-    it.only('should auth (explicit), deauth, and reauth with refresh token', function(done) {
+    it('should auth (explicit), deauth, and reauth with refresh token', function(done) {
       var userConfig = util.getExplicitUserConfig([ 'identity' ], 'permanent');
       var oauth = new OAuth(userConfig, request);
       var url = oauth.getAuthUrl('foo');

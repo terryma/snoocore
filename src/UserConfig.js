@@ -19,7 +19,7 @@ export default class UserConfig {
 
     // ** SERVERS
     this.serverOAuth = u.thisOrThat(userConfiguration.serverOAuth,
-                                        'oauth.reddit.com');
+                                    'oauth.reddit.com');
     this.serverWWW = u.thisOrThat(userConfiguration.serverWWW,
                                   'www.reddit.com');
     this.serverOAuthPort = u.thisOrThat(userConfiguration.serverOAuthPort, 80);
@@ -54,11 +54,11 @@ export default class UserConfig {
     this.oauth.scope = u.thisOrThat(this.oauth.scope, []);
 
     this.oauth.deviceId = u.thisOrThat(this.oauth.deviceId,
-                                           'DO_NOT_TRACK_THIS_DEVICE');
+                                       'DO_NOT_TRACK_THIS_DEVICE');
     this.oauth.type = u.thisOrThrow(this.oauth.type,
-                                        missingMsg + '`oauth.type`');
+                                    missingMsg + '`oauth.type`');
     this.oauth.key = u.thisOrThrow(this.oauth.key,
-                                       missingMsg + '`oauth.key`');
+                                   missingMsg + '`oauth.key`');
     this.oauth.duration = u.thisOrThat(this.oauth.duration, 'temporary');
 
 
@@ -102,6 +102,27 @@ export default class UserConfig {
         this.oauth.redirectUri,
         missingMsg + '`oauth.redirectUri` for type implicit/explicit');
     }
+
+
+    //
+    // TESTING CONFIGURATION
+    //
+    // Some test cases require some deep messing around with the library
+    // in order to be nice to the API server when testing.
+    //
+    // These should neve be used by anything other than the test cases to
+    // modify internal variables. They are only used if needed!
+
+    /*
+       Used to determine when we have gone over the rate limit. The default
+       would be "0", e.g. when there are not more requests remaining in the
+       current time slot
+     */
+    this.__test = {};
+    userConfiguration.__test = userConfiguration.__test || {};
+
+    this.__test.rateLimitRemainingCutoff = u.thisOrThat(
+      userConfiguration.__test.rateLimitRemainingCutoff, 0);
   }
 
   /*

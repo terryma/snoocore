@@ -14,7 +14,7 @@ import config from '../config';
 
 import Throttle from '../../src/Throttle';
 
-describe('Throttle.', function () {
+describe(__filename, function () {
 
   this.timeout(config.testTimeout);
 
@@ -76,5 +76,25 @@ describe('Throttle.', function () {
 
   });
 
+
+  describe('addTime()', function() {
+    it('should properly add time to the throttle', function() {
+      var before = Date.now();
+      var throttle = new Throttle();
+      expect(throttle._throttleDelay).to.equal(1);
+
+      var one = throttle.wait();
+      expect(throttle._throttleDelay).to.equal(1001);
+
+      throttle.addTime(3000);
+
+      var two = throttle.wait();
+      expect(throttle._throttleDelay).to.equal(5001);
+
+      return when.all([ one, two ]).then(() => {
+        expect(Date.now() - before).to.be.gt(4000);
+      });
+    });
+  });
 
 });

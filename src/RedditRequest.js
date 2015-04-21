@@ -200,7 +200,41 @@ export default class RedditRequest extends events.EventEmitter {
     // Attempt to parse some JSON, otherwise continue on (may be empty, or text)
     try {
       data = JSON.parse(data);
+
+      // Reddit isn't always honest in their response status. Check for
+      // any errors in 2xx http statuses
+      if (data.json && data.json.errors && data.json.errors.length > 0) {
+        return when.reject(new ResponseError('', response, endpoint));
+      }
     } catch(e) {}
+
+
+    let rateLimitRemaining = response._headers['x-ratelimit-remaining'];
+    let rateLimitUsed = response._headers['x-ratelimit-used'];
+    let rateLimitReset = response._headers['x-ratelimit-reset'];
+
+    let rateLimitData = {
+      rateLimitRemaining: rateLimitRemaining ? Number(rateLimitRemaining) : void 0,
+      rateLimitUsed: rateLimitUsed ? Number(rateLimitUsed) : void 0,
+      rateLimitReset: rateLimitReset ? Number(rateLimitReset) : void 0
+    };
+
+    if (typeof rateLimitData.rateLimitUsed !== 'undefined') {
+      this.emit('rate_limit', rateLimitData);
+    }
+
+    // Using a test variable
+    // this._userConfig.__test.rateLimitRemainingCutoff
+    // it's default value is "0", however in the tests cases this
+    // would take too long.
+    let cutoff = this._userConfig.__test.rateLimitRemainingCutoff;
+
+    if (typeof rateLimitData.rateLimitRemaining !== 'undefined' &&
+      Number(rateLimitRemaining) <= cutoff)
+    {
+      this.emit('rate_limit_reached', rateLimitData);
+    }
+
 
     return when.resolve(data);
   }

@@ -71,6 +71,17 @@ export default class Snoocore extends events.EventEmitter {
       this.emit('access_token_expired', responseError);
     });
 
+    this._redditRequest.on('rate_limit', (rateLimitData) => {
+      this.emit('rate_limit', rateLimitData);
+    });
+
+    this._redditRequest.on('rate_limit_reached', (rateLimitData) => {
+      // let the user know that they have gone over
+      this.emit('rate_limit_reached', rateLimitData);
+      // Delay the next call until the rate limit reset occurs
+      this._throttle.addTime(rateLimitData.rateLimitReset * 1000);
+    });
+
     /*
        Make this._redditRequest.path the primary function that we return, but
        stick the rest of the available functions on the prototype so we

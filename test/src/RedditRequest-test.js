@@ -72,7 +72,7 @@ describe(__filename, function () {
         return reddit('/api/site_admin').post(data);
 
       }).catch(function(error) {
-        expect(error.message.indexOf('BAD_SR_NAME')).to.not.equal(-1);
+        expect(error.message).to.contain('"errors"');
       });
     });
 
@@ -324,6 +324,113 @@ describe(__filename, function () {
         $sort: 'top'
       }).then(function(result) {
         expect(result).to.haveOwnProperty('kind', 'Listing');
+      });
+    });
+
+  });
+
+  describe('rate limit headers', function() {
+
+    it('should fire when calling an endpoint that is not cached', function() {
+      let reddit = util.getScriptInstance([ 'read', 'subscribe' ]);
+
+      let rateLimitPromise = when.promise((resolve, reject) => {
+        reddit.once('rate_limit', rateLimitData => {
+          expect(rateLimitData.rateLimitRemaining).to.be.a('number');
+          expect(rateLimitData.rateLimitUsed).to.be.a('number');
+          expect(rateLimitData.rateLimitReset).to.be.a('number');
+          return resolve();
+        });
+      });
+
+      let subscribePromise = reddit('/r/$subreddit/about').get({
+        $subreddit: config.reddit.testSubreddit
+      }).then(result => {
+        let subName = result.data.name;
+        let isSubbed = result.data.user_is_subscriber;
+        return isSubbed ? when.resolve() : reddit('/api/subscribe').post({
+          action: 'sub',
+          sr: subName
+        });
+      });
+
+      return when.all([ rateLimitPromise, subscribePromise ]);
+    });
+
+    it('call an endpoint until the rate limit is reached', function() {
+
+      let reddit = util.getScriptInstance([ 'read', 'subscribe' ], {
+        throttle: 0
+      });
+
+      expect(reddit._throttle._throttleDelay).to.equal(1);
+
+      let CUTOFF_SET = false; // have we already set the cutoff value?
+      let LIMIT_REACHED = false;
+
+      // keeps subscribing / unsubscribing until the limit is reached
+      let subscribeLoop = () => {
+        let rateLimitPromise = when.promise((resolve, reject) => {
+          reddit.once('rate_limit', rateLimitData => {
+            expect(rateLimitData.rateLimitRemaining).to.be.a('number');
+            expect(rateLimitData.rateLimitUsed).to.be.a('number');
+            expect(rateLimitData.rateLimitReset).to.be.a('number');
+
+            // Set the cutoff value to whatever the current rate limit remaining
+            // is set to minus 5. This is required to prevent hammering reddit
+            // for this test case.
+            if (!CUTOFF_SET) {
+              CUTOFF_SET = true;
+              reddit._redditRequest._userConfig.__test.rateLimitRemainingCutoff =
+              rateLimitData.rateLimitRemaining - 5;
+            }
+
+            if (rateLimitData.rateLimitRemaining === 0) {
+              LIMIT_REACHED = true;
+            }
+            return resolve();
+          });
+        });
+
+        let subscribePromise = reddit('/r/$subreddit/about').get({
+          $subreddit: config.reddit.testSubreddit
+        }).then(result => {
+          let subName = result.data.name;
+          let isSubbed = result.data.user_is_subscriber;
+          return isSubbed ? when.resolve() : reddit('/api/subscribe').post({
+            action: 'sub',
+            sr: subName
+          });
+        });
+
+        return when.all([ rateLimitPromise, subscribePromise ]).then(() => {
+          return LIMIT_REACHED ? when.resolve() : subscribeLoop();
+        });
+      };
+
+      // sets the limit reached flag to true once the limit is reached
+      let limitReachedP = when.promise((resolve, reject) => {
+        reddit.on('rate_limit_reached', () => {
+          LIMIT_REACHED = true;
+          return resolve();
+        });
+      });
+
+      return when.all([ subscribeLoop(), limitReachedP ]).then(() => {
+        // ensure that the next call takes place much later
+        let beforeTimeslot = Date.now();
+
+        var hotPromise = reddit('/hot').get().then(function() {
+          expect(Date.now() - beforeTimeslot).to.be.gt(1000);
+        });
+
+        var timeout = when.promise(resolve => {
+          setTimeout(resolve, 10000);
+        });
+
+        // Assume that the hot promise would have gone through, but we
+        // don't have the time to wait for it in a test case...
+        return when.race([ hotPromise, timeout ]);
       });
     });
 
