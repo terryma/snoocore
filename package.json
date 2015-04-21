@@ -17,6 +17,7 @@
     "when": "^3.6.3"
   },
   "devDependencies": {
+    "babel": "^5.1.11",
     "browserify": "^6.3.3",
     "chai": "^1.10.0",
     "chai-as-promised": "^4.1.1",

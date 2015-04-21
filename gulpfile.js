@@ -87,8 +87,8 @@ gulp.task('babelTests', function() {
 gulp.task('bundleBrowser', [ 'babel' ], function() {
   // set up the browserify instance on a task basis
   var b = browserify({
-    entries: './build/Snoocore.js',
-    exclude: [ './build/https/httpsNode.js' ],
+    entries: './build/src/Snoocore.js',
+    // exclude: [ './build/src/https/httpsNode.js' ],
     debug: true
   });
 
@@ -102,7 +102,7 @@ gulp.task('bundleBrowser', [ 'babel' ], function() {
           .pipe(gulp.dest('./dist/'));
 });
 
-gulp.task('bundleBrowserTests', function() {
+gulp.task('bundleBrowserTests', [ 'babelTests' ], function() {
   // set up the browserify instance on a task basis
   var b = browserify({
     entries: './build/test/browser-tests.js',
@@ -115,7 +115,7 @@ gulp.task('bundleBrowserTests', function() {
           .pipe(sourcemaps.init())
           .on('error', gutil.log)
           .pipe(sourcemaps.write('./'))
-          .pipe(gulp.dest('./test/build/'));
+          .pipe(gulp.dest('./build/test/'));
 });
 
 gulp.task('buildNode', [ 'endpointProps', 'babel', 'babelTests' ]);
@@ -138,7 +138,8 @@ gulp.task('mocha', [ 'buildNode' ], function(done) {
 });
 
 gulp.task('buildBrowser', [
-  'endpointProps', 'bundleBrowser', 'bundleBrowserTests']);
+  'endpointProps', 'bundleBrowser', 'bundleBrowserTests'
+]);
 
 gulp.task('karma', [ 'buildBrowser' ], function(done) {
   var karma = spawn(
