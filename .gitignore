@@ -17,6 +17,9 @@ results
 # building the browser version in the `dist` folder
 build
 
+# Ignore coverage dir
+coverage
+
 # Ignore user test configuration
 test/config.js
 

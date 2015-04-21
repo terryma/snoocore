@@ -132,9 +132,9 @@ gulp.task('bundleBrowserTests', function() {
           .pipe(gulp.dest('./test/build/'));
 });
 
-gulp.task('mocha', [
-  'endpointProps', 'modules', 'babel', 'babelTests'
-], function(done) {
+gulp.task('buildNode', [ 'endpointProps', 'modules', 'babel', 'babelTests' ]);
+
+gulp.task('mocha', [ 'buildNode' ], function(done) {
   var mocha = spawn(
     path.join(__dirname, 'node_modules', '.bin', 'mocha'),
     [
@@ -151,9 +151,11 @@ gulp.task('mocha', [
   });
 });
 
-gulp.task('karma', [
+gulp.task('buildBrowser', [
   'endpointProps', 'modules', 'bundleBrowser', 'bundleBrowserTests'
-], function(done) {
+]);
+
+gulp.task('karma', [ 'buildBrowser' ], function(done) {
   var karma = spawn(
     path.join(__dirname, 'node_modules', 'karma', 'bin', 'karma'),
     [ 'start', 'build/test/karma.conf.js'  ],
