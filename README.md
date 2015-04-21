@@ -7,7 +7,7 @@ A minimal and complete JavaScript driver for the Reddit API.
 [![Gitter chat](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/trevorsenior/snoocore)
 
 
-### [View the documentation](http://trevorsenior.github.io/snoocore)
+### [View the documentation](http://snoocore.readme.io/)
 
 ### Features
 
