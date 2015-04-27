@@ -1,4 +1,3 @@
-
 module.exports = function(config) {
   config.set({
 
@@ -7,7 +6,9 @@ module.exports = function(config) {
 
 
     // frameworks to use
-    frameworks: [ 'mocha' ],
+    // env == throw environment variables into window.__env
+    // mocha == test runner
+    frameworks: [ 'env', 'mocha' ],
 
 
     // list of files / patterns to load in the browser
@@ -15,13 +16,18 @@ module.exports = function(config) {
       'browser-tests.js'
     ],
 
+    client: {
+      // karma-env setup. Expose everything in process.__env to window.__env
+      env: process.env
+    },
+
     // test results reporter to use
     // possible values: 'dots', 'progress', 'junit', 'growl', 'coverage'
     reporters: [ 'progress' ],
 
 
     // web server port
-    port: 9876,
+    port: 3000,
 
 
     // enable / disable colors in the output (reporters and logs)

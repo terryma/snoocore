@@ -164,14 +164,14 @@ describe(__filename, function () {
   });
 
   it('should not decode html', function() {
-    var reddit = util.getScriptInstance([ 'read' ]);
+    var reddit = util.getImplicitInstance([ 'read' ]);
     return reddit('/r/snoocoreTest/about.json').get().then(function(result) {
       expect(result.data.description_html.indexOf('&lt;/p&gt;')).to.not.equal(-1);
     });
   });
 
-  it('should decode html on a per call basis', function() {
-    var reddit = util.getScriptInstance([ 'read' ]);
+  it.only('should decode html on a per call basis', function() {
+    var reddit = util.getImplicitInstance([ 'read' ]);
     return reddit('/r/snoocoreTest/about.json').get(null, {
       decodeHtmlEntities: true
     }).then(function(result) {

@@ -8,7 +8,12 @@ import * as form from './form';
 
 // https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest#getAllResponseHeaders()
 
+// Set to true to print useful http debug information on a lower level
+let DEBUG_LOG = false ? console.error : ()=>{};
+
 export default function(options, formData) {
+
+  DEBUG_LOG('>> browser https call');
 
   options = options || {};
   options.headers = options.headers || {};
@@ -25,6 +30,8 @@ export default function(options, formData) {
 
       var url = 'https://' + options.hostname + options.path;
 
+      DEBUG_LOG('>> url: ', url);
+
       // append the form data to the end of the url
       if (options.method === 'GET') {
         url += '?' + data.buffer.toString();
@@ -40,6 +47,7 @@ export default function(options, formData) {
         if (x.readyState > 3) {
           // Normalize the result to match how requestNode.js works
 
+          DEBUG_LOG('finished...', x.status);
           console.log(x.getAllResponseHeaders());
 
           return resolve({

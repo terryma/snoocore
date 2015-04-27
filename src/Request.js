@@ -8,13 +8,10 @@ import * as u from './utils';
 
 import ResponseError from './ResponseError';
 
-/*
-   Browserify switches it to httpsBrowser for us when building
-   for browsers.
+import httpsNode from './https/httpsNode';
+import httpsBrowser from './https/httpsBrowser';
 
-   This is defined in `package.json`
- */
-import rawHttps from './https/httpsNode';
+const rawHttps = u.isNode() ? httpsNode : httpsBrowser;
 
 export default class Request extends events.EventEmitter {
 

@@ -9,7 +9,7 @@ describe('[Browser]', function() {
   this.timeout(config.testTimeout);
 
   before(function() {
-    return when.resolve().delay(10000);
+    return when.resolve().delay(5000);
   });
 
   after(function() {
