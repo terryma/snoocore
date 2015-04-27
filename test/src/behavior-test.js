@@ -1,5 +1,7 @@
 /* global describe, it, before, beforeEach */
 
+// import './snoocore-mocha';
+
 import fs from 'fs';
 import path from 'path';
 import when from 'when';
@@ -22,14 +24,14 @@ describe(__filename, function () {
 
   this.timeout(config.testTimeout);
 
-  it('should get resources when logged in', function() {
+  it.node('should get resources when logged in', function() {
     var reddit = util.getScriptInstance([ 'identity' ]);
     return reddit.auth().then(reddit('/api/v1/me').get).then(function(result) {
       expect(result.name).to.equal(config.reddit.login.username);
     });
   });
 
-  it('should GET resources when logged in (respect parameters)', function() {
+  it.node('should GET resources when logged in (respect parameters)', function() {
     var reddit = util.getScriptInstance([ 'mysubreddits' ]);
 
     return reddit.auth().then(function() {
@@ -42,7 +44,7 @@ describe(__filename, function () {
     });
   });
 
-  it('should be able to upload files in Node', function() {
+  it.node('should be able to upload files in Node', function() {
     var reddit = util.getScriptInstance([ 'modconfig' ]);
 
     // @TODO maybe just move the images into the build/test/src
@@ -65,7 +67,9 @@ describe(__filename, function () {
     });
   });
 
-  it('should sub/unsub from a subreddit (POST)', function() {
+  it.skip('should be able to upload files in the browser');
+
+  it.node('should sub/unsub from a subreddit (POST)', function() {
 
     var reddit = util.getScriptInstance([ 'read', 'subscribe' ]);
 
@@ -95,7 +99,7 @@ describe(__filename, function () {
 
   });
 
-  it('should auto-fill api_type to be "json"', function() {
+  it.node('should auto-fill api_type to be "json"', function() {
 
     var reddit = util.getScriptInstance([ 'read', 'modconfig' ]);
 
@@ -117,7 +121,7 @@ describe(__filename, function () {
   // Browsers are unable to authenticate anyway, unless using a chrome
   // extension. If this is the case, they should use OAuth for authentication
   // and then bypass will work.
-  it('should bypass authentication for calls when set', function() {
+  it.node('should bypass authentication for calls when set', function() {
 
     var reddit = util.getScriptInstance([ 'read', 'subscribe' ]);
 
@@ -170,7 +174,7 @@ describe(__filename, function () {
     });
   });
 
-  it.only('should decode html on a per call basis', function() {
+  it('should decode html on a per call basis', function() {
     var reddit = util.getImplicitInstance([ 'read' ]);
     return reddit('/r/snoocoreTest/about.json').get(null, {
       decodeHtmlEntities: true
@@ -181,7 +185,7 @@ describe(__filename, function () {
 
   it('should decode html globally & respect per call override', function() {
 
-    var reddit = util.getScriptInstance([ 'read' ]);
+    var reddit = util.getImplicitInstance([ 'read' ]);
 
     var secondReddit = new Snoocore({
       userAgent: 'foobar',
@@ -213,7 +217,7 @@ describe(__filename, function () {
     });
   });
 
-  describe('Explicit internal configuration (duration permanent)', function() {
+  describe.node('Explicit internal configuration (duration permanent)', function() {
 
     it('should auth, get refresh token, deauth, use refresh token to reauth, deauth(true) -> refresh', function() {
 
@@ -377,7 +381,7 @@ describe(__filename, function () {
 
   });
 
-  describe('Explicit internal configuration (duration temporary)', function() {
+  describe.node('Explicit internal configuration (duration temporary)', function() {
 
 
     it('should auth, and call an oauth endpoint', function() {
@@ -419,7 +423,7 @@ describe(__filename, function () {
 
   });
 
-  describe('Implicit internal configuration', function() {
+  describe.node('Implicit internal configuration', function() {
 
     it('should auth, and call an oauth endpoint', function() {
 
@@ -478,7 +482,7 @@ describe(__filename, function () {
 
   });
 
-  describe('Script internal configuration Authenticate tests', function() {
+  describe.node('Script internal configuration Authenticate tests', function() {
 
     it('should authenticate with OAuth, and call an oauth endpoint', function() {
 
@@ -504,7 +508,7 @@ describe(__filename, function () {
       });
     });
 
-    it('(explicit/script client) Application only OAuth', function() {
+    it.node('(explicit/script client) Application only OAuth', function() {
       var reddit = util.getScriptInstance([ 'read' ]);
 
       // OAuth only endpoint.
@@ -519,7 +523,7 @@ describe(__filename, function () {
 
   describe('General Reddit API Tests using OAuth', function() {
 
-    it('should get resources when logged in', function() {
+    it.node('should get resources when logged in', function() {
 
       var reddit = util.getScriptInstance([ 'identity', 'mysubreddits' ]);
 
@@ -530,7 +534,7 @@ describe(__filename, function () {
                    });
     });
 
-    it('should GET resources when logged in (respect parameters)', function() {
+    it.node('should GET resources when logged in (respect parameters)', function() {
 
       var reddit = util.getScriptInstance([ 'identity', 'mysubreddits' ]);
 
@@ -546,7 +550,7 @@ describe(__filename, function () {
 
   });
 
-  it('should retry an endpoint 3 times then fail', function() {
+  it.node('should retry an endpoint 3 times then fail', function() {
 
     // allow self signed certs for our test server
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
@@ -604,7 +608,7 @@ describe(__filename, function () {
 
   });
 
-  it('should retry an endpoint on HTTP 5xx', function() {
+  it.node('should retry an endpoint on HTTP 5xx', function() {
 
     let reddit = util.getScriptInstance([ 'identity', 'read' ]);
 
@@ -655,7 +659,7 @@ describe(__filename, function () {
     });
   });
 
-  it('should retry initial authentication when HTTP 5xx error', function() {
+  it.node('should retry initial authentication when HTTP 5xx error', function() {
 
     let reddit = util.getScriptInstance([ 'identity', 'read' ]);
 

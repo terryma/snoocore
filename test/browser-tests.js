@@ -21,6 +21,7 @@ describe('[Browser]', function() {
   require('./src/RedditRequest-test');
   require('./src/Request-test');
   require('./src/Throttle-test');
+  require('./src/ResponseError-test');
   require('./src/UserConfig-test');
   require('./src/behavior-test');
 });

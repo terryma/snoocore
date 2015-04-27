@@ -1,4 +1,5 @@
 /* describe, it, afterEach, beforeEach */
+import './snoocore-mocha';
 
 import when from 'when';
 
@@ -41,11 +42,15 @@ describe(__filename, function () {
                                             oauth,
                                             appOnlyOAuth);
 
-
-      expect(redditRequest.buildHeaders(endpoint)).to.eql({
-        'User-Agent': util.USER_AGENT,
+      let expectedHeaders = {
         'Authorization': 'bearer invalid_token'
-      });
+      };
+
+      if (util.isNode()) {
+        expectedHeaders['User-Agent'] = util.USER_AGENT;
+      }
+
+      expect(redditRequest.buildHeaders(endpoint)).to.eql(expectedHeaders);
     });
   });
 
@@ -55,7 +60,7 @@ describe(__filename, function () {
 
   describe('responseErrorHandler()', function() {
 
-    it('should handle data.json.errors field', function() {
+    it.node('should handle data.json.errors field', function() {
 
       var reddit = util.getScriptInstance([ 'identity', 'modconfig' ]);
 
@@ -96,7 +101,7 @@ describe(__filename, function () {
 
     });
 
-    it('should explain that a scope is missing', function() {
+    it.node('should explain that a scope is missing', function() {
       var reddit = util.getScriptInstance([ 'read' ]);
 
       return reddit.auth().then(function() {
@@ -109,7 +114,7 @@ describe(__filename, function () {
       });
     });
 
-    it('should give an assortment of reasons why call errored', function() {
+    it.node('should give an assortment of reasons why call errored', function() {
 
       var reddit = util.getScriptInstance();
 
@@ -123,7 +128,7 @@ describe(__filename, function () {
       });
     });
 
-    it('should spit out more information when we come to an error (url & args used)', function() {
+    it.node('should spit out more information when we come to an error (url & args used)', function() {
       var reddit = util.getScriptInstance([ 'identity', 'read' ]);
 
       return reddit.auth().then(function() {
@@ -156,7 +161,7 @@ describe(__filename, function () {
 
     it('should get the front page listing and nav through it (basic)', function() {
 
-      var reddit = util.getScriptInstance([ 'read' ]);
+      var reddit = util.getImplicitInstance([ 'read' ]);
 
       // or reddit('/hot').listing
       return reddit('/hot').listing().then(function(slice) {
@@ -186,7 +191,7 @@ describe(__filename, function () {
 
     it('should handle empty listings', function() {
 
-      var reddit = util.getScriptInstance([ 'read', 'history' ]);
+      var reddit = util.getImplicitInstance([ 'read', 'history' ]);
 
       return reddit('/user/$username/$where').listing({
         $username: 'emptyListing', // an account with no comments
@@ -198,7 +203,7 @@ describe(__filename, function () {
 
     it('should requery a listing after changes have been made', function() {
 
-      var reddit = util.getScriptInstance([ 'read', 'history' ]);
+      var reddit = util.getImplicitInstance([ 'read', 'history' ]);
 
       // @TODO we need a better way to test this (without using captcha's)
       // as of now it is requerying empty comments of a user which runs the
@@ -218,7 +223,7 @@ describe(__filename, function () {
 
     it('should handle listings with multiple listings', function() {
 
-      var reddit = util.getScriptInstance([ 'read' ]);
+      var reddit = util.getImplicitInstance([ 'read' ]);
 
       // just get the data back to compare it with the listing
       return reddit('duplicates/$article').get({
@@ -249,7 +254,7 @@ describe(__filename, function () {
     });
 
     it('throw error - listing has multiple listings w/o specifying index', function() {
-      var reddit = util.getScriptInstance([ 'read' ]);
+      var reddit = util.getImplicitInstance([ 'read' ]);
 
       return reddit('duplicates/$article').listing({
         limit: 2,
@@ -266,9 +271,7 @@ describe(__filename, function () {
   describe('path()', function() {
 
     it('should allow a "path" syntax', function() {
-
-      var redditRequest = util.getScriptRedditRequest([ 'read' ]);
-      process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+      var redditRequest = util.getImplicitRedditRequest([ 'read' ]);
       return redditRequest.path('/r/$subreddit/hot')
                           .get({ $subreddit: 'aww' })
                           .then(function(result) {
@@ -277,7 +280,7 @@ describe(__filename, function () {
     });
 
     it('should tolerate a missing beginning slash', function() {
-      var redditRequest = util.getScriptRedditRequest([ 'read' ]);
+      var redditRequest = util.getImplicitRedditRequest([ 'read' ]);
       return redditRequest
                    .path('r/$subreddit/hot')
                    .get({ $subreddit: 'aww' })
@@ -287,7 +290,7 @@ describe(__filename, function () {
     });
 
     it('should allow a "path" syntax (where reddit === path fn)', function() {
-      var reddit = util.getScriptInstance([ 'read' ]);
+      var reddit = util.getImplicitInstance([ 'read' ]);
       return reddit('/r/$subreddit/hot')
                        .get({ $subreddit: 'aww' })
                        .then(function(result) {
@@ -296,21 +299,21 @@ describe(__filename, function () {
     });
 
     it('should allow for alternate placeholder names', function() {
-      var reddit = util.getScriptInstance([ 'read' ]);
+      var reddit = util.getImplicitInstance([ 'read' ]);
       return reddit('/r/$sub/hot').get({ $sub: 'aww' }).then(function(result) {
         expect(result).to.haveOwnProperty('kind', 'Listing');
       });
     });
 
     it('should allow for embedding of url parameters', function() {
-      var reddit = util.getScriptInstance([ 'read' ]);
+      var reddit = util.getImplicitInstance([ 'read' ]);
       return reddit('/r/aww/hot').get().then(function(result) {
         expect(result).to.haveOwnProperty('kind', 'Listing');
       });
     });
 
     it('should allow for embedding of url parameters (listings)', function() {
-      var reddit = util.getScriptInstance([ 'read', 'history' ]);
+      var reddit = util.getImplicitInstance([ 'read', 'history' ]);
       return reddit('/user/kemitche/comments').listing({
         sort: 'new'
       }).then(function(result) {
@@ -319,7 +322,7 @@ describe(__filename, function () {
     });
 
     it('should allow a variable at the beginning of a path', function() {
-      var reddit = util.getScriptInstance([ 'read' ]);
+      var reddit = util.getImplicitInstance([ 'read' ]);
       return reddit('/$sort').get({
         $sort: 'top'
       }).then(function(result) {
@@ -331,7 +334,7 @@ describe(__filename, function () {
 
   describe('rate limit headers', function() {
 
-    it('should fire when calling an endpoint that is not cached', function() {
+    it.node('should fire when calling an endpoint that is not cached', function() {
       let reddit = util.getScriptInstance([ 'read', 'subscribe' ]);
 
       let rateLimitPromise = when.promise((resolve, reject) => {
@@ -357,7 +360,7 @@ describe(__filename, function () {
       return when.all([ rateLimitPromise, subscribePromise ]);
     });
 
-    it('call an endpoint until the rate limit is reached', function() {
+    it.node('call an endpoint until the rate limit is reached', function() {
 
       let reddit = util.getScriptInstance([ 'read', 'subscribe' ], {
         throttle: 0

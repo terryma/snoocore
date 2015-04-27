@@ -1,5 +1,5 @@
 /* global describe, it */
-require("babel/register");
+import './snoocore-mocha';
 
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
@@ -14,7 +14,7 @@ import Request from '../../src/Request';
 import Endpoint from '../../src/Endpoint';
 import UserConfig from '../../src/UserConfig';
 
-describe(__filename, function () {
+describe(__filename, function() {
 
   this.timeout(config.testTimeout);
 
@@ -34,6 +34,5 @@ describe(__filename, function () {
       expect(data.kind).to.equal('Listing');
     });
   });
-
 
 });

@@ -1,4 +1,5 @@
 /* describe, it, afterEach, beforeEach */
+import './snoocore-mocha';
 
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';

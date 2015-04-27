@@ -1,4 +1,6 @@
 /* global describe, it */
+import './snoocore-mocha';
+
 var when = require('when');
 var delay = require('when/delay');
 var chai = require('chai');
@@ -259,7 +261,7 @@ describe(__filename, function (require) {
 
   describe('getToken()', function() {
 
-    it('(Explicit) it should get an access token', function() {
+    it.node('(Explicit) it should get an access token', function() {
 
       var userConfig = util.getExplicitUserConfig([ 'identity' ]);
       var oauth = new OAuth(userConfig, request);
@@ -288,7 +290,7 @@ describe(__filename, function (require) {
       });
     });
 
-    it('(Script) should get an access token', function() {
+    it.node('(Script) should get an access token', function() {
 
       var userConfig = util.getScriptUserConfig();
       var oauth = new OAuth(userConfig, request);
@@ -305,7 +307,7 @@ describe(__filename, function (require) {
       });
     });
 
-    it('(Script + 1 scope) should get an access token', function() {
+    it.node('(Script + 1 scope) should get an access token', function() {
 
       var userConfig = util.getScriptUserConfig([ 'flair' ]);
       var oauth = new OAuth(userConfig, request);
@@ -322,7 +324,7 @@ describe(__filename, function (require) {
       });
     });
 
-    it('(Script + multiple scopes) should get an access token', function() {
+    it.node('(Script + multiple scopes) should get an access token', function() {
       var userConfig = util.getScriptUserConfig([ 'flair', 'identity' ]);
       var oauth = new OAuth(userConfig, request);
 
@@ -354,7 +356,7 @@ describe(__filename, function (require) {
       });
     });
 
-    it('(Application only script/web) should get Application only access token', function() {
+    it.node('(Application only script/web) should get Application only access token', function() {
 
       var userConfig = util.getScriptUserConfig();
       var oauth = new OAuth(userConfig, request);
@@ -375,7 +377,7 @@ describe(__filename, function (require) {
 
   describe('auth()', function() {
 
-    it('application only auth (explicit/script)', function() {
+    it.node('application only auth (explicit/script)', function() {
       var userConfig = util.getScriptUserConfig();
       var oauth = new OAuth(userConfig, request);
 
@@ -385,7 +387,7 @@ describe(__filename, function (require) {
       });
     });
 
-    it('script oauth', function() {
+    it.node('script oauth', function() {
       var userConfig = util.getScriptUserConfig();
       var oauth = new OAuth(userConfig, request);
 
@@ -395,7 +397,7 @@ describe(__filename, function (require) {
       });
     });
 
-    it('explicit oauth (duration temporary)', function() {
+    it.node('explicit oauth (duration temporary)', function() {
       var userConfig = util.getExplicitUserConfig([ 'identity' ]);
       var oauth = new OAuth(userConfig, request);
       var url = oauth.getAuthUrl('foo');
@@ -414,7 +416,7 @@ describe(__filename, function (require) {
       });
     });
 
-    it('explicit oauth (duration permanent)', function() {
+    it.node('explicit oauth (duration permanent)', function() {
       var userConfig = util.getExplicitUserConfig([ 'identity' ], 'permanent');
       var oauth = new OAuth(userConfig, request);
       var url = oauth.getAuthUrl('foo');
@@ -431,7 +433,7 @@ describe(__filename, function (require) {
       });
     });
 
-    it('implicit oauth', function() {
+    it.node('implicit oauth', function() {
       var userConfig = util.getImplicitUserConfig([ 'identity' ]);
       var oauth = new OAuth(userConfig, request);
       var url = oauth.getAuthUrl('foo');
@@ -449,7 +451,7 @@ describe(__filename, function (require) {
   });
 
   describe('applicationOnlyOAuth()', function() {
-    it('application only auth (script)', function() {
+    it.node('application only auth (script)', function() {
       var userConfig = util.getScriptUserConfig();
       var oauth = new OAuth(userConfig, request);
       return oauth.applicationOnlyAuth().then(function(authData) {
@@ -459,7 +461,7 @@ describe(__filename, function (require) {
   });
 
   describe('setAccessToken()', function() {
-    it('should set the access token directly', function() {
+    it.node('should set the access token directly', function() {
       var userConfig = util.getScriptUserConfig();
       var oauth = new OAuth(userConfig, request);
       expect(typeof oauth.getAccessToken()).to.equal('undefined');
@@ -468,7 +470,7 @@ describe(__filename, function (require) {
     });
   });
 
-  describe('refresh()', function() {
+  describe.node('refresh()', function() {
 
     it('should not refresh', function(done) {
       var userConfig = util.getExplicitUserConfig([ 'identity' ], 'permanent');
@@ -554,7 +556,7 @@ describe(__filename, function (require) {
     });
   });
 
-  describe('setRefreshToken()', function() {
+  describe.node('setRefreshToken()', function() {
     it('should set the refresh token directly', function() {
       var userConfig = util.getScriptUserConfig();
       var oauth = new OAuth(userConfig, request);
@@ -565,7 +567,7 @@ describe(__filename, function (require) {
   });
 
   describe('deauth()', function() {
-    it('should auth (script), deauth, and not reauth', function() {
+    it.node('should auth (script), deauth, and not reauth', function() {
       var userConfig = util.getScriptUserConfig();
       var oauth = new OAuth(userConfig, request);
       return oauth.auth().then(function(authData) {
@@ -576,7 +578,7 @@ describe(__filename, function (require) {
       });
     });
 
-    it('should auth (explicit), deauth, and reauth with refresh token', function(done) {
+    it.node('should auth (explicit), deauth, and reauth with refresh token', function(done) {
       var userConfig = util.getExplicitUserConfig([ 'identity' ], 'permanent');
       var oauth = new OAuth(userConfig, request);
       var url = oauth.getAuthUrl('foo');

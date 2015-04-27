@@ -1,5 +1,5 @@
 /* describe, it, afterEach, beforeEach */
-require("babel/register");
+import './snoocore-mocha';
 
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';

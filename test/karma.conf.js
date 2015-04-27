@@ -17,7 +17,8 @@ module.exports = function(config) {
     ],
 
     client: {
-      // karma-env setup. Expose everything in process.__env to window.__env
+      // karma-env setup.
+      // Expose everything in process.env to window.__env
       env: process.env
     },
 
@@ -27,7 +28,7 @@ module.exports = function(config) {
 
 
     // web server port
-    port: 3000,
+    port: 9876,
 
 
     // enable / disable colors in the output (reporters and logs)
@@ -52,10 +53,10 @@ module.exports = function(config) {
     // - PhantomJS
     // - IE (only Windows; has to be installed with `npm install karma-ie-launcher`)
     browsers: [
-//      'PhantomJS',
+      //'PhantomJS',
       'Chrome',
-  //    'Firefox',
-    //  'Safari'
+      //'Firefox',
+      //'Safari'
     ],
 
     customLaunchers: {},

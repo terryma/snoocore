@@ -1,5 +1,5 @@
 /* describe, it, afterEach, beforeEach */
-require("babel/register");
+import './snoocore-mocha';
 
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
@@ -158,6 +158,7 @@ describe(__filename, function () {
     describe('buildUrl()', function() {
 
       it('should build an url for an endpoint', function() {
+
         var userConfig = util.getScriptUserConfig();
         var args = {
           extensions: [],
