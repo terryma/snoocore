@@ -54,8 +54,6 @@ describe(__filename, function() {
       { requestTimeout: 2 });
 
     return request.https(endpoint).catch(function(error) {
-      console.log(error);
-      console.log(error.stack);
       expect(error instanceof ResponseError).to.equal(true);
     });
   });

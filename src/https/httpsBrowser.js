@@ -77,7 +77,6 @@ export default function(options, formData) {
           // Normalize the result to match how requestNode.js works
 
           DEBUG_LOG('finished...', x.status);
-          console.log(x.getAllResponseHeaders());
 
           return resolve({
             _body: x.responseText,
