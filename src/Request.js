@@ -85,8 +85,8 @@ export default class Request extends events.EventEmitter {
             return this.https(modifiedEndpoint, responseErrorHandler);
           });
         });
-      });
+      }).timeout(endpoint.contextOptions.requestTimeout);
 
-    }).timeout(endpoint.contextOptions.requestTimeout);
+    });
   }
 }
