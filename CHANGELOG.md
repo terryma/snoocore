@@ -23,3 +23,4 @@ login.password → oauth.password
 **New Features**
 - Support for rate limit headers ("burst requests")
 - Application only OAuth
+- Requests time out after 20 seconds to prevent unresolved promises.

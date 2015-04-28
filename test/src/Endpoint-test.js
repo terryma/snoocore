@@ -103,6 +103,7 @@ describe(__filename, function () {
           retryAttemptsLeft: 60,
           retryDelay: 5000,
           reauthAttemptsLeft: 60,
+          requestTimeout: 20000
         });
       });
 
@@ -112,6 +113,7 @@ describe(__filename, function () {
         userConfig.decodeHtmlEntities = true;
         userConfig.retryAttempts = 9999;
         userConfig.retryDelay = 8888;
+        userConfig.requestTimeout = 5;
 
         var endpoint = new Endpoint(userConfig,
                                     'host.name',
@@ -122,7 +124,8 @@ describe(__filename, function () {
           decodeHtmlEntities: true,
           retryAttemptsLeft: 9999,
           retryDelay: 8888,
-          reauthAttemptsLeft: 9999
+          reauthAttemptsLeft: 9999,
+          requestTimeout: 5
         });
       });
 
@@ -133,7 +136,8 @@ describe(__filename, function () {
           bypassAuth: true,
           decodeHtmlEntities: true,
           retryAttempts: 9999,
-          retryDelay: 8888
+          retryDelay: 8888,
+          requestTimeout: 6
         };
 
         var endpoint = new Endpoint(userConfig,
@@ -150,7 +154,8 @@ describe(__filename, function () {
           retryAttemptsLeft: 9999,
           retryDelay: 8888,
           reauthAttemptsLeft: 9999,
-          retryAttempts: 9999
+          retryAttempts: 9999,
+          requestTimeout: 6
         });
       });
     });

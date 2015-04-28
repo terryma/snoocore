@@ -87,6 +87,6 @@ export default class Request extends events.EventEmitter {
         });
       });
 
-    });
+    }).timeout(endpoint.contextOptions.requestTimeout);
   }
 }

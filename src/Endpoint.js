@@ -58,6 +58,10 @@ export default class Endpoint {
     cOptions.retryDelay = u.thisOrThat(cOptions.retryDelay,
                                        this._userConfig.retryDelay);
 
+    // milliseconds before a request times out
+    cOptions.requestTimeout = u.thisOrThat(cOptions.requestTimeout,
+                                           this._userConfig.requestTimeout);
+
     // how many reauthentication attempts do we have left?
     cOptions.reauthAttemptsLeft = u.thisOrThat(cOptions.reauthAttemptsLeft,
                                                cOptions.retryAttemptsLeft);

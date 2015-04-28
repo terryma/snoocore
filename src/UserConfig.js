@@ -47,6 +47,8 @@ export default class UserConfig {
 
     this.retryDelay = u.thisOrThat(userConfiguration.retryDelay, 5000);
 
+    this.requestTimeout = u.thisOrThat(userConfiguration.requestTimeout, 20000);
+
 
     // ** OAUTH
     this.oauth = u.thisOrThat(userConfiguration.oauth, {});

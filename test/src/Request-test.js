@@ -1,6 +1,8 @@
 /* global describe, it */
 import './snoocore-mocha';
 
+import when from 'when';
+
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 chai.use(chaiAsPromised);
@@ -34,6 +36,26 @@ describe(__filename, function() {
       expect(res._headers).to.be.an('object');
       expect(res._headers['x-moose']).to.equal('majestic');
       expect(data.kind).to.equal('Listing');
+    });
+  });
+
+  it('should timeout', function() {
+    let userConfig = util.getScriptUserConfig();
+    let throttle = new Throttle(1000);
+    let request = new Request(throttle);
+    let endpoint = new Endpoint(
+      userConfig,
+      userConfig.serverWWW,
+      'get',
+      '/r/askreddit/hot.json',
+      {},
+      {},
+      // timeout after 2ms. Unless the request server is super quick
+      // this should always result in a timeout
+      { requestTimeout: 2 });
+
+    return request.https(endpoint).catch(function(error) {
+      expect(error instanceof when.TimeoutError).to.equal(true);
     });
   });
 
