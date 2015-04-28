@@ -45,6 +45,7 @@ export default class Snoocore extends events.EventEmitter {
     // Expose OAuth functions in here
     [ 'getExplicitAuthUrl',
       'getImplicitAuthUrl',
+      'getAuthUrl',
       'auth',
       'refresh',
       'deauth',
