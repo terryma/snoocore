@@ -24,7 +24,7 @@ gulp.task('copyTestConfig', function(done) {
 
     fs.createReadStream(configTemplatePath)
       .pipe(fs.createWriteStream(configPath))
-      .on('end', done);
+      .on('finish', done);
   });
 });
 
@@ -36,7 +36,7 @@ gulp.task('babel', function() {
              .pipe(gulp.dest('./build/src/'));
 });
 
-gulp.task('babelTests', function() {
+gulp.task('babelTests', [ 'copyTestConfig' ], function() {
   return gulp.src('./test/**/*.js')
              .pipe(sourcemaps.init())
              .pipe(babel())

@@ -12,26 +12,7 @@
 
 import util from './util';
 
-it.node = function(...args) {
-  if (util.isNode()) {
-    return it.apply(it, ...args);
-  }
-};
-
-it.browser = function(...args) {
-  if (!util.isNode()) {
-    return it.apply(it, ...args);
-  }
-};
-
-describe.node = function(...args) {
-  if (util.isNode()) {
-    return describe.apply(describe, ...args);
-  }
-};
-
-describe.browser = function(...args) {
-  if (!util.isNode()) {
-    return describe.apply(describe, ...args);
-  }
-};
+it.node = util.isNode() ? it : ()=>{};
+it.browser = !util.isNode() ? it : ()=>{};
+describe.node = util.isNode() ? describe : ()=>{};
+describe.browser = !util.isNode() ? describe : ()=>{};
