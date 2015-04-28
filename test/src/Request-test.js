@@ -31,6 +31,8 @@ describe(__filename, function() {
 
     return request.https(endpoint).then(function(res) {
       var data = JSON.parse(res._body);
+      expect(res._headers).to.be.an('object');
+      expect(res._headers['x-moose']).to.equal('majestic');
       expect(data.kind).to.equal('Listing');
     });
   });

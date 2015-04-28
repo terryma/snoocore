@@ -11,6 +11,35 @@ import * as form from './form';
 // Set to true to print useful http debug information on a lower level
 let DEBUG_LOG = false ? console.error : ()=>{};
 
+/**
+ * Modified from https://gist.github.com/monsur/706839
+ *
+ * XmlHttpRequest's getAllResponseHeaders() method returns a string of response
+ * headers according to the format described here:
+ * http://www.w3.org/TR/XMLHttpRequest/#the-getallresponseheaders-method
+ * This method parses that string into a user-friendly key/value pair object.
+ */
+function parseResponseHeaders(headerStr) {
+  let headers = {};
+  if (!headerStr) {
+    return headers;
+  }
+  let headerPairs = headerStr.split('\u000d\u000a');
+  for (let i = 0, len = headerPairs.length; i < len; i++) {
+    let headerPair = headerPairs[i];
+    // Can't use split() here because it does the wrong thing
+    // if the header value has the string ": " in it.
+    let index = headerPair.indexOf('\u003a\u0020');
+    if (index > 0) {
+      // make all keys lowercase
+      let key = headerPair.substring(0, index).toLowerCase();
+      let val = headerPair.substring(index + 2);
+      headers[key] = val;
+    }
+  }
+  return headers;
+}
+
 export default function(options, formData) {
 
   DEBUG_LOG('>> browser https call');
@@ -53,7 +82,7 @@ export default function(options, formData) {
           return resolve({
             _body: x.responseText,
             _status: x.status,
-            _headers: x.getAllResponseHeaders()
+            _headers: parseResponseHeaders(x.getAllResponseHeaders())
           });
         }
       };
