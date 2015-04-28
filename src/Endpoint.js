@@ -138,7 +138,7 @@ export function replaceUrlParams(endpointUrl, givenArgs) {
     return endpointUrl;
   }
 
-  // pull out letiables from the url
+  // pull out variables from the url
   let params = endpointUrl.match(/\$[\w\.]+/g);
 
   // replace with the argument provided

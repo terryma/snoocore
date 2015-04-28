@@ -189,6 +189,18 @@ describe(__filename, function () {
 
     });
 
+    it('should carry over url parameters when navigating a listing', ()=> {
+      var reddit = util.getImplicitInstance([ 'read' ]);
+      return reddit('/r/$subreddit/hot').listing({
+        $subreddit: 'netsec'
+      }).then(slice => {
+        expect(slice.get).to.be.a('object');
+        return slice.next();
+      }).then(slice => {
+        expect(slice.get).to.be.a('object');
+      });
+    });
+
     it('should handle empty listings', function() {
 
       var reddit = util.getImplicitInstance([ 'read', 'history' ]);

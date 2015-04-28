@@ -287,7 +287,7 @@ export default class RedditRequest extends events.EventEmitter {
         slice.next = () => {
           count += limit;
 
-          let newArgs = endpoint.args;
+          let newArgs = endpoint.givenArgs;
           newArgs.before = null;
           newArgs.after = slice.children[slice.children.length - 1].data.name;
           newArgs.count = count;
@@ -304,7 +304,7 @@ export default class RedditRequest extends events.EventEmitter {
         slice.previous = () => {
           count -= limit;
 
-          let newArgs = endpoint.args;
+          let newArgs = endpoint.givenArgs;
           newArgs.before = slice.children[0].data.name;
           newArgs.after = null;
           newArgs.count = count;
@@ -321,7 +321,7 @@ export default class RedditRequest extends events.EventEmitter {
         slice.start = () => {
           count = 0;
 
-          let newArgs = endpoint.args;
+          let newArgs = endpoint.givenArgs;
           newArgs.before = null;
           newArgs.after = start;
           newArgs.count = count;
