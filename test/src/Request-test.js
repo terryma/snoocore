@@ -1,8 +1,6 @@
 /* global describe, it */
 import './snoocore-mocha';
 
-import when from 'when';
-
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 chai.use(chaiAsPromised);
@@ -15,6 +13,7 @@ import Throttle from '../../src/Throttle';
 import Request from '../../src/Request';
 import Endpoint from '../../src/Endpoint';
 import UserConfig from '../../src/UserConfig';
+import ResponseError from '../../src/ResponseError';
 
 describe(__filename, function() {
 
@@ -55,7 +54,9 @@ describe(__filename, function() {
       { requestTimeout: 2 });
 
     return request.https(endpoint).catch(function(error) {
-      expect(error instanceof when.TimeoutError).to.equal(true);
+      console.log(error);
+      console.log(error.stack);
+      expect(error instanceof ResponseError).to.equal(true);
     });
   });
 

@@ -48,7 +48,7 @@ export default class Request extends events.EventEmitter {
 
       return rawHttps(reqOptions, formData).timeout(
         endpoint.contextOptions.requestTimeout,
-        'The request has timed out' + endpoint.path
+        new ResponseError('The request has timed out', {}, endpoint)
       ).then(response => {
 
         let statusChar = String(response._status).substring(0, 1);
