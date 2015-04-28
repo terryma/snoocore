@@ -49,6 +49,7 @@ gulp.task('bundleBrowser', [ 'babel' ], function() {
   var b = browserify({
     entries: './build/src/Snoocore.js',
     // exclude: [ './build/src/https/httpsNode.js' ],
+    standalone: 'Snoocore',
     debug: true
   });
 
@@ -66,6 +67,7 @@ gulp.task('bundleBrowserTests', [ 'babelTests' ], function() {
   // set up the browserify instance on a task basis
   var b = browserify({
     entries: './build/test/browser-tests.js',
+    standalone: 'SnoocoreTests',
     debug: true
   });
 
