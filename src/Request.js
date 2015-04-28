@@ -46,7 +46,10 @@ export default class Request extends events.EventEmitter {
 
       let formData = endpoint.args;
 
-      return rawHttps(reqOptions, formData).then(response => {
+      return rawHttps(reqOptions, formData).timeout(
+        endpoint.contextOptions.requestTimeout,
+        'The request has timed out' + endpoint.path
+      ).then(response => {
 
         let statusChar = String(response._status).substring(0, 1);
         let success =  statusChar === '2';
@@ -85,7 +88,7 @@ export default class Request extends events.EventEmitter {
             return this.https(modifiedEndpoint, responseErrorHandler);
           });
         });
-      }).timeout(endpoint.contextOptions.requestTimeout);
+      });
 
     });
   }

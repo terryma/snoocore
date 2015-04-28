@@ -35,6 +35,8 @@ export default class UserConfig {
     this.mobile = u.thisOrThat(userConfiguration.mobile, false);
 
     // ** CALL MODIFICATIONS
+    this.throttle = u.thisOrThat(userConfiguration.throttle, 1000);
+
     this.decodeHtmlEntities = u.thisOrThat(
       userConfiguration.decodeHtmlEntities,
       false);
