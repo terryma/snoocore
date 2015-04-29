@@ -1,6 +1,8 @@
 ---
 title: Snoocore OAuth Explicit Authentication
 layout: default
+redirect_to:
+  - http://snoocore.readme.io
 ---
 
 # Authenticating with Implicit OAuth

@@ -1,6 +1,8 @@
 ---
 title: Snoocore running tests
 layout: default
+redirect_to:
+  - http://snoocore.readme.io
 ---
 
 # Running Tests

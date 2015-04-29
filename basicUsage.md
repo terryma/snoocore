@@ -1,6 +1,8 @@
 ---
 title: Snoocore basic usage
 layout: default
+redirect_to:
+  - http://snoocore.readme.io
 ---
 
 # Basic Usage

@@ -1,6 +1,8 @@
 ---
 title: Snoocore Per Call Options
 layout: default
+redirect_to:
+  - http://snoocore.readme.io
 ---
 
 # Call context options

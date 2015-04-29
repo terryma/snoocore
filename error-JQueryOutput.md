@@ -1,6 +1,8 @@
 ---
 title: Snoocore JQuery Output
 layout: default
+redirect_to:
+  - http://snoocore.readme.io
 ---
 
 # Strange jQuery output

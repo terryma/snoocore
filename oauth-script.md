@@ -1,6 +1,8 @@
 ---
 title: Snoocore OAuth Script Authentication
 layout: default
+redirect_to:
+  - http://snoocore.readme.io
 ---
 
 # Authenticating with Script OAuth

@@ -1,6 +1,8 @@
 ---
 title: Snoocore promises
 layout: default
+redirect_to:
+  - http://snoocore.readme.io
 ---
 
 # Promises

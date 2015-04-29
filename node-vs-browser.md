@@ -1,6 +1,8 @@
 ---
 title: Snoocore Node vs Browser
 layout: default
+redirect_to:
+  - http://snoocore.readme.io
 ---
 
 # Node vs Browser differences

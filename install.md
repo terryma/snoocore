@@ -1,6 +1,8 @@
 ---
 title: Snoocore include & install
 layout: default
+redirect_to:
+  - http://snoocore.readme.io
 ---
 
 ## Install

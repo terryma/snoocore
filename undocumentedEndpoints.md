@@ -1,6 +1,8 @@
 ---
 title: Snoocore Undocumented Endpoints
 layout: default
+redirect_to:
+  - http://snoocore.readme.io
 ---
 
 # Making calls to undocumented endpoints

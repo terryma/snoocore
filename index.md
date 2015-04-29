@@ -1,6 +1,8 @@
 ---
 title: Snoocore documentation
 layout: default
+redirect_to:
+  - http://snoocore.readme.io
 ---
 
 # [Snoocore](https://github.com/trevorsenior/snoocore)

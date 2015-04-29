@@ -1,6 +1,8 @@
 ---
 title: Snoocore Invalid Path Provided
 layout: default
+redirect_to:
+  - http://snoocore.readme.io
 ---
 
 # Uncaught Error: Invalid path provided.

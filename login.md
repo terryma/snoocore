@@ -1,6 +1,8 @@
 ---
 title: Snoocore login
 layout: default
+redirect_to:
+  - http://snoocore.readme.io
 ---
 
 # Login

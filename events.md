@@ -1,6 +1,8 @@
 ---
 title: Snoocore Events
 layout: default
+redirect_to:
+  - http://snoocore.readme.io
 ---
 
 # Events

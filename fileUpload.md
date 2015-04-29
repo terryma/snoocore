@@ -1,6 +1,8 @@
 ---
 title: Snoocore File Upload
 layout: default
+redirect_to:
+  - http://snoocore.readme.io
 ---
 
 # File Upload

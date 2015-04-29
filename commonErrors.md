@@ -1,6 +1,8 @@
 ---
 title: Snoocore Common Errors
 layout: default
+redirect_to:
+  - http://snoocore.readme.io
 ---
 
 # Common Errors

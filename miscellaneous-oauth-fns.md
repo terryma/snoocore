@@ -1,6 +1,8 @@
 ---
 title: Snoocore Miscellaneous OAuth fns.
 layout: default
+redirect_to:
+  - http://snoocore.readme.io
 ---
 
 ## Misc. OAuth Functions (new in `2.8.0`)
