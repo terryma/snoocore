@@ -2,7 +2,7 @@
 
 A minimal and complete JavaScript driver for the Reddit API.
 
-[![Coverage Status (wip-3.0.0)](https://coveralls.io/repos/trevorsenior/snoocore/badge.svg?branch=wip-3.0.0)](https://coveralls.io/r/trevorsenior/snoocore?branch=wip-3.0.0)
+[![Coverage Status (master)](https://coveralls.io/repos/trevorsenior/snoocore/badge.svg?branch=master)](https://coveralls.io/r/trevorsenior/snoocore?branch=master)
 [![Build Status](https://travis-ci.org/trevorsenior/snoocore.svg?branch=master)](https://travis-ci.org/trevorsenior/snoocore)
 [![Gitter chat](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/trevorsenior/snoocore)
 
