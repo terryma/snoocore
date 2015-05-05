@@ -2,6 +2,16 @@
 
 View the [Migration Guide](http://snoocore.readme.io/v3.0.0/docs/migration-guide) for instructions on how to deal with breaking changes.
 
+## 3.0.1
+
+Bug fixes & enhancements.
+
+Thanks to https://github.com/saiichihashimoto for reporting all of these!
+
+- Issues #123, #124: Speed up fetching of access tokens
+- Issue #125: Handle json.error HTTP 200 response from reddit
+- Issue #126: Ensure that the given device_id is between 20-30 characters
+
 ## 3.0.0
 
 **Breaking Changes**
