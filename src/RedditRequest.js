@@ -125,14 +125,9 @@ export default class RedditRequest extends events.EventEmitter {
         authPromise = this._oauth.auth();
       }
     }
-    // No way to refresh our access token, it has expired
+    // No way to authenticate
     else {
-      this.emit('access_token_expired');
-
-      let errmsg = 'Access token has expired. Listen for ' +
-                   'the "access_token_expired" event to ' +
-                   'handle this gracefully in your app.';
-      return when.reject(new ResponseError(errmsg, response, endpoint));
+      return when.reject(new Error('Unable to authenticate'));
     }
 
     return authPromise;
@@ -192,6 +187,13 @@ export default class RedditRequest extends events.EventEmitter {
                                             endpoint.port);
 
         return when.resolve(modifiedEndpoint);
+      }).catch(error => {
+        this.emit('access_token_expired');
+
+        let msg = 'Access token has expired. Listen for ' +
+                   'the "access_token_expired" event to ' +
+                     'handle this gracefully in your app.';
+        return when.reject(new ResponseError(msg, response, endpoint));
       });
     }
 

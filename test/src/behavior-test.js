@@ -465,10 +465,10 @@ describe(__filename, function () {
                 return reject(new Error('did not fire when token expired'));
               }
 
-              expect(error.message.indexOf(
+              expect(error.message).to.contain(
                 'Access token has expired. ' +
                 'Listen for the "access_token_expired" event to ' +
-                'handle this gracefully in your app.')).to.not.equal(-1);
+                'handle this gracefully in your app.');
 
               resolve();
             });
@@ -711,7 +711,7 @@ describe(__filename, function () {
 
   });
 
-  it('retry delay should not be applied when fetching access tokens', () => {
+  it.node('retry delay should not be applied when fetching access tokens', () => {
 
     // (issue #124)
 
