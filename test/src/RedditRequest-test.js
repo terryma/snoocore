@@ -81,24 +81,10 @@ describe(__filename, function () {
       });
     });
 
-    // Reddit no longer throws an 'IMAGE_ERROR', so this test
-    // no longer works properly. We need to find another instance
-    // of the data.errors or remove this test completly
-    it.skip('should handle data.errors field', function() {
-      var reddit = util.getScriptInstance([ 'modconfig' ]);
-
-      return reddit.auth().then(function() {
-        return reddit('/r/$subreddit/api/upload_sr_img').post({
-          $subreddit: config.reddit.testSubreddit,
-          file: Snoocore.file('fakename', 'image/png', 'fake image data'),
-          header: 0,
-          img_type: 'png',
-          name: 'test'
-        });
-      }).catch(function(error) {
-        expect(error.message.indexOf('IMAGE_ERROR')).to.not.equal(-1);
-      });
-
+    it.skip('should handle data.json.error field', function() {
+      // When the device_id is an invalid length it will result in
+      // this error. The device id length is checked in the user
+      // config.
     });
 
     it.node('should explain that a scope is missing', function() {

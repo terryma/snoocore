@@ -203,9 +203,17 @@ export default class RedditRequest extends events.EventEmitter {
 
       // Reddit isn't always honest in their response status. Check for
       // any errors in 2xx http statuses
+
+      // data.json.errors
       if (data.json && data.json.errors && data.json.errors.length > 0) {
         return when.reject(new ResponseError('', response, endpoint));
       }
+
+      // data.json.error
+      if (data.json && data.json.error) {
+        return when.reject(new ResponseError('', response, endpoint));
+      }
+
     } catch(e) {}
 
 
