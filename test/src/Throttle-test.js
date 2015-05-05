@@ -59,8 +59,8 @@ describe(__filename, function () {
         // check that we actually waited for the throttleMs time between each
         // it won't be exactly 1000 as there may be other things in the
         // event loop that slow things down for us.
-        expect(order[1].now - order[0].now).to.be.gt(900);
-        expect(order[2].now - order[1].now).to.be.gt(900);
+        expect(order[1].now - order[0].now).to.be.gt(800);
+        expect(order[2].now - order[1].now).to.be.gt(800);
 
         // check that throttleDelay been reset to 1ms
         expect(throttle._throttleDelay).to.equal(1);
