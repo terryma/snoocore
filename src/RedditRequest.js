@@ -40,6 +40,15 @@ export default class RedditRequest extends events.EventEmitter {
   }
 
   /*
+     Are we currently authenticated?
+   */
+  isAuthenticated() {
+    return this.isApplicationOnly() ?
+           this._oauthAppOnly.hasAccessToken() :
+           this._oauth.hasAccessToken();
+  }
+
+  /*
      Builds up the headers for an endpoint.
    */
   buildHeaders(contextOptions={}) {
@@ -63,12 +72,70 @@ export default class RedditRequest extends events.EventEmitter {
      Call the reddit api.
    */
   callRedditApi(endpoint) {
-    let requestPromise = this._request.https(
-      endpoint, this.responseErrorHandler.bind(this));
+    // Authenticate if needed before making a call.
+    //
+    // Eliminates unwanted 401 errors when making initial calls
+    // on Application only OAuth & Script instances where calling
+    // `.auth()` isn't required.
+    let auth = this.isAuthenticated() ? when.resolve() : (() => {
+      return this.authenticate(endpoint).then(() => {
+        // rebuild endpoint with new headers
+        endpoint = new Endpoint(this._userConfig,
+                                 endpoint.hostname,
+                                 endpoint.method,
+                                 endpoint.path,
+                                 this.buildHeaders(
+                                   endpoint.contextOptions),
+                                 endpoint.givenArgs,
+                                 endpoint.contextOptions,
+                                 endpoint.port);
 
-    return requestPromise.then(response => {
-      return this.handleSuccessResponse(response, endpoint);
+      });
+    })();
+
+    return auth.then(() => {
+      let requestPromise = this._request.https(
+        endpoint, this.responseErrorHandler.bind(this));
+
+      return requestPromise.then(response => {
+        return this.handleSuccessResponse(response, endpoint);
+      });
     });
+  }
+
+  /*
+     Authenticate with the appropriate OAuth type for a given
+     endpoint
+   */
+  authenticate(endpoint) {
+    let authPromise;
+
+    // If we are application only, or are bypassing authentication
+    // therefore we're using application only OAuth
+    if (this.isApplicationOnly() || endpoint.contextOptions.bypassAuth) {
+      authPromise = this._oauthAppOnly.applicationOnlyAuth();
+    }
+    else if (this._oauth.canRefreshAccessToken()) {
+      // If we have been authenticated with a permanent refresh token use it
+      if (this._oauth.hasRefreshToken()) {
+        authPromise = this._oauth.refresh();
+      }
+      // If we are OAuth type script we can call `.auth` again
+      else if (this._userConfig.isOAuthType('script')) {
+        authPromise = this._oauth.auth();
+      }
+    }
+    // No way to refresh our access token, it has expired
+    else {
+      this.emit('access_token_expired');
+
+      let errmsg = 'Access token has expired. Listen for ' +
+                   'the "access_token_expired" event to ' +
+                   'handle this gracefully in your app.';
+      return when.reject(new ResponseError(errmsg, response, endpoint));
+    }
+
+    return authPromise;
   }
 
   /*
@@ -108,32 +175,7 @@ export default class RedditRequest extends events.EventEmitter {
     if (response._status === 401) {
 
       // Atempt to get a new access token!
-      let reauthPromise;
-
-      // If we are application only, or are bypassing authentication
-      // therefore we're using application only OAuth
-      if (this.isApplicationOnly() || endpoint.contextOptions.bypassAuth) {
-        reauthPromise = this._oauthAppOnly.applicationOnlyAuth();
-      }
-      else if (this._oauth.canRefreshAccessToken()) {
-        // If we have been authenticated with a permanent refresh token use it
-        if (this._oauth.hasRefreshToken()) {
-          reauthPromise = this._oauth.refresh();
-        }
-        // If we are OAuth type script we can call `.auth` again
-        else if (this._userConfig.isOAuthType('script')) {
-          reauthPromise = this._oauth.auth();
-        }
-      }
-      // No way to refresh our access token, it has expired
-      else {
-        this.emit('access_token_expired');
-
-        let errmsg = 'Access token has expired. Listen for ' +
-                     'the "access_token_expired" event to ' +
-                     'handle this gracefully in your app.';
-        return when.reject(new ResponseError(errmsg, response, endpoint));
-      }
+      let reauthPromise = this.authenticate(endpoint);
 
       return reauthPromise.then(() => {
         // refresh the authentication headers for this endpoint
