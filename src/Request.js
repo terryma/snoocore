@@ -52,7 +52,7 @@ export default class Request extends events.EventEmitter {
       ).then(response => {
 
         let statusChar = String(response._status).substring(0, 1);
-        let success =  statusChar === '2';
+        let success = statusChar === '2';
 
         // If success we're done!
         if (success) {
@@ -84,7 +84,13 @@ export default class Request extends events.EventEmitter {
         // Call the error handler. If not rejected, retry the endpoint
         // with any modifications made by the responseErrorHandler
         return responseErrorHandler(response, endpoint).then(modifiedEndpoint => {
-          return delay(modifiedEndpoint.contextOptions.retryDelay).then(()=> {
+
+          // Only have a retry delay if the endpoint had an HTTP 5xx status
+          let retryDelay = (statusChar === '5') ?
+                           modifiedEndpoint.contextOptions.retryDelay :
+                           0;
+
+          return delay(retryDelay).then(()=> {
             return this.https(modifiedEndpoint, responseErrorHandler);
           });
         });

@@ -711,4 +711,23 @@ describe(__filename, function () {
 
   });
 
+  it.node('retry delay should not be applied when fetching access tokens', () => {
+
+    // (issue #124)
+
+    let then = Date.now();
+
+    let reddit = util.getScriptInstance([ 'identity', 'read' ], {
+      retryDelay: 10000
+    });
+
+    return reddit('/hot').get().then(function() {
+      // expect that the time it takes to authenticate, and make a
+      // call to /hot takes less than 5 seconds even if the retry
+      // delay is set to 10 seconds
+      expect(Date.now() - then).to.be.lt(5000);
+    });
+
+  });
+
 });

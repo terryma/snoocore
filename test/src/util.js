@@ -154,6 +154,7 @@ exports.getScriptInstance = function(scopes, options) {
     __test: options.__test || {},
     throttle: options.throttle || 1000,
     serverWWW: config.requestServer.www,
-    serverOAuth: config.requestServer.oauth
+    serverOAuth: config.requestServer.oauth,
+    retryDelay: options.retryDelay
   });
 };
