@@ -77,6 +77,12 @@ export default class UserConfig {
         'Invalid `oauth.duration`. Must be one of: permanent, temporary');
     }
 
+    if (this.oauth.deviceId !== 'DO_NOT_TRACK_THIS_DEVICE' &&
+      (this.oauth.deviceId.length < 20 || this.oauth.deviceId.length > 30)) {
+        throw new Error(
+          'Invalid device_id length. Must be 20-30 characters');
+    }
+
     if (!this.isOAuthType('explicit') &&
       !this.isOAuthType('implicit') &&
       !this.isOAuthType('script'))
@@ -114,7 +120,7 @@ export default class UserConfig {
     // Some test cases require some deep messing around with the library
     // in order to be nice to the API server when testing.
     //
-    // These should neve be used by anything other than the test cases to
+    // These should never be used by anything other than the test cases to
     // modify internal variables. They are only used if needed!
 
     /*

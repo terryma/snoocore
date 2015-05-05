@@ -132,4 +132,30 @@ describe(__filename, function () {
     }).to.throw('Missing required userConfiguration value `oauth.redirectUri` for type implicit/explicit');
   });
 
+  it('should complain about device_id\'s that are not 20-30 characters', function() {
+    expect(function() {
+      new UserConfig({
+        userAgent: 'foobar',
+        oauth: {
+          type: 'implicit',
+          key: 'test',
+          deviceId: 'a',
+          redirectUri: 'http://foo.bar'
+        }
+      });
+    }).to.throw('Invalid device_id length. Must be 20-30 characters');
+
+    expect(function() {
+      new UserConfig({
+        userAgent: 'foobar',
+        oauth: {
+          type: 'implicit',
+          key: 'test',
+          deviceId: 'abcdefghijklmnopqrstuvwxyz1234567890',
+          redirectUri: 'http://foo.bar'
+        }
+      });
+    }).to.throw('Invalid device_id length. Must be 20-30 characters');
+  });
+
 });
