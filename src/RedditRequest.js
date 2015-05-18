@@ -329,10 +329,12 @@ export default class RedditRequest extends events.EventEmitter {
         slice.empty = slice.allChildren.length === 0;
 
         slice.children = slice.allChildren.filter(function(child) {
+          child.data = child.data || {};
           return !child.data.stickied;
         });
 
         slice.stickied = slice.allChildren.filter(function(child) {
+          child.data = child.data || {};
           return child.data.stickied;
         });
 
