@@ -2,6 +2,8 @@
 // Browser requests, mirrors the syntax of the node requests
 //
 
+import urlLib from 'url';
+
 import when from 'when';
 
 import * as form from './form';
@@ -40,7 +42,7 @@ function parseResponseHeaders(headerStr) {
   return headers;
 }
 
-export default function(options, formData) {
+export default function https(options, formData) {
 
   DEBUG_LOG('>> browser https call');
 
@@ -51,7 +53,7 @@ export default function(options, formData) {
 
   options.headers['Content-Type'] = data.contentType;
 
-  return when.promise(function(resolve, reject) {
+  return when.promise((resolve, reject) => {
 
     try {
       // https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest
@@ -68,11 +70,11 @@ export default function(options, formData) {
 
       x.open(options.method, url, true);
 
-      Object.keys(options.headers).forEach(function(headerKey) {
+      Object.keys(options.headers).forEach(headerKey => {
         x.setRequestHeader(headerKey, options.headers[headerKey]);
       });
 
-      x.onreadystatechange = function() {
+      x.onreadystatechange = () => {
         if (x.readyState > 3) {
           // Normalize the result to match how requestNode.js works
 
@@ -92,5 +94,18 @@ export default function(options, formData) {
       return reject(e);
     }
 
+  }).then(res => {
+    let canRedirect = (String(res._status).substring(0, 1) === '3' &&
+      typeof res._headers.location !== 'undefined');
+
+    if (canRedirect) {
+      // Make the call again with the new hostname, path, and form data
+      let parsed = urlLib.parse(res._headers.location);
+      options.hostname = parsed.hostname;
+      options.path = parsed.pathname;
+      return https(options, parsed.query);
+    }
+
+    return res;
   });
 }

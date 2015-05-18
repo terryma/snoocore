@@ -2,7 +2,8 @@
 // Node requests
 //
 
-import https from 'https';
+import httpsLib from 'https';
+import urlLib from 'url';
 
 import when from 'when';
 
@@ -14,7 +15,7 @@ let DEBUG_LOG = false ? console.error : ()=>{};
 /*
    Form data can be a raw string, or an object containing key/value pairs
  */
-export default function(options, formData) {
+export default function https(options, formData) {
   DEBUG_LOG('\n\n\n\n');
   DEBUG_LOG('>>> request:\n' +
             options.method + ': ' +
@@ -26,7 +27,7 @@ export default function(options, formData) {
 
   formData = formData || [];
 
-  var data = form.getData(formData);
+  let data = form.getData(formData);
 
   options.headers['Content-Type'] = data.contentType;
 
@@ -34,7 +35,7 @@ export default function(options, formData) {
     options.headers['Content-Length'] = data.contentLength;
   }
 
-  DEBUG_LOG('\n>>> request headers}\n', options.headers);
+  DEBUG_LOG('\n>>> request headers\n', options.headers);
 
   // stick the data at the end of the url for GET requests
   if (options.method === 'GET' && data.buffer.toString() !== '') {
@@ -44,15 +45,15 @@ export default function(options, formData) {
 
   return when.promise(function(resolve, reject) {
 
-    var req = https.request(options, function(res) {
+    let req = httpsLib.request(options, function(res) {
 
       res._req = req; // attach a reference back to the request
 
       res.setEncoding('utf8');
-      var body = '';
-      res.on('error', function(error) { return reject(error); });
-      res.on('data', function(chunk) { body += chunk; });
-      res.on('end', function() {
+      let body = '';
+      res.on('error', error => { return reject(error); });
+      res.on('data', chunk => { body += chunk; });
+      res.on('end', () => {
         res._body = body; // attach the response body to the object
         res._status = res.statusCode;
         res._headers = res.headers;
@@ -70,9 +71,18 @@ export default function(options, formData) {
 
     req.end();
 
-  }).then(function(res) {
-    // @TODO no endpoints except /logout require redirects, but if it's
-    // needed in the future we can handle it here
+  }).then(res => {
+    let canRedirect = (String(res._status).substring(0, 1) === '3' &&
+      typeof res._headers.location !== 'undefined');
+
+    if (canRedirect) {
+      // Make the call again with the new hostname, path, and form data
+      let parsed = urlLib.parse(res._headers.location);
+      options.hostname = parsed.hostname;
+      options.path = parsed.pathname;
+      return https(options, parsed.query);
+    }
+
     return res;
   });
 
