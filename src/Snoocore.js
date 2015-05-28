@@ -57,6 +57,8 @@ export default class Snoocore extends events.EventEmitter {
       'hasAccessToken'
     ].forEach(fn => { this[fn] = this.oauth[fn].bind(this.oauth); });
 
+    this.appOnlyAuth = this.oauthAppOnly.applicationOnlyAuth.bind(this.oauthAppOnly);
+
     // Bubble up the  events
     this.oauth.on('access_token_refreshed', (accessToken) => {
       this.emit('access_token_refreshed', accessToken);
