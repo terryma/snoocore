@@ -2,6 +2,11 @@
 
 View the [Migration Guide](http://snoocore.readme.io/v3.0.0/docs/migration-guide) for instructions on how to deal with breaking changes.
 
+## 3.0.2
+
+- Expose application only auth function to prevent unecessary access token requests (broguht up by https://github.com/saiichihashimoto)
+
+
 ## 3.0.1
 
 Bug fixes & enhancements.
