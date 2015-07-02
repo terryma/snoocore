@@ -31,7 +31,7 @@ export default class UserConfig {
     // ** SERVERS
     if (this.useBrowserCookies) {
       this.serverOAuth = u.thisOrThat(userConfiguration.serverOAuth,
-                                      'json.reddit.com');
+                                      'www.reddit.com');
     } else {
       this.serverOAuth = u.thisOrThat(userConfiguration.serverOAuth,
                                       'oauth.reddit.com');
