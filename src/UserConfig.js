@@ -28,6 +28,14 @@ export default class UserConfig {
 
     this.useBrowserCookies = u.thisOrThat(userConfiguration.useBrowserCookies, false);
 
+    if (userConfiguration.apiServerUri) {
+      userConfiguration.serverOAuth = userConfiguration.apiServerUri;
+    }
+
+    if (userConfiguration.authServerUri) {
+      userConfiguration.serverWWW = userConfiguration.authServerUri;
+    }
+
     // ** SERVERS
     if (this.useBrowserCookies) {
       this.serverOAuth = u.thisOrThat(userConfiguration.serverOAuth,
