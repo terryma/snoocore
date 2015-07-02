@@ -13,7 +13,7 @@ import fileHelper from './https/file';
 export default class Snoocore extends events.EventEmitter {
 
   static get version() {
-    return '3.0.2';
+    return '3.1.0';
   }
 
   static file(...args) {
