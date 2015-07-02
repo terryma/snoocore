@@ -57,12 +57,17 @@ export default class RedditRequest extends events.EventEmitter {
     if (this._userConfig.isNode) {
       // Can't set User-Agent in browser
       headers['User-Agent'] = this._userConfig.userAgent;
+    } else {
+      // But the admins might appreciate this
+      headers['X-User-Agent'] = this._userConfig.userAgent;
     }
 
-    if (contextOptions.bypassAuth || this.isApplicationOnly()) {
-      headers['Authorization'] = this._oauthAppOnly.getAuthorizationHeader();
-    } else {
-      headers['Authorization'] = this._oauth.getAuthorizationHeader();
+    if (!this._userConfig.useBrowserCookies) {
+      if (contextOptions.bypassAuth || this.isApplicationOnly()) {
+        headers['Authorization'] = this._oauthAppOnly.getAuthorizationHeader();
+      } else {
+        headers['Authorization'] = this._oauth.getAuthorizationHeader();
+      }
     }
 
     return headers;
@@ -112,7 +117,10 @@ export default class RedditRequest extends events.EventEmitter {
 
     // If we are application only, or are bypassing authentication
     // therefore we're using application only OAuth
-    if (this.isApplicationOnly() || endpoint.contextOptions.bypassAuth) {
+    if (this._userConfig.useBrowserCookies) {
+      authPromise = when.resolve();
+    }
+    else if (this.isApplicationOnly() || endpoint.contextOptions.bypassAuth) {
       authPromise = this._oauthAppOnly.applicationOnlyAuth();
     }
     else if (this._oauth.canRefreshAccessToken()) {
@@ -161,13 +169,13 @@ export default class RedditRequest extends events.EventEmitter {
     // - - -
     // 404 - Page not found
     if (response._status === 404) {
-      let msg = 'Page nod found. Is this a valid endpoint?';
+      let msg = 'Page not found. Is this a valid endpoint?';
       return when.reject(new ResponseError(msg, response, endpoint));
     }
 
     // - - -
     // Access token has expired
-    if (response._status === 401) {
+    if (response._status === 401 && !this._userConfig.useBrowserCookies) {
 
       // Atempt to get a new access token!
       let reauthPromise = this.authenticate(endpoint);
@@ -195,6 +203,13 @@ export default class RedditRequest extends events.EventEmitter {
                      'handle this gracefully in your app.';
         return when.reject(new ResponseError(msg, response, endpoint));
       });
+    }
+
+    // - - -
+    // Access token has expired and we're trying to authenticate without OAuth
+    if (response._status === 401 && !this._userConfig.useBrowserCookies) {
+      let msg = 'Access token required to access this endpoint.';
+      return when.reject(new ResponseError(msg, response, endpoint));
     }
 
     // - - -

@@ -17,14 +17,6 @@ export default class UserConfig {
 
     var missingMsg = 'Missing required userConfiguration value ';
 
-    // ** SERVERS
-    this.serverOAuth = u.thisOrThat(userConfiguration.serverOAuth,
-                                    'oauth.reddit.com');
-    this.serverWWW = u.thisOrThat(userConfiguration.serverWWW,
-                                  'www.reddit.com');
-    this.serverOAuthPort = u.thisOrThat(userConfiguration.serverOAuthPort, 80);
-    this.serverWWWPort = u.thisOrThat(userConfiguration.serverWWWPort, 80);
-
     // ** IDENFIFICATION
     this.userAgent = u.thisOrThrow(
       userConfiguration.userAgent,
@@ -33,6 +25,22 @@ export default class UserConfig {
     this.isNode = u.thisOrThat(userConfiguration.browser, u.isNode());
 
     this.mobile = u.thisOrThat(userConfiguration.mobile, false);
+
+    this.useBrowserCookies = u.thisOrThat(userConfiguration.useBrowserCookies, false);
+
+    // ** SERVERS
+    if (this.useBrowserCookies) {
+      this.serverOAuth = u.thisOrThat(userConfiguration.serverOAuth,
+                                      'json.reddit.com');
+    } else {
+      this.serverOAuth = u.thisOrThat(userConfiguration.serverOAuth,
+                                      'oauth.reddit.com');
+    }
+
+    this.serverWWW = u.thisOrThat(userConfiguration.serverWWW,
+                                  'www.reddit.com');
+    this.serverOAuthPort = u.thisOrThat(userConfiguration.serverOAuthPort, 80);
+    this.serverWWWPort = u.thisOrThat(userConfiguration.serverWWWPort, 80);
 
     // ** CALL MODIFICATIONS
     this.throttle = u.thisOrThat(userConfiguration.throttle, 1000);
@@ -59,11 +67,17 @@ export default class UserConfig {
 
     this.oauth.deviceId = u.thisOrThat(this.oauth.deviceId,
                                        'DO_NOT_TRACK_THIS_DEVICE');
-    this.oauth.type = u.thisOrThrow(this.oauth.type,
-                                    missingMsg + '`oauth.type`');
-    this.oauth.key = u.thisOrThrow(this.oauth.key,
-                                   missingMsg + '`oauth.key`');
     this.oauth.duration = u.thisOrThat(this.oauth.duration, 'temporary');
+
+    if (this.useBrowserCookies) {
+      this.oauth.type = u.thisOrThat(this.oauth.type, '');
+      this.oauth.key = u.thisOrThat(this.oauth.key, '');
+    } else {
+      this.oauth.type = u.thisOrThrow(this.oauth.type,
+                                      missingMsg + '`oauth.type`');
+      this.oauth.key = u.thisOrThrow(this.oauth.key,
+                                     missingMsg + '`oauth.key`');
+    }
 
 
     //
@@ -85,32 +99,35 @@ export default class UserConfig {
 
     if (!this.isOAuthType('explicit') &&
       !this.isOAuthType('implicit') &&
-      !this.isOAuthType('script'))
+      !this.isOAuthType('script') &&
+      !this.useBrowserCookies)
     {
       throw new Error(
         'Invalid `oauth.type`. Must be one of: explicit, implicit, or script');
     }
 
-    if (this.isOAuthType('explicit') || this.isOAuthType('script')) {
-      this.oauth.secret = u.thisOrThrow(
-        this.oauth.secret,
-        missingMsg + '`oauth.secret` for type explicit/script');
-    }
+    if (!this.useBrowserCookies) {
+      if (this.isOAuthType('explicit') || this.isOAuthType('script')) {
+        this.oauth.secret = u.thisOrThrow(
+          this.oauth.secret,
+          missingMsg + '`oauth.secret` for type explicit/script');
+      }
 
 
-    if (this.isOAuthType('script')) {
-      this.oauth.username = u.thisOrThrow(
-        this.oauth.username,
-        missingMsg + '`oauth.username` for type script');
-      this.oauth.password = u.thisOrThrow(
-        this.oauth.password,
-        missingMsg + '`oauth.password` for type script');
-    }
+      if (this.isOAuthType('script')) {
+        this.oauth.username = u.thisOrThrow(
+          this.oauth.username,
+          missingMsg + '`oauth.username` for type script');
+        this.oauth.password = u.thisOrThrow(
+          this.oauth.password,
+          missingMsg + '`oauth.password` for type script');
+      }
 
-    if (this.isOAuthType('implicit') || this.isOAuthType('explicit')) {
-      this.oauth.redirectUri = u.thisOrThrow(
-        this.oauth.redirectUri,
-        missingMsg + '`oauth.redirectUri` for type implicit/explicit');
+      if (this.isOAuthType('implicit') || this.isOAuthType('explicit')) {
+        this.oauth.redirectUri = u.thisOrThrow(
+          this.oauth.redirectUri,
+          missingMsg + '`oauth.redirectUri` for type implicit/explicit');
+      }
     }
 
 

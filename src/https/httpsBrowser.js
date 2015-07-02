@@ -70,6 +70,10 @@ export default function https(options, formData) {
 
       x.open(options.method, url, true);
 
+      if (options.useBrowserCookies) {
+        x.withCredentials = true;
+      }
+
       Object.keys(options.headers).forEach(headerKey => {
         x.setRequestHeader(headerKey, options.headers[headerKey]);
       });

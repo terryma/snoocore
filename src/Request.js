@@ -36,7 +36,8 @@ export default class Request extends events.EventEmitter {
         method: endpoint.method.toUpperCase(),
         hostname: endpoint.hostname,
         path: endpoint.computedPath,
-        headers: endpoint.headers
+        headers: endpoint.headers,
+        useBrowserCookies: endpoint._userConfig.useBrowserCookies
       };
 
       // @TODO Node.js has issues if you set it to 80?
