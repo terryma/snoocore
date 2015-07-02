@@ -2,6 +2,12 @@
 
 View the [Migration Guide](http://snoocore.readme.io/v3.0.0/docs/migration-guide) for instructions on how to deal with breaking changes.
 
+## 3.1.0
+
+PR from [@empyrical](https://github.com/empyrical) adds a new feature to use browser cookies for authentication.
+
+The documentation for this can be found here: http://snoocore.readme.io/v3.0.0/docs/using-existing-browser-cookies
+
 ## 3.0.2
 
 - Expose application only auth function to prevent unecessary access token requests (broguht up by https://github.com/saiichihashimoto)
