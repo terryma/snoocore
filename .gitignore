@@ -31,3 +31,6 @@ bower_components
 
 # OSX ignore
 .DS_Store
+
+# Old documentation
+_site

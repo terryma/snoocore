@@ -1,7 +1,8 @@
 test
-Snoocore-standalone.js
 .jshintrc
 bower.json
 karma.conf.js
 run.js
 .gitignore
+_site
+dist
