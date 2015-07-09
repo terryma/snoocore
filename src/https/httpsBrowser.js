@@ -49,13 +49,23 @@ export default function https(options, formData) {
   options = options || {};
   options.headers = options.headers || {};
 
-  var data = form.getData(formData);
+  var data;
 
-  options.headers['Content-Type'] = data.contentType;
+  if (formData.file) {
+    data = form.getFormData(formData);
+  } else {
+    data = form.getData(formData);
+    options.headers['Content-Type'] = data.contentType;
+  }
 
   return when.promise((resolve, reject) => {
 
     try {
+      if (options.method === 'GET' && data instanceof FormData) {
+        reject('Cannot make a GET request while handling a file!');
+        return;
+      }
+
       // https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest
       var x = new window.XMLHttpRequest();
 
@@ -92,7 +102,11 @@ export default function https(options, formData) {
         }
       };
 
-      x.send(options.method === 'GET' ? null : data.buffer.toString());
+      if (data instanceof FormData) {
+        x.send(data);
+      } else {
+        x.send(options.method === 'GET' ? null : data.buffer.toString());
+      }
 
     } catch (e) {
       return reject(e);

@@ -135,3 +135,22 @@ export function getData(formData) {
   data.contentLength = data.buffer.length;
   return data;
 }
+
+/*
+   Takes an key-value pair and turns them into a FormData object. This is for when
+   we want to upload a file using XMLHttpRequest.
+*/
+
+export function getFormData(formData) {
+  var data = new FormData();
+
+  for (var key in formData) {
+    if (key === 'file') {
+      data.append(key, formData[key].data, formData[key].name);
+    } else {
+      data.append(key, formData[key]);
+    }
+  }
+
+  return data;
+}
