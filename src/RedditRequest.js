@@ -57,7 +57,7 @@ export default class RedditRequest extends events.EventEmitter {
     if (this._userConfig.isNode) {
       // Can't set User-Agent in browser
       headers['User-Agent'] = this._userConfig.userAgent;
-    } else {
+    } else if (this._userConfig.useBrowserCookies) {
       // But the admins might appreciate this
       headers['X-User-Agent'] = this._userConfig.userAgent;
     }
