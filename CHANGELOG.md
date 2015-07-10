@@ -2,6 +2,11 @@
 
 View the [Migration Guide](http://snoocore.readme.io/v3.0.0/docs/migration-guide) for instructions on how to deal with breaking changes.
 
+## 3.2.0
+
+- PR from [@empyrical](https://github.com/empyrical) adds the ability to upload files
+- Fix for CORS. Only use `X-User-Agent` when in cookie mode
+
 ## 3.1.2
 
 Fix for bloated npm package. Caught by [@a9io](https://github.com/a9io).
