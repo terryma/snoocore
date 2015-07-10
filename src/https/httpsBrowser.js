@@ -62,8 +62,8 @@ export default function https(options, formData) {
 
     try {
       if (options.method === 'GET' && data instanceof FormData) {
-        reject('Cannot make a GET request while handling a file!');
-        return;
+        return reject(new Error(
+          'Cannot make a GET request while handling a file!'));
       }
 
       // https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest
