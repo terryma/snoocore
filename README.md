@@ -30,3 +30,7 @@ There is an [example code repository](https://github.com/trevorsenior/snoocore-e
 ### Questions about reddit development?
 
 Head over to [/r/redditdev](https://www.reddit.com/r/redditdev).
+
+### Looking for a new maintainer
+
+If interested send me a message on Gitter / email / Freenode (tsenior)
