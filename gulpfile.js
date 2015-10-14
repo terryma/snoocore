@@ -54,10 +54,10 @@ gulp.task('bundleBrowser', [ 'babel' ], function() {
   });
 
   return b.bundle()
-          .pipe(source('Snoocore-browser.min.js'))
+          .pipe(source('Snoocore-browser.js'))
           .pipe(buffer())
           .pipe(sourcemaps.init())
-          .pipe(uglify())
+          // .pipe(uglify())
           .on('error', gutil.log)
           .pipe(sourcemaps.write('./'))
           .pipe(gulp.dest('./dist/'));
